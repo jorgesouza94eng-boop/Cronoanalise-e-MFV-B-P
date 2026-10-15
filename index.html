@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="Cronoanálise de vídeo e apoio ao Mapa de Fluxo de Valor — funciona 100% offline.">
+  <title>Lean Chrono &amp; MFV | Brasil Mais Produtivo</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- CABEÇALHO -->
+  <header class="app-header">
+    <div class="brand-area">
+      <div class="brand-badge">LEAN</div>
+      <div class="brand-titles">
+        <h1>Cronoanálise &amp; MFV</h1>
+        <span class="subtitle">Programa Brasil Mais Produtivo</span>
+      </div>
+    </div>
+
+    <div class="client-context">
+      <div class="input-inline">
+        <label for="client-name">Empresa / Cliente</label>
+        <input type="text" id="client-name" placeholder="Nome da indústria..." autocomplete="off">
+      </div>
+      <div class="input-inline">
+        <label for="process-name">Posto / Operação</label>
+        <input type="text" id="process-name" placeholder="Ex.: Solda MIG subconjunto A" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="storage-controls">
+      <span id="sync-status" class="status-pill status-offline" role="status" aria-live="polite"
+            title="Situação do salvamento">
+        <span class="dot" aria-hidden="true"></span><span class="status-text">Iniciando...</span>
+      </span>
+      <button id="btn-studies" class="btn-header" type="button" title="Abrir, criar ou importar estudos">
+        Estudos
+      </button>
+      <button id="btn-connect-folder" class="btn-primary" type="button" hidden
+              title="Selecione a pasta sincronizada pelo OneDrive onde os arquivos .json serão salvos">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <span class="btn-label">Conectar pasta (OneDrive)</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- AVISO DE CONFLITO COM A PASTA -->
+  <div id="conflict-banner" class="conflict-banner" role="alert" hidden>
+    <div class="conflict-text">
+      <strong>Conflito de versões.</strong>
+      <span id="conflict-detail">O arquivo na pasta foi alterado em outro dispositivo.</span>
+    </div>
+    <div class="conflict-actions">
+      <button type="button" id="btn-conflict-disk" class="btn-outline">Usar versão da pasta</button>
+      <button type="button" id="btn-conflict-local" class="btn-danger">Manter minha versão (sobrescrever)</button>
+    </div>
+  </div>
+
+  <main class="app-workspace">
+
+    <!-- PARÂMETROS DA JORNADA + PAINEL DE INDICADORES -->
+    <section class="dashboard-section" aria-label="Parâmetros e indicadores">
+
+      <div class="shift-params-card">
+        <div class="card-header-mini">Parâmetros da jornada e demanda</div>
+        <div class="params-grid">
+          <div class="param-field">
+            <label for="shift-time">Jornada bruta (min/dia)</label>
+            <input type="text" inputmode="decimal" id="shift-time" data-param="shiftTimeMin" autocomplete="off">
+          </div>
+          <div class="param-field">
+            <label for="planned-stops">Paradas planejadas (min/dia)</label>
+            <input type="text" inputmode="decimal" id="planned-stops" data-param="plannedStopsMin" autocomplete="off">
+          </div>
+          <div class="param-field">
+            <label for="daily-demand">Demanda do cliente (pçs/dia)</label>
+            <input type="text" inputmode="decimal" id="daily-demand" data-param="dailyDemandPcs" autocomplete="off">
+          </div>
+          <div class="param-field">
+            <label for="tolerance-factor">Tolerância / fadiga (%)</label>
+            <input type="text" inputmode="decimal" id="tolerance-factor" data-param="tolerancePct" autocomplete="off"
+                   title="Tempo padrão = ΣTempo normal × (1 + Tolerância/100)">
+          </div>
+        </div>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <span class="kpi-title">Tempo líquido disponível</span>
+          <div class="kpi-value-group">
+            <strong id="kpi-net-time">--</strong>
+            <span class="kpi-unit">min/dia</span>
+          </div>
+          <span class="kpi-caption">Jornada bruta − paradas planejadas</span>
+        </div>
+
+        <div class="kpi-card highlight-takt">
+          <span class="kpi-title">Takt time</span>
+          <div class="kpi-value-group">
+            <strong id="kpi-takt-time">--</strong>
+            <span class="kpi-unit">min/pç</span>
+          </div>
+          <span class="kpi-caption" id="kpi-takt-sec">--</span>
+        </div>
+
+        <div class="kpi-card">
+          <span class="kpi-title">Tempo padrão do ciclo</span>
+          <div class="kpi-value-group">
+            <strong id="kpi-cycle-time">--</strong>
+            <span class="kpi-unit">min/pç</span>
+          </div>
+          <span class="kpi-caption" id="kpi-normal-time">--</span>
+        </div>
+
+        <div class="kpi-card">
+          <span class="kpi-title">Capacidade produtiva</span>
+          <div class="kpi-value-group">
+            <strong id="kpi-capacity">--</strong>
+            <span class="kpi-unit">pçs/dia</span>
+          </div>
+          <span class="kpi-caption">Tempo líquido ÷ tempo padrão</span>
+        </div>
+
+        <div class="kpi-card status-card" id="kpi-bottleneck-card">
+          <span class="kpi-title">Status / gargalo</span>
+          <div class="kpi-value-group">
+            <strong id="kpi-bottleneck">Aguardando</strong>
+          </div>
+          <span class="kpi-caption" id="kpi-bottleneck-detail">Insira elementos na grade</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- GRADE DE APONTAMENTO (LEITURA CONTÍNUA) -->
+    <section class="timesheet-section" aria-label="Grade de apontamento">
+      <div class="section-toolbar">
+        <div class="toolbar-left">
+          <h2>Grade de apontamento (leitura contínua)</h2>
+          <span class="keyboard-hint">
+            <kbd>Enter</kbd> Descrição → Tempo final → Ritmo → próxima linha
+            &bull; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> nova linha
+            &bull; <kbd>↑</kbd><kbd>↓</kbd> muda de linha
+            &bull; <kbd>Ctrl</kbd>+<kbd>Del</kbd> exclui
+          </span>
+        </div>
+        <div class="toolbar-actions">
+          <div class="inline-field">
+            <label for="video-start" title="Instante do vídeo em que o primeiro elemento começa">Leitura inicial</label>
+            <input type="text" id="video-start" class="mono" inputmode="numeric" placeholder="00:00" autocomplete="off"
+                   title="Instante do vídeo em que o primeiro elemento começa (MMSS ou MM:SS)">
+          </div>
+          <button type="button" id="btn-add-row" class="btn-secondary" title="Nova linha (Ctrl+Enter)">+ Nova linha</button>
+          <button type="button" id="btn-export-json" class="btn-outline" title="Baixar o estudo em .json (backup ou envio para outro dispositivo)">Exportar JSON</button>
+          <button type="button" id="btn-export-csv" class="btn-outline" title="Baixar a grade para o Excel">Exportar CSV</button>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table class="chrono-table" id="chrono-table">
+          <colgroup>
+            <col class="col-num"><col class="col-elem"><col class="col-type"><col class="col-freq">
+            <col class="col-tfinal"><col class="col-tsub"><col class="col-pace"><col class="col-tnorm">
+            <col class="col-action"><col class="col-del">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col" title="Número sequencial do elemento">Nº</th>
+              <th scope="col">Elemento de trabalho (operação)</th>
+              <th scope="col" title="C = cíclico | A = acíclico (definido pela frequência)">Tipo</th>
+              <th scope="col" title="1 = uma vez por peça | 1/50 = uma vez a cada 50 peças">Freq.</th>
+              <th scope="col" title="Digite MMSS (132 → 01:32) ou HMMSS (10532 → 1:05:32)">Tempo final</th>
+              <th scope="col" title="Tempo final − leitura anterior (minutos centesimais)">T. subtraído</th>
+              <th scope="col" title="Avaliação do ritmo do operador (50% a 150%)">Ritmo (%)</th>
+              <th scope="col" title="Tempo subtraído × (Ritmo/100) × Frequência">T. normal</th>
+              <th scope="col">Ação sugerida / Kaizen (ECRS)</th>
+              <th scope="col"><span class="sr-only">Excluir</span></th>
+            </tr>
+          </thead>
+          <tbody id="chrono-tbody"></tbody>
+          <tfoot>
+            <tr>
+              <td colspan="5" class="tfoot-label">Totais do ciclo (minutos centesimais):</td>
+              <td class="cell-total mono" id="total-tsub">0,000</td>
+              <td></td>
+              <td class="cell-total mono highlight-col" id="total-tnorm">0,000</td>
+              <td colspan="2" class="tfoot-errors" id="total-errors"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- MODELO DE LINHA DA GRADE -->
+  <template id="row-template">
+    <tr>
+      <td class="cell-num"></td>
+      <td><input type="text" class="input-cell input-elem" data-field="description" aria-label="Elemento de trabalho"
+                 placeholder="Descreva a operação..." autocomplete="off" enterkeyhint="next"></td>
+      <td class="cell-type"><span class="tag-type">C</span></td>
+      <td><input type="text" class="input-cell input-freq mono" data-field="frequency" aria-label="Frequência"
+                 title="1 = uma vez por peça | 1/50 = uma vez a cada 50 peças" autocomplete="off" enterkeyhint="next"></td>
+      <td><input type="text" class="input-cell input-tfinal mono" data-field="videoTime" aria-label="Tempo final"
+                 inputmode="numeric" placeholder="MMSS" autocomplete="off" enterkeyhint="next"></td>
+      <td class="cell-readonly mono" data-out="tsub">0,000</td>
+      <td><input type="text" class="input-cell input-pace mono" data-field="pace" aria-label="Fator de ritmo em %"
+                 inputmode="decimal" autocomplete="off" enterkeyhint="next"></td>
+      <td class="cell-readonly mono highlight-col" data-out="tnorm">0,000</td>
+      <td><input type="text" class="input-cell input-action" data-field="kaizen" aria-label="Ação sugerida / Kaizen"
+                 placeholder="Desperdício / melhoria..." autocomplete="off" enterkeyhint="next"></td>
+      <td class="cell-actions"><button type="button" class="btn-icon-del" tabindex="-1"
+                 title="Excluir linha (Ctrl+Del)" aria-label="Excluir linha">&times;</button></td>
+    </tr>
+  </template>
+
+  <!-- GERENCIADOR DE ESTUDOS -->
+  <dialog id="study-dialog" class="study-dialog" aria-labelledby="study-dialog-title">
+    <div class="dialog-header">
+      <h2 id="study-dialog-title">Estudos de cronoanálise</h2>
+      <button type="button" class="btn-icon-close" id="btn-close-dialog" aria-label="Fechar">&times;</button>
+    </div>
+
+    <form id="new-study-form" class="new-study-form" autocomplete="off">
+      <div class="card-header-mini">Novo estudo (1 arquivo por posto)</div>
+      <div class="new-study-grid">
+        <div class="param-field">
+          <label for="new-client">Empresa / Cliente</label>
+          <input type="text" id="new-client" required placeholder="Ex.: Indústria Metalúrgica Alfa">
+        </div>
+        <div class="param-field">
+          <label for="new-process">Posto / Operação</label>
+          <input type="text" id="new-process" required placeholder="Ex.: Montagem final — posto 01">
+        </div>
+        <button type="submit" class="btn-primary">Criar estudo</button>
+      </div>
+      <p class="form-hint">Os parâmetros da jornada do estudo aberto são copiados para o novo estudo.</p>
+    </form>
+
+    <div class="study-list-header">
+      <div class="card-header-mini">Estudos salvos</div>
+      <span id="study-source" class="study-source"></span>
+    </div>
+    <ul id="study-list" class="study-list" aria-label="Estudos salvos"></ul>
+
+    <div class="dialog-footer">
+      <label class="btn-outline file-button">
+        Importar JSON
+        <input type="file" id="input-import-json" accept=".json,application/json" hidden>
+      </label>
+      <span class="form-hint" id="storage-hint"></span>
+    </div>
+  </dialog>
+
+  <!-- NOTIFICAÇÕES -->
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- Scripts clássicos (sem módulos ES) para funcionar também via file:// sem erro de CORS -->
+  <script src="js/calc.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

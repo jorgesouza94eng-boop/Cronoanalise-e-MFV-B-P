@@ -1,0 +1,14 @@
+{
+  "name": "Lean Chrono & MFV — Cronoanálise",
+  "short_name": "Lean Chrono",
+  "description": "Cronoanálise de vídeo e apoio ao Mapa de Fluxo de Valor. Funciona 100% offline.",
+  "lang": "pt-BR",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

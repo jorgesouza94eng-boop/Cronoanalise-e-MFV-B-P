@@ -1,0 +1,15 @@
+{
+  "name": "lean-chrono-mfv",
+  "version": "1.0.0",
+  "description": "Cronoanálise de vídeo e apoio ao Mapa de Fluxo de Valor — aplicação web local-first, sem backend e sem build.",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/calc.test.js",
+    "test:e2e": "node tests/e2e.browser.js",
+    "start": "npx --yes http-server -c-1 -p 8080 ."
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}
