@@ -171,6 +171,29 @@
       return true;
     },
 
+    /**
+     * Produto confirmado numa linha (oldValue = valor antes da edição): preenche as linhas
+     * vazias abaixo ou, se o produto foi trocado, pergunta se troca o bloco seguido.
+     * Retorna { ids, value, from, to } das linhas alteradas, ou null.
+     */
+    onProductCommit(id, oldValue, filtered) {
+      if (!state.study || filtered) return null; // com filtro, só a linha editada muda
+      const els = state.study.elements;
+      const idx = els.findIndex((e) => e.id === id);
+      const plan = Calc.productFillPlan(els, idx, oldValue);
+      if (!plan) return null;
+      if (plan.mode === "trocar") {
+        const ok = root.confirm(
+          `Trocar também as linhas ${plan.from} a ${plan.to}, que estavam como "${plan.oldValue}", para "${plan.value || "(sem produto)"}"?\n\n` +
+            "OK (Enter) = sim, trocar o bloco\nCancelar (Esc) = só esta linha"
+        );
+        if (!ok) return null;
+      }
+      plan.ids.forEach((rid) => (findElement(rid).product = plan.value));
+      markChanged();
+      return plan;
+    },
+
     /** Demanda diária própria de um produto (vazio = demanda geral). Retorna false se inválida. */
     onProductDemandChange(key, raw) {
       if (!state.study) return false;

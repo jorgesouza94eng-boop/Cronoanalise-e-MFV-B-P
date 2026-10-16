@@ -844,3 +844,29 @@ test("carga do posto: Σ TP × demanda, ocupação, takt misto e TC ponderado", 
   s.elements.forEach((e) => (e.product = ""));
   assert.equal(C.computeStudy(s).mix, null);
 });
+
+/* ==========================================================================
+   REV 1.5: PREENCHER O PRODUTO PARA BAIXO
+   ========================================================================== */
+
+test("produto para baixo: preenche as linhas vazias abaixo até a próxima com produto", () => {
+  const els = ["", "", "", "Produto B", ""].map((p, i) => C.createElement({ id: `r${i}`, product: p }));
+  els[0].product = "Produto A";
+  const plan = C.productFillPlan(els, 0, "");
+  assert.equal(plan.mode, "preencher");
+  assert.deepEqual(plan.ids, ["r1", "r2"], "para antes da linha que já tem produto");
+  assert.equal(plan.from, 2);
+  assert.equal(plan.to, 3);
+  assert.equal(C.productFillPlan(els, 4, ""), null, "última linha: nada a preencher");
+});
+
+test("produto para baixo: trocar oferece só o bloco seguido com o produto antigo", () => {
+  const els = ["A", "A", "a", "B", "A"].map((p, i) => C.createElement({ id: `r${i}`, product: p }));
+  els[1].product = "C"; // linha 2 trocada de A para C
+  const plan = C.productFillPlan(els, 1, "A");
+  assert.equal(plan.mode, "trocar");
+  assert.deepEqual(plan.ids, ["r2"], "maiúsculas não importam; para no B (a linha 5 'A' não entra)");
+  assert.equal(C.productFillPlan(els, 1, "c"), null, "mesmo produto (só maiúsculas): nada a fazer");
+  els[3].product = "";
+  assert.equal(C.productFillPlan(els, 3, ""), null, "linha esvaziada: não preenche");
+});

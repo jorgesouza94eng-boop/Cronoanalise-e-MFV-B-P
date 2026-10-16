@@ -117,6 +117,17 @@ Pela literatura (OIT, Barnes), o tempo padrão é **por produto**. Para analisar
 
 - Desmarcar **Vários produtos** apaga os produtos das linhas (com confirmação).
 
+**Preencher para baixo (REV 1.5):** o produto é confirmado ao sair do campo ou com `Enter` (que segue para a descrição).
+
+| Situação | O que o app faz |
+|---|---|
+| A linha estava **sem produto** | Copia o produto para as linhas **vazias** logo abaixo, até a próxima linha que já tem produto. Não pede confirmação |
+| A linha **já tinha** um produto e você digitou outro | Pergunta se troca também as linhas **seguidas** que tinham o produto antigo. `Enter` = troca o bloco · `Esc` = só esta linha |
+| **Filtro ativo** | Só a linha editada muda (o preenchimento mexeria em linhas escondidas) |
+
+- O preenchimento segue a ordem da grade e atravessa a troca de filmagem.
+- Exemplo: num estudo de 12 linhas sem produto, digitar "Produto A" na linha 1 e "Produto B" na linha 7 (com `Enter` para trocar o bloco) deixa as linhas 1–6 como A e as 7–12 como B.
+
 #### Carga do posto com vários produtos (REV 1.4)
 
 Num posto que faz vários produtos, o tempo é dividido entre eles. Por isso, o gargalo é avaliado pela **carga do mix** e não pelo takt de cada produto isolado. O quadro **Carga do posto (mix de produtos)** aparece abaixo do resumo:
@@ -422,8 +433,8 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 122 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback e IA (Node 18+, sem dependências)
-npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2, 1.3 e 1.4 — requer o servidor local
+npm test             # 124 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback e IA (Node 18+, sem dependências)
+npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada e REV 1.2 a 1.5 — requer o servidor local
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

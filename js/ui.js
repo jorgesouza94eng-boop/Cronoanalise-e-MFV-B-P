@@ -24,6 +24,7 @@
 
   /** Ordem do fluxo rápido com Enter. Frequência e Kaizen ficam fora (acesso por Tab). */
   const ENTER_FLOW = {
+    product: "description",
     description: "videoTime",
     type: "__qty__",
     quantity: "videoTime",
@@ -235,6 +236,14 @@
     // Grade (delegação de eventos: funciona para linhas criadas dinamicamente)
     els.tbody.addEventListener("input", onGridInput);
     els.tbody.addEventListener("focusout", onGridFocusOut);
+    // Produto: guarda o valor ao entrar no campo (para saber se foi preenchido ou trocado)
+    // e seleciona o texto: digitar substitui o produto (inclusive o que acabou de ser preenchido)
+    els.tbody.addEventListener("focusin", (e) => {
+      if (e.target.dataset && e.target.dataset.field === "product") {
+        e.target.dataset.before = e.target.value;
+        e.target.select();
+      }
+    });
     els.tbody.addEventListener("keydown", onGridKeyDown);
     els.tbody.addEventListener("click", onGridClick);
 
@@ -303,6 +312,23 @@
     }
     if (info.field === "pace") commitPace(info, e.target, true);
     if (info.field === "description") commitDescription(info);
+    if (info.field === "product") commitProduct(info, e.target);
+  }
+
+  /** Preencher para baixo: aplica o produto às linhas vazias abaixo (ou troca o bloco). */
+  function commitProduct(info, input) {
+    const before = input.dataset.before == null ? input.value : input.dataset.before;
+    input.dataset.before = input.value; // Enter + saída do campo não repetem a ação
+    const plan = h.onProductCommit(info.id, before, filterActive());
+    if (!plan) return;
+    plan.ids.forEach((rid) => {
+      const other = els.tbody.querySelector(`tr[data-id="${rid}"] [data-field="product"]`);
+      if (other) {
+        other.value = plan.value;
+        other.dataset.before = plan.value;
+      }
+    });
+    toast(`${plan.value ? `"${plan.value}" aplicado` : "Produto removido"} nas linhas ${plan.from} a ${plan.to}.`, "ok");
   }
 
   /** Elemento já classificado em outra linha: copia tipo, valor e desperdício. */
@@ -367,6 +393,7 @@
         }
       }
       if (info.field === "description") commitDescription(info);
+      if (info.field === "product") commitProduct(info, e.target);
       if (info.field === "pace") {
         const res = commitPace(info, e.target, true);
         if (!res.ok) {

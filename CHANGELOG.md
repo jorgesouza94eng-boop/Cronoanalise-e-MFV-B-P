@@ -4,11 +4,30 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.5** | 16/10/2026 | Preencher o produto para baixo |
 | **REV 1.4** | 16/10/2026 | Carga do posto com vários produtos e ligação Cronoanálise → MFV |
 | **REV 1.3** | 16/10/2026 | Início por filmagem, vários produtos no mesmo estudo e filtros |
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.5 — 16/10/2026 (preencher o produto para baixo)
+
+### Novidades
+- **Coluna Produto com preenchimento para baixo**, útil ao ligar "Vários produtos" num estudo já lançado:
+  - produto digitado numa linha **vazia** é copiado para as linhas vazias abaixo, até a próxima linha com produto, sem confirmação;
+  - produto **trocado** pergunta se troca também o bloco seguido com o produto antigo (`Enter` = sim · `Esc` = só esta linha);
+  - com **filtro ativo**, só a linha editada muda.
+- `Enter` no campo Produto segue para a descrição.
+- Ao entrar no campo Produto, o texto fica selecionado: digitar substitui o produto, inclusive o que acabou de ser preenchido.
+
+### Compatibilidade
+- Sem mudança no formato dos arquivos: só a tela foi alterada.
+
+### Testes
+- 124 testes de unidade (2 novos, da regra de preenchimento) e o novo teste de navegador `tests/e2e.rev15.js` (13 verificações).
 
 ---
 

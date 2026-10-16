@@ -69,7 +69,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 ```bash
 npm test                                    # testes de unidade (node:test, sem dependências)
 npx http-server -c-1 -p 8765 -s .           # servidor local para os testes de navegador
-CHROMIUM_PATH=/caminho/chrome node tests/e2e.rev14.js http://localhost:8765/
+CHROMIUM_PATH=/caminho/chrome node tests/e2e.rev15.js http://localhost:8765/
 npm run test:e2e                            # todos os testes de navegador (Playwright)
 ```
 

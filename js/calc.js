@@ -438,6 +438,36 @@
     };
   }
 
+  /**
+   * "Preencher para baixo" da coluna Produto, depois que a linha idx recebeu um produto
+   * (o valor anterior era oldProduct). Não altera nada: devolve o plano para a tela.
+   *  - "preencher": antes vazia → as linhas vazias logo abaixo recebem o produto
+   *                 (para na 1ª linha que já tem produto). Não precisa de confirmação.
+   *  - "trocar":    antes "A" → as linhas seguidas abaixo que também eram "A" podem
+   *                 receber o novo valor (pede confirmação na tela).
+   * Segue a ordem da grade (atravessa filmagens). Retorna null quando não há o que fazer.
+   */
+  function productFillPlan(elements, idx, oldProduct) {
+    const list = elements || [];
+    const row = list[idx];
+    if (!row) return null;
+    const value = String(row.product || "").trim().replace(/\s+/g, " ");
+    const oldKey = elementKey(oldProduct);
+    if (elementKey(value) === oldKey) return null;
+    const ids = [];
+    let mode;
+    if (!oldKey) {
+      if (!value) return null;
+      mode = "preencher";
+      for (let i = idx + 1; i < list.length && !elementKey(list[i].product); i++) ids.push(list[i].id);
+    } else {
+      mode = "trocar";
+      for (let i = idx + 1; i < list.length && elementKey(list[i].product) === oldKey; i++) ids.push(list[i].id);
+    }
+    if (!ids.length) return null;
+    return { mode, value, oldValue: String(oldProduct || "").trim(), ids, from: idx + 2, to: idx + 1 + ids.length };
+  }
+
   /** Agrupa as linhas válidas pelo nome do elemento (equivale à aba "Listagem de Elementos"). */
   /**
    * Compilação (aba "Compilação e Soluções"): por valor agregado e por desperdício,
@@ -1115,6 +1145,7 @@
     computeStudy,
     computeKpis,
     computeMix,
+    productFillPlan,
     formatNumber,
     generateId,
     slugify,
