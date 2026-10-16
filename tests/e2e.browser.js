@@ -45,6 +45,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const fileName = await page.evaluate(() => LeanApp.state.study.fileName);
   check(/^Crono_Industria_Metalurgica_Alfa_Montagem_Final_Posto_01_\d{4}-\d\d-\d\d_[0-9a-f]{8}\.json$/.test(fileName), "nome do arquivo: " + fileName);
   check(await page.evaluate(() => document.activeElement.dataset.field) === "description", "foco na descrição da linha 1");
+  check(await page.inputValue("#entry-mode") === "quantidade" && await page.inputValue("#time-unit") === "s", "novo estudo no padrão da planilha (quantidade, segundos)");
+  // O fluxo abaixo usa o modo clássico (frequência, minutos, tolerância 5%)
+  await page.selectOption("#entry-mode", "frequencia");
+  await page.selectOption("#time-unit", "min");
+  await page.fill("#tolerance-factor", "5");
+  await page.focus("#chrono-tbody tr:nth-child(1) [data-field=description]");
 
   // Fluxo só teclado
   const typeRow = async (desc, time, pace) => {
@@ -61,8 +67,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // Linha 3: troca de caixa 1/50 (frequência via Tab)
   await page.keyboard.type("Trocar caixa");
+  await page.keyboard.press("Tab"); // vai para o tipo (lista C/A)
+  await page.keyboard.press("a");   // tecla A seleciona "acíclico"
   await page.keyboard.press("Tab"); // vai para freq
-  check(await page.evaluate(() => document.activeElement.dataset.field) === "frequency", "Tab alcança a frequência");
+  check(await page.evaluate(() => document.activeElement.dataset.field) === "frequency", "Tab alcança tipo e frequência");
   await page.keyboard.type("1/50"); await page.keyboard.press("Enter");
   check(await page.evaluate(() => document.activeElement.dataset.field) === "videoTime", "Enter na frequência vai ao tempo final");
   await page.keyboard.type("212"); await page.keyboard.press("Enter");
@@ -72,7 +80,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check(await read("#chrono-tbody tr:nth-child(2) [data-out=tsub]") === "1,000", "TS linha 2 = 1,000");
   check(await read("#chrono-tbody tr:nth-child(2) [data-out=tnorm]") === "1,100", "TN linha 2 = 1,100");
   check(await read("#chrono-tbody tr:nth-child(3) [data-out=tnorm]") === "0,020", "TN troca de caixa 1/50 = 0,020");
-  check(await read("#chrono-tbody tr:nth-child(3) .tag-type") === "A", "linha 3 marcada como acíclica");
+  check(await page.inputValue("#chrono-tbody tr:nth-child(3) [data-field=type]") === "A", "linha 3 marcada como acíclica pelo teclado");
   check(await read("#total-tnorm") === "1,320", "ΣTN = 1,320");
   check(await read("#kpi-net-time") === "480,0", "TLD = 480,0");
   check(await read("#kpi-takt-time") === "2,00", "Takt = 2,00");
@@ -231,6 +239,50 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     check(n === 2, "2 arquivos de estudo na pasta (1 por posto)");
     }
   }
+
+  // ===== Padrão da planilha B+P: quantidade, tipo C/A, valor e resumo por elemento =====
+  await page.click("#btn-studies");
+  await page.waitForSelector("#study-dialog[open]");
+  await page.fill("#new-client", "Cliente Planilha"); await page.fill("#new-process", "Posto REV2");
+  await page.click("#new-study-form button[type=submit]");
+  await page.waitForFunction(() => LeanApp.state.study.clientName === "Cliente Planilha");
+  check(await page.inputValue("#tolerance-factor") === "5", "novo estudo herda os parâmetros da jornada (tolerância 5%)");
+  await page.fill("#tolerance-factor", "0");
+  await page.selectOption("#entry-mode", "quantidade");
+  await page.selectOption("#time-unit", "s");
+  await page.focus("#chrono-tbody tr:nth-child(1) [data-field=description]");
+  // Linha 1: Corte (C, qtd 2) — Tab tipo → Tab qtd → Enter → tempo
+  await page.keyboard.type("Corte da treliça"); await page.keyboard.press("Tab"); await page.keyboard.press("c");
+  await page.keyboard.press("Tab"); await page.keyboard.press("Control+a"); await page.keyboard.type("2");
+  await page.keyboard.press("Enter");
+  check(await page.evaluate(() => document.activeElement.dataset.field) === "videoTime", "Enter na quantidade vai ao tempo final");
+  await page.keyboard.type("32"); await page.keyboard.press("Enter"); await page.keyboard.press("Enter");
+  // Linha 2: Transporte (A)
+  await page.keyboard.type("Transporte"); await page.keyboard.press("Tab"); await page.keyboard.press("a");
+  await page.keyboard.press("Enter"); // tipo → quantidade
+  check(await page.evaluate(() => document.activeElement.classList.contains("input-qty")), "Enter no tipo vai à quantidade");
+  await page.keyboard.press("Enter"); await page.keyboard.type("37"); await page.keyboard.press("Enter"); await page.keyboard.press("Enter");
+  // Classifica a linha 1 como Agrega pelo teclado
+  await page.focus("#chrono-tbody tr:nth-child(1) [data-field=value]");
+  await page.keyboard.press("a");
+  check(await page.inputValue("#chrono-tbody tr:nth-child(1) [data-field=value]") === "AG", "tecla A em Valor = Agrega");
+  // Linha 3: mesmo elemento escrito diferente → herda tipo e valor
+  await page.focus("#chrono-tbody tr:nth-child(3) [data-field=description]");
+  await page.keyboard.type("corte  da TRELIÇA"); await page.keyboard.press("Enter");
+  check(await page.inputValue("#chrono-tbody tr:nth-child(3) [data-field=value]") === "AG", "elemento repetido herda o valor (Agrega)");
+  await page.keyboard.type("135"); await page.keyboard.press("Enter"); await page.keyboard.press("Enter");
+  const sumRows = await page.$$eval("#summary-tbody tr", (r) => r.map((tr) => Array.from(tr.cells).map((c) => c.textContent.trim())));
+  check(sumRows.length === 2, "resumo agrupa em 2 elementos");
+  check(sumRows[0][3] === "2" && sumRows[0][4] === "3", "Corte: 2 ocorrências, qtd total 3");
+  check(sumRows[0][6] === "30,0", "Corte (C): (32 + 58) s ÷ 3 un = 30,0 s/un → " + sumRows[0][6]);
+  check(sumRows[1][6] === "5,0", "Transporte (A): soma = 5,0 s");
+  check(sumRows[0][8] === "Agrega" && sumRows[0][10] === "Manter atividade", "valor e ação no resumo");
+  check(await read("#summary-total") === "35,0", "tempo normal do ciclo = 35,0 s");
+  check(await read("#kpi-cycle-time") === "35,0", "painel em segundos: TP = 35,0 s/pç");
+  await page.selectOption("#time-unit", "min");
+  check(await read("#summary-total") === "0,583" && (await read("#kpi-cycle-time")) === "0,58", "troca para minutos: 0,583 min");
+  await page.selectOption("#time-unit", "h");
+  check(await read("#summary-total") === "0,0097", "troca para horas: 0,0097 h");
 
   check(errors.length === 0, "nenhum erro no console" + (errors.length ? ": " + errors.join(" | ") : ""));
   await browser.close();

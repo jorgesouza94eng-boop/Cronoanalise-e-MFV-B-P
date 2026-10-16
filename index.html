@@ -104,7 +104,7 @@
           <span class="kpi-title">Takt time</span>
           <div class="kpi-value-group">
             <strong id="kpi-takt-time">--</strong>
-            <span class="kpi-unit">min/pç</span>
+            <span class="kpi-unit"><span class="unit-label">min</span>/pç</span>
           </div>
           <span class="kpi-caption" id="kpi-takt-sec">--</span>
         </div>
@@ -113,7 +113,7 @@
           <span class="kpi-title">Tempo padrão do ciclo</span>
           <div class="kpi-value-group">
             <strong id="kpi-cycle-time">--</strong>
-            <span class="kpi-unit">min/pç</span>
+            <span class="kpi-unit"><span class="unit-label">min</span>/pç</span>
           </div>
           <span class="kpi-caption" id="kpi-normal-time">--</span>
         </div>
@@ -152,6 +152,21 @@
         </div>
         <div class="toolbar-actions">
           <div class="inline-field">
+            <label for="entry-mode" title="Quantidade = padrão da planilha B+P | Frequência = cronoanálise clássica (1/50)">Lançamento</label>
+            <select id="entry-mode" data-setting="entryMode">
+              <option value="quantidade">Quantidade</option>
+              <option value="frequencia">Frequência</option>
+            </select>
+          </div>
+          <div class="inline-field">
+            <label for="time-unit">Unidade</label>
+            <select id="time-unit" data-setting="timeUnit">
+              <option value="s">Segundos</option>
+              <option value="min">Minutos</option>
+              <option value="h">Horas</option>
+            </select>
+          </div>
+          <div class="inline-field">
             <label for="video-start" title="Instante do vídeo em que o primeiro elemento da 1ª filmagem começa">Leitura inicial</label>
             <input type="text" id="video-start" class="mono" inputmode="numeric" placeholder="00:00" autocomplete="off"
                    title="Instante do vídeo em que o primeiro elemento da 1ª filmagem começa (MMSS ou MM:SS). As filmagens seguintes começam em 00:00.">
@@ -167,18 +182,20 @@
           <colgroup>
             <col class="col-num"><col class="col-elem"><col class="col-type"><col class="col-freq">
             <col class="col-tfinal"><col class="col-tsub"><col class="col-pace"><col class="col-tnorm">
-            <col class="col-action"><col class="col-del">
+            <col class="col-value"><col class="col-waste"><col class="col-action"><col class="col-del">
           </colgroup>
           <thead>
             <tr>
               <th scope="col" title="Número do elemento. Toque no número (ou Alt+N) para marcar o início de uma nova filmagem">Nº</th>
-              <th scope="col">Elemento de trabalho (operação)</th>
-              <th scope="col" title="C = cíclico | A = acíclico (definido pela frequência)">Tipo</th>
-              <th scope="col" title="1 = uma vez por peça | 1/50 = uma vez a cada 50 peças">Freq.</th>
+              <th scope="col" title="Elementos com o MESMO NOME são agrupados no resumo (média se C, soma se A)">Elemento de trabalho (operação)</th>
+              <th scope="col" title="C = cíclico (média das ocorrências) | A = acíclico (soma dos tempos). Digite C ou A">Tipo</th>
+              <th scope="col" id="th-qty" title="Quantidade de unidades produzidas no trecho">Qtd.</th>
               <th scope="col" title="Digite MMSS (132 → 01:32) ou HMMSS (10532 → 1:05:32)">Tempo final</th>
-              <th scope="col" title="Tempo final − leitura anterior (minutos centesimais)">T. subtraído</th>
-              <th scope="col" title="Avaliação do ritmo do operador (50% a 150%)">Ritmo (%)</th>
-              <th scope="col" title="Tempo subtraído × (Ritmo/100) × Frequência">T. normal</th>
+              <th scope="col" title="Tempo final − leitura anterior">T. subtr. (<span class="unit-label">min</span>)</th>
+              <th scope="col" title="Avaliação do ritmo do operador (50% a 150%; padrão 100%)">Ritmo (%)</th>
+              <th scope="col" id="th-normal" title="Tempo subtraído × (Ritmo/100)">T. normal (<span class="unit-label">min</span>)</th>
+              <th scope="col" title="Agrega / Não agrega / Incidental. Digite A, N ou I">Valor</th>
+              <th scope="col" title="Os 8 desperdícios do Lean. Digite a inicial">Desperdício</th>
               <th scope="col">Ação sugerida / Kaizen (ECRS)</th>
               <th scope="col"><span class="sr-only">Excluir</span></th>
             </tr>
@@ -186,17 +203,61 @@
           <tbody id="chrono-tbody"></tbody>
           <tfoot>
             <tr>
-              <td colspan="5" class="tfoot-label">Totais (minutos centesimais)<span id="total-films"></span>:</td>
+              <td colspan="5" class="tfoot-label">Totais observados (<span class="unit-label">min</span>)<span id="total-films"></span>:</td>
               <td class="cell-total mono" id="total-tsub">0,000</td>
               <td></td>
               <td class="cell-total mono highlight-col" id="total-tnorm">0,000</td>
-              <td colspan="2" class="tfoot-errors" id="total-errors"></td>
+              <td colspan="4" class="tfoot-errors" id="total-errors"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <!-- RESUMO POR ELEMENTO (equivale à aba "Listagem de Elementos" da planilha) -->
+    <section class="timesheet-section summary-section" aria-label="Resumo por elemento">
+      <div class="section-toolbar">
+        <div class="toolbar-left">
+          <h2>Resumo por elemento</h2>
+          <span class="keyboard-hint" id="summary-hint"></span>
+        </div>
+      </div>
+      <div class="table-container summary-container">
+        <table class="chrono-table summary-table">
+          <colgroup>
+            <col class="col-num"><col class="col-elem"><col class="col-type"><col class="col-occ"><col class="col-occ">
+            <col class="col-tsub"><col class="col-tnorm"><col class="col-occ"><col class="col-value"><col class="col-waste"><col class="col-act">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Nº</th>
+              <th scope="col">Elemento</th>
+              <th scope="col">Tipo</th>
+              <th scope="col" title="Quantas vezes o elemento aparece na grade">Ocorr.</th>
+              <th scope="col" id="th-sum-qty" title="Soma das quantidades">Qtd. total</th>
+              <th scope="col">T. total (<span class="unit-label">min</span>)</th>
+              <th scope="col" title="Tipo C: Σtempo ÷ Σquantidade | Tipo A: Σtempo">T. no ciclo (<span class="unit-label">min</span>)</th>
+              <th scope="col">% ciclo</th>
+              <th scope="col">Valor</th>
+              <th scope="col">Desperdício</th>
+              <th scope="col">Ação</th>
+            </tr>
+          </thead>
+          <tbody id="summary-tbody"></tbody>
+          <tfoot>
+            <tr>
+              <td colspan="6" class="tfoot-label">Tempo normal do ciclo (<span class="unit-label">min</span>):</td>
+              <td class="cell-total mono highlight-col" id="summary-total">0,000</td>
+              <td colspan="4" class="summary-note" id="summary-note"></td>
             </tr>
           </tfoot>
         </table>
       </div>
     </section>
   </main>
+
+  <!-- NOMES JÁ USADOS (autocompletar: garante o mesmo nome para o mesmo elemento) -->
+  <datalist id="element-names"></datalist>
 
   <!-- MODELO DE LINHA DA GRADE -->
   <template id="row-template">
@@ -205,18 +266,27 @@
                  title="Marcar/desmarcar o início de uma nova filmagem (Alt+N)"><span class="seq-num"></span><span
                  class="film-tag" hidden></span></button></td>
       <td><input type="text" class="input-cell input-elem" data-field="description" aria-label="Elemento de trabalho"
-                 placeholder="Descreva a operação..." autocomplete="off" enterkeyhint="next"></td>
-      <td class="cell-type"><span class="tag-type">C</span></td>
-      <td><input type="text" class="input-cell input-freq mono" data-field="frequency" aria-label="Frequência"
-                 title="1 = uma vez por peça | 1/50 = uma vez a cada 50 peças" autocomplete="off" enterkeyhint="next"></td>
+                 list="element-names" placeholder="Descreva a operação..." autocomplete="off" enterkeyhint="next"></td>
+      <td><select class="input-cell input-type" data-field="type" aria-label="Tipo: C cíclico ou A acíclico">
+            <option value="C">C</option><option value="A">A</option></select></td>
+      <td><input type="text" class="input-cell input-qty mono" data-field="quantity" aria-label="Quantidade"
+                 inputmode="decimal" autocomplete="off" enterkeyhint="next"></td>
       <td><input type="text" class="input-cell input-tfinal mono" data-field="videoTime" aria-label="Tempo final"
                  inputmode="numeric" placeholder="MMSS" autocomplete="off" enterkeyhint="next"></td>
       <td class="cell-readonly mono" data-out="tsub">0,000</td>
       <td><input type="text" class="input-cell input-pace mono" data-field="pace" aria-label="Fator de ritmo em %"
                  inputmode="decimal" autocomplete="off" enterkeyhint="next"></td>
       <td class="cell-readonly mono highlight-col" data-out="tnorm">0,000</td>
+      <td><select class="input-cell input-value" data-field="value" aria-label="Valor agregado">
+            <option value="">—</option><option value="AG">Agrega</option><option value="NA">Não agrega</option>
+            <option value="IN">Incidental</option></select></td>
+      <td><select class="input-cell input-waste" data-field="waste" aria-label="Desperdício">
+            <option value="">—</option><option value="superproducao">Superprodução</option><option value="espera">Espera</option>
+            <option value="transporte">Transporte</option><option value="processamento">Processamento excessivo</option>
+            <option value="estoque">Estoque</option><option value="movimentacao">Movimentação</option>
+            <option value="defeitos">Defeitos / retrabalho</option><option value="intelecto">Intelecto</option></select></td>
       <td><input type="text" class="input-cell input-action" data-field="kaizen" aria-label="Ação sugerida / Kaizen"
-                 placeholder="Desperdício / melhoria..." autocomplete="off" enterkeyhint="next"></td>
+                 placeholder="Melhoria (ECRS)..." autocomplete="off" enterkeyhint="next"></td>
       <td class="cell-actions"><button type="button" class="btn-icon-del" tabindex="-1"
                  title="Excluir linha (Ctrl+Del)" aria-label="Excluir linha">&times;</button></td>
     </tr>

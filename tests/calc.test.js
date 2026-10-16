@@ -12,8 +12,15 @@ const C = require("../js/calc.js");
 const close = (actual, expected, msg) =>
   assert.ok(Math.abs(actual - expected) < 1e-9, `${msg || ""} esperado ${expected}, obtido ${actual}`);
 
+/** Estudo de teste no modo clássico (frequência, minutos, tolerância 5%). */
 function study(elements, overrides) {
-  const s = C.createStudy({ clientName: "Cliente Teste", processName: "Posto 01", id: "abcd1234-0000-4000-8000-000000000000" });
+  const s = C.createStudy({
+    clientName: "Cliente Teste",
+    processName: "Posto 01",
+    id: "abcd1234-0000-4000-8000-000000000000",
+    settings: { entryMode: "frequencia", timeUnit: "min" },
+    shiftParams: { tolerancePct: 5 },
+  });
   s.elements = elements.map((e) => C.createElement(e));
   return Object.assign(s, overrides || {});
 }
@@ -236,7 +243,7 @@ test("tempo normal: TN = TS × (ritmo/100) × frequência", () => {
   const r = C.computeStudy(
     study([
       { videoTime: "01:00", pace: "110", frequency: "1" }, // 1,0 × 1,10 × 1 = 1,10
-      { videoTime: "03:00", pace: "100", frequency: "1/50" }, // 2,0 × 1,00 × 0,02 = 0,04 (troca de caixa)
+      { videoTime: "03:00", pace: "100", frequency: "1/50", type: "A" }, // 2,0 × 1,00 × 0,02 = 0,04 (troca de caixa)
       { videoTime: "03:30", pace: "90", frequency: "2" }, // 0,5 × 0,90 × 2 = 0,90
     ])
   );
@@ -380,7 +387,8 @@ test("JSON: resumo de resultados é gravado para leitura externa", () => {
   const s = study([{ videoTime: "01:00", pace: "100" }]);
   const out = JSON.parse(C.serializeStudy(s));
   assert.equal(out.results.unit, "minutos centesimais");
-  assert.equal(out.results.sumNormalTimeMin, 1);
+  assert.equal(out.results.cycleNormalTimeMin, 1);
+  assert.equal(out.results.observedTimeMin, 1);
   assert.equal(out.results.standardTimeMin, 1.05);
 });
 
@@ -438,4 +446,191 @@ test("conflito: só grava se a pasta ainda estiver na revisão conhecida", () =>
   assert.equal(C.canWriteOver(3, { revision: 3 }), true);
   assert.equal(C.canWriteOver(3, { revision: 4 }), false, "outro notebook gravou antes");
   assert.equal(C.canWriteOver(null, { revision: 1 }), false, "arquivo desconhecido não é sobrescrito");
+});
+
+/* ==========================================================================
+   PADRÃO DA PLANILHA B+P: QUANTIDADE, TIPO C/A MANUAL E RESUMO POR ELEMENTO
+   ========================================================================== */
+
+/** Estudo no padrão da planilha REV2 (quantidade, segundos, tolerância 0%). */
+function studyQty(rows) {
+  const s = C.createStudy({ clientName: "Cliente", processName: "Posto" });
+  s.elements = rows.map((e) => C.createElement(e));
+  return s;
+}
+
+test("novo estudo segue a planilha: quantidade, segundos, tolerância 0% e ritmo 100%", () => {
+  const s = C.createStudy({ clientName: "A", processName: "B" });
+  assert.equal(C.entryMode(s), "quantidade");
+  assert.equal(C.timeUnit(s), "s");
+  assert.equal(s.shiftParams.tolerancePct, 0);
+  assert.equal(s.elements[0].pace, "100");
+  assert.equal(s.elements[0].type, "C");
+  assert.equal(s.elements[0].quantity, "1");
+});
+
+test("resumo (quantidade): Tipo C = Σtempo ÷ Σquantidade, como a coluna 'tempo de ciclo' da planilha", () => {
+  const r = C.computeStudy(
+    studyQty([
+      { description: "Preencher bandeja", videoTime: "32", quantity: "2", type: "C" }, // 32 s / 2 un
+      { description: "Transporte", videoTime: "37", type: "A" }, // 5 s
+      { description: "Preencher bandeja", videoTime: "1:35", quantity: "3", type: "C" }, // 58 s / 3 un
+    ])
+  );
+  const g = r.summary.elements;
+  assert.equal(g.length, 2, "agrupa as 2 linhas de mesmo nome");
+  assert.equal(g[0].occurrences, 2);
+  assert.equal(g[0].sumQuantity, 5);
+  close(g[0].cycleTime * 60, 90 / 5, "(32 + 58) ÷ (2 + 3) = 18 s/un");
+  close(g[1].cycleTime * 60, 5);
+  close(r.kpis.sumNormal * 60, 23, "ciclo = 18 + 5");
+  close(r.totals.sumSubtracted * 60, 95, "tempo observado continua sendo a soma de tudo");
+});
+
+test("resumo (quantidade): Tipo A soma os tempos e ignora a quantidade (planilha REV2)", () => {
+  const r = C.computeStudy(
+    studyQty([
+      { description: "Corte das treliças", videoTime: "32", quantity: "2", type: "A" },
+      { description: "Movimentação", videoTime: "37", type: "A" },
+      { description: "Corte das treliças", videoTime: "1:41", quantity: "3", type: "A" },
+    ])
+  );
+  close(r.summary.elements[0].cycleTime * 60, 32 + 64);
+  close(r.summary.elements[0].sumQuantity, 5);
+});
+
+test("resumo: agrupa ignorando maiúsculas e espaços extras; linhas sem descrição ficam separadas", () => {
+  const r = C.computeStudy(
+    studyQty([
+      { description: "Transporte de material", videoTime: "10" },
+      { description: "  transporte   DE material ", videoTime: "20" },
+      { description: "", videoTime: "30" },
+      { description: "", videoTime: "40" },
+    ])
+  );
+  assert.equal(r.summary.elements.length, 3);
+  assert.equal(r.summary.elements[0].occurrences, 2);
+  assert.equal(r.summary.elements[0].name, "Transporte de material");
+});
+
+test("resumo (frequência): média das ocorrências; a frequência rateia o acíclico", () => {
+  const s = studyQty([
+    { description: "Soldar", videoTime: "1:00", frequency: "1" },
+    { description: "Soldar", videoTime: "3:00", frequency: "1" },
+    { description: "Trocar caixa", videoTime: "4:00", frequency: "1/50", type: "A" },
+  ]);
+  s.settings.entryMode = "frequencia";
+  const r = C.computeStudy(s);
+  close(r.summary.elements[0].cycleTime, 1.5, "(1 + 2) ÷ 2 ocorrências");
+  close(r.summary.elements[1].cycleTime, 0.02);
+  close(r.kpis.sumNormal, 1.52);
+});
+
+test("resumo: ritmo e tolerância continuam valendo quando informados", () => {
+  const s = studyQty([{ description: "Montar", videoTime: "1:00", pace: "110" }]);
+  s.shiftParams.tolerancePct = 10;
+  const r = C.computeStudy(s);
+  close(r.summary.elements[0].cycleTime, 1.1);
+  close(r.kpis.standardTime, 1.21);
+});
+
+test("resumo: valor, desperdício e ação automática (Manter / Eliminar / Reduzir)", () => {
+  const r = C.computeStudy(
+    studyQty([
+      { description: "Corte", videoTime: "10", value: "AG" },
+      { description: "Procurar peças", videoTime: "20", value: "NA", waste: "movimentacao" },
+      { description: "Anotar OP", videoTime: "30", value: "IN", waste: "processamento" },
+      { description: "Limpeza", videoTime: "40" },
+    ])
+  );
+  assert.deepEqual(
+    r.summary.elements.map((g) => g.action),
+    ["Manter atividade", "Eliminar atividade", "Reduzir atividade", "Classificar valor"]
+  );
+  assert.equal(r.summary.elements[1].waste, "movimentacao");
+  close(r.summary.elements.reduce((a, g) => a + g.sharePct, 0), 100);
+});
+
+test("resumo: classificação divergente no mesmo elemento é sinalizada", () => {
+  const r = C.computeStudy(
+    studyQty([
+      { description: "Transporte", videoTime: "10", value: "NA", type: "A" },
+      { description: "Transporte", videoTime: "20", value: "IN", type: "C" },
+    ])
+  );
+  assert.deepEqual(r.summary.elements[0].conflicts.sort(), ["tipo", "valor"]);
+  assert.equal(r.summary.elements[0].value, "NA", "prevalece a 1ª ocorrência");
+  assert.equal(r.summary.conflictCount, 1);
+});
+
+test("resumo: linhas com erro ou sem tempo ficam fora", () => {
+  const r = C.computeStudy(
+    studyQty([
+      { description: "A", videoTime: "30" },
+      { description: "B", videoTime: "" },
+      { description: "C", videoTime: "20" }, // menor que a anterior → erro
+      { description: "D", videoTime: "40", quantity: "0" }, // quantidade inválida
+    ])
+  );
+  assert.deepEqual(r.summary.elements.map((g) => g.name), ["A"]);
+  assert.equal(r.errorCount, 2);
+});
+
+test("unidades: segundos, minutos e horas", () => {
+  assert.equal(C.formatTime(1.5, "s"), "90,0");
+  assert.equal(C.formatTime(1.5, "min"), "1,500");
+  assert.equal(C.formatTime(90, "h"), "1,5000");
+  close(C.toUnit(2, "s"), 120);
+});
+
+test("quantidade: aceita vírgula; zero ou texto é erro", () => {
+  assert.equal(C.parseQuantity("").value, 1);
+  assert.equal(C.parseQuantity("2,5").value, 2.5);
+  assert.equal(C.parseQuantity("0").value, null);
+  assert.equal(C.parseQuantity("abc").value, null);
+});
+
+test("JSON de versão anterior (sem settings): mantém frequência, minutos e deduz o tipo pela frequência", () => {
+  const r = C.normalizeStudy({
+    schema: C.SCHEMA_ID,
+    schemaVersion: 1,
+    id: "x",
+    elements: [{ description: "a", frequency: "1/50" }, { description: "b" }],
+  });
+  assert.equal(C.entryMode(r.study), "frequencia");
+  assert.equal(C.timeUnit(r.study), "min");
+  assert.equal(r.study.elements[0].type, "A");
+  assert.equal(r.study.elements[1].type, "C");
+});
+
+test("JSON: valor/desperdício inválidos são descartados; classificação e resumo são gravados", () => {
+  const r = C.normalizeStudy({
+    schema: C.SCHEMA_ID,
+    schemaVersion: 1,
+    id: "x",
+    settings: { entryMode: "quantidade", timeUnit: "h" },
+    elements: [{ description: "a", value: "XX", waste: "nada" }, { description: "b", value: "NA", waste: "espera" }],
+  });
+  assert.equal(r.study.elements[0].value, "");
+  assert.equal(r.study.elements[0].waste, "");
+  assert.equal(r.study.elements[1].waste, "espera");
+  assert.equal(C.timeUnit(r.study), "h");
+  const s = studyQty([{ description: "Corte", videoTime: "30", value: "AG" }]);
+  const out = JSON.parse(C.serializeStudy(s));
+  assert.equal(out.results.summary[0].element, "Corte");
+  assert.equal(out.results.summary[0].action, "Manter atividade");
+  assert.equal(out.results.entryMode, "quantidade");
+});
+
+test("CSV: unidade escolhida e seção 'Resumo por elemento'", () => {
+  const csv = C.buildCSV(
+    studyQty([
+      { description: "Corte", videoTime: "30", quantity: "2", value: "AG" },
+      { description: "Corte", videoTime: "1:00", quantity: "1", value: "AG" },
+    ])
+  );
+  const lines = csv.split("\r\n");
+  assert.ok(lines.some((l) => l.includes("Tempo subtraído (s)")));
+  assert.ok(lines.includes("RESUMO POR ELEMENTO (Listagem de Elementos)"));
+  assert.ok(lines.some((l) => l.startsWith('1;"Corte";Cíclico;2;3,0000;60,0;20,0;100,0;"Agrega"')));
 });

@@ -52,6 +52,40 @@ Aplicação web **local-first** e **100% sem servidor** para cronoanálise de v�
 | `199` | **Recusado**: segundos ≥ 60 (erro de digitação) | — |
 | Valor menor que a leitura anterior | **Recusado**: a linha fica em vermelho e o foco permanece no campo | — |
 
+### Padrão da planilha B+P (REV2)
+
+Um estudo novo já abre no padrão da planilha: **lançamento por Quantidade**, tempos em **segundos**, **ritmo 100%** e **tolerância 0%**. Nesse padrão, o resultado é igual ao da planilha. Conferi com as 149 linhas e 9 filmagens da cronoanálise da Laje Forte: deram os mesmos 28 elementos e os mesmos 7.681 s.
+
+| Coluna | Como preencher (teclado) |
+|---|---|
+| **Tipo** | `C` = cíclico (média por unidade) · `A` = acíclico (soma dos tempos) |
+| **Qtd.** | Unidades produzidas no trecho (tempo/un = tempo ÷ qtd). No modo **Frequência**, a mesma coluna recebe `1`, `0,02` ou `1/50` |
+| **Valor** | `A` Agrega · `N` Não agrega · `I` Incidental |
+| **Desperdício** | Inicial de um dos 8 desperdícios Lean: Superprodução, Espera, Transporte, Processamento excessivo, Estoque, Movimentação, Defeitos, Intelecto |
+
+- **Lançamento** (barra da grade): *Quantidade* (padrão planilha) ou *Frequência* (cronoanálise clássica).
+- **Unidade** (barra da grade): *Segundos*, *Minutos* ou *Horas*. Muda a grade, o resumo, o painel e o CSV. A jornada continua em minutos.
+- **Mesmo nome = mesmo elemento.** A descrição sugere os nomes já usados e ignora diferenças de maiúsculas e de espaços. Um elemento repetido herda o tipo, o valor e o desperdício da 1ª ocorrência.
+
+### Resumo por elemento (aba "Listagem de Elementos")
+
+Abaixo da grade, o app agrupa as linhas pelo nome do elemento:
+
+| Modo | Tipo C | Tipo A |
+|---|---|---|
+| **Quantidade** (planilha) | Σtempo ÷ Σquantidade (média por unidade) | Σtempo |
+| **Frequência** | média das ocorrências | média das ocorrências (a frequência já rateia) |
+
+O resumo mostra:
+- ocorrências e quantidade total;
+- tempo total e tempo no ciclo;
+- % do ciclo;
+- valor, desperdício e **ação automática**: Agrega → *Manter*, Não agrega → *Eliminar*, Incidental → *Reduzir*.
+
+Classificações divergentes no mesmo elemento aparecem com ⚠. O **tempo normal do ciclo** é a soma do resumo, e é ele que alimenta o tempo padrão, o Takt e o gargalo.
+
+![Resumo por elemento](docs/tela-resumo.png)
+
 ### Várias filmagens no mesmo estudo
 
 Cada vídeo novo começa em 00:00, como as células amarelas de "Tempo (Início)" na planilha REV2. Para registrar isso no app, há três formas:
@@ -74,8 +108,10 @@ A linha marcada ganha uma faixa amarela e a etiqueta **F2**, **F3**, e assim por
 | Indicador | Fórmula |
 |---|---|
 | Tempo subtraído (TS) | Tempo final da linha − última leitura válida (a primeira linha usa a leitura inicial; a linha de **nova filmagem** usa 00:00) |
-| Tempo normal (TN) | TS × (Ritmo / 100) × Frequência |
-| Tempo padrão (TP) | ΣTN × (1 + Tolerância / 100), método multiplicativo da OIT |
+| Tempo normal da linha (TN) | TS × (Ritmo / 100) [× Frequência, no modo frequência] |
+| Tempo do elemento (resumo) | Quantidade: C = ΣTN ÷ ΣQtd · A = ΣTN — Frequência: média das ocorrências |
+| Tempo normal do ciclo | Σ tempos dos elementos do resumo |
+| Tempo padrão (TP) | Tempo normal do ciclo × (1 + Tolerância / 100), método multiplicativo da OIT |
 | Tempo líquido disponível (TLD) | Jornada bruta − Paradas planejadas |
 | Takt time | TLD ÷ Demanda diária |
 | Capacidade | ⌊TLD ÷ TP⌋ peças/dia |
@@ -84,7 +120,7 @@ A linha marcada ganha uma faixa amarela e a etiqueta **F2**, **F3**, e assim por
 - Todos os tempos estão em **minutos centesimais**. Os cálculos usam precisão total; o arredondamento é só na exibição.
 - Linhas com erro ficam **fora dos totais** e o painel informa quantas são.
 - Com demanda zero ou paradas maiores que a jornada, o painel mostra **"Verificar"**, não "gargalo".
-- MVP: **1 ciclo observado por estudo**.
+- Arquivos `.json` de versões anteriores abrem no modo *Frequência* em *minutos*, preservando os resultados de antes.
 
 ---
 
@@ -133,9 +169,11 @@ Ao importar no notebook um estudo editado no celular, a revisão do arquivo serv
   "clientName": "Indústria Alfa",
   "processName": "Posto 01",
   "videoStart": "00:00",
+  "settings": { "entryMode": "quantidade", "timeUnit": "s" },
   "shiftParams": { "shiftTimeMin": 528, "plannedStopsMin": 48, "dailyDemandPcs": 240, "tolerancePct": 5 },
   "elements": [
-    { "id": "…", "description": "Soldar", "frequency": "1", "videoTime": "01:12", "pace": "110", "kaizen": "", "newVideo": false }
+    { "id": "…", "description": "Soldar", "type": "C", "quantity": "2", "frequency": "1", "videoTime": "01:12",
+      "pace": "100", "value": "AG", "waste": "", "kaizen": "", "newVideo": false }
   ],
   "results": { "unit": "minutos centesimais", "taktTimeMin": 2, "standardTimeMin": 1.386, "capacityPcsDay": 346, "status": "balanceado", "…": "…" }
 }
@@ -166,7 +204,7 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 44 testes do motor de cálculo (Node 18+, sem dependências)
+npm test             # 58 testes do motor de cálculo (Node 18+, sem dependências)
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:
@@ -186,7 +224,7 @@ As instruções estão no cabeçalho do arquivo.
 
 ## 8. Limitações conhecidas (MVP)
 
-- Um ciclo observado por estudo; médias de vários ciclos ficam para a fase 2.
+- O cálculo estatístico do número de ciclos necessários e os gráficos de valor agregado ficam para as próximas etapas.
 - No celular a grade usa rolagem horizontal; o modo "cartão" fica para a fase 2.
 - Estudos alterados no navegador sem pasta conectada só são gravados na pasta quando forem abertos novamente com a pasta conectada (o gerenciador marca "Alterações não gravadas na pasta").
 - A gravação na pasta usa a File System Access API, disponível no Chrome e no Edge para computador.

@@ -145,23 +145,100 @@
      CÁLCULO DO ESTUDO (LEITURA CONTÍNUA + INDICADORES LEAN)
      ========================================================================== */
 
+  /* ==========================================================================
+     CLASSIFICAÇÕES (PADRÃO DA PLANILHA B+P) E UNIDADES
+     ========================================================================== */
+
+  /** Valor agregado e ação sugerida (aba "Listagem de Elementos"). */
+  const VALUES = {
+    AG: { label: "Agrega", action: "Manter atividade" },
+    NA: { label: "Não agrega", action: "Eliminar atividade" },
+    IN: { label: "Incidental", action: "Reduzir atividade" },
+  };
+
+  /** Os 8 desperdícios do Lean. */
+  const WASTES = {
+    superproducao: "Superprodução",
+    espera: "Espera",
+    transporte: "Transporte",
+    processamento: "Processamento excessivo",
+    estoque: "Estoque",
+    movimentacao: "Movimentação",
+    defeitos: "Defeitos / retrabalho",
+    intelecto: "Intelecto (talento não utilizado)",
+  };
+
+  /** Unidades de exibição (o cálculo interno é sempre em minutos centesimais). */
+  const TIME_UNITS = {
+    s: { factor: 60, label: "s", name: "segundos", decimals: 1 },
+    min: { factor: 1, label: "min", name: "minutos", decimals: 3 },
+    h: { factor: 1 / 60, label: "h", name: "horas", decimals: 4 },
+  };
+
+  /** Modos de lançamento: "quantidade" (planilha REV2) ou "frequencia" (cronoanálise clássica). */
+  const ENTRY_MODES = ["quantidade", "frequencia"];
+
+  function timeUnit(study) {
+    const u = study && study.settings && study.settings.timeUnit;
+    return TIME_UNITS[u] ? u : "min";
+  }
+
+  function entryMode(study) {
+    const m = study && study.settings && study.settings.entryMode;
+    return ENTRY_MODES.includes(m) ? m : "frequencia";
+  }
+
+  /** Converte minutos centesimais para a unidade escolhida. */
+  function toUnit(minutes, unit) {
+    if (minutes == null || !Number.isFinite(minutes)) return null;
+    return minutes * TIME_UNITS[TIME_UNITS[unit] ? unit : "min"].factor;
+  }
+
+  /** Formata minutos na unidade escolhida (pt-BR). */
+  function formatTime(minutes, unit, decimals) {
+    const u = TIME_UNITS[unit] ? unit : "min";
+    return formatNumber(toUnit(minutes, u), decimals == null ? TIME_UNITS[u].decimals : decimals);
+  }
+
+  /** Quantidade produzida no trecho (vazio = 1). */
+  function parseQuantity(raw) {
+    const s = String(raw == null ? "" : raw).trim();
+    if (s === "") return { value: 1, error: null };
+    const v = parseNumber(s);
+    if (v == null || !(v > 0)) return { value: null, error: "Quantidade deve ser um número maior que zero" };
+    return { value: v, error: null };
+  }
+
+  /** Chave de agrupamento: mesmo nome = mesmo elemento (ignora maiúsculas e espaços extras). */
+  function elementKey(description) {
+    return String(description || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+  }
+
+  /* ==========================================================================
+     CÁLCULO DO ESTUDO (LEITURA CONTÍNUA + RESUMO POR ELEMENTO + INDICADORES)
+     ========================================================================== */
+
   /**
-   * Calcula todas as linhas e os indicadores do estudo.
+   * Calcula todas as linhas, o resumo por elemento e os indicadores do estudo.
    *
-   * Regras:
-   *  - Tempo Subtraído (TS) = Tempo Final da linha − última leitura válida
-   *    (a primeira linha usa a leitura inicial do vídeo).
-   *  - Nova filmagem: a linha marcada com "newVideo" reinicia a leitura em 00:00
-   *    (equivale ao "Tempo (Início) = 00:00:00" da planilha REV2).
-   *  - Tempo Normal (TN) = TS × (Ritmo / 100) × Frequência.
-   *  - Tempo Padrão (TP) = ΣTN × (1 + Tolerância / 100)  [método multiplicativo OIT].
-   *  - Tempo Líquido Disponível (TLD) = Jornada Bruta − Paradas Planejadas.
-   *  - Takt Time = TLD ÷ Demanda Diária.
-   *  - Capacidade = ⌊TLD ÷ TP⌋ peças/dia.
-   *  - Linha com erro não entra nos totais (e é sinalizada na interface).
+   * Linhas (aba GERAL):
+   *  - Tempo Subtraído (TS) = Tempo Final − última leitura válida
+   *    (1ª linha usa a leitura inicial; linha de "nova filmagem" usa 00:00).
+   *  - Tempo Normal da linha (TN) = TS × (Ritmo/100) [× Frequência no modo frequência].
+   *  - Modo quantidade: tempo/un = TN ÷ Quantidade.
+   *
+   * Resumo por elemento (aba Listagem de Elementos) — agrupa pelo nome:
+   *  - Modo quantidade (planilha REV2): Tipo C → ΣTN ÷ ΣQtd (média por unidade);
+   *                                     Tipo A → ΣTN (soma dos tempos).
+   *  - Modo frequência: média do TN das ocorrências (a frequência já rateia o acíclico).
+   *  - Tempo normal do ciclo = Σ tempos dos elementos.
+   *
+   * Indicadores: TP = Tempo do ciclo × (1 + Tolerância/100) [OIT]; TLD, Takt, Capacidade.
+   * Linha com erro não entra no resumo nem nos totais (e é sinalizada na interface).
    */
   function computeStudy(study) {
     const params = (study && study.shiftParams) || {};
+    const mode = entryMode(study);
     const start = parseTimeInput(study && study.videoStart);
     let previous = start.minutes != null ? start.minutes : 0;
     let film = 1;
@@ -169,8 +246,9 @@
     let sumSubtracted = 0;
     let sumNormal = 0;
     let errorCount = 0;
+    const elements = (study && study.elements) || [];
 
-    const rows = ((study && study.elements) || []).map((el, index) => {
+    const rows = elements.map((el, index) => {
       const errors = [];
       // A primeira linha já inicia a filmagem 1; a marcação só vale a partir da 2ª.
       const newVideo = !!el.newVideo && index > 0;
@@ -180,10 +258,10 @@
       }
       const time = parseTimeInput(el.videoTime);
       const freq = parseFrequency(el.frequency);
+      const qty = parseQuantity(el.quantity);
       const pace = parsePace(el.pace);
 
       if (time.error) errors.push(time.error);
-      if (freq.error) errors.push(freq.error);
 
       let subtractedTime = 0;
       let hasReading = false;
@@ -198,12 +276,15 @@
         }
       }
 
-      // Ritmo só é exigido quando a linha tem leitura de tempo.
+      // Ritmo e quantidade/frequência só são exigidos quando a linha tem leitura de tempo.
+      if (mode === "frequencia" && freq.error) errors.push(freq.error);
+      if (hasReading && mode === "quantidade" && qty.error) errors.push(qty.error);
       if (hasReading && pace.error) errors.push(pace.error);
 
       const valid = errors.length === 0;
-      const normalTime =
-        valid && hasReading ? subtractedTime * (pace.value / 100) * freq.value : 0;
+      const factor = mode === "frequencia" ? freq.value : 1;
+      const normalTime = valid && hasReading ? subtractedTime * (pace.value / 100) * factor : 0;
+      const unitTime = mode === "quantidade" && valid && hasReading ? normalTime / qty.value : normalTime;
 
       if (valid) {
         sumSubtracted += subtractedTime;
@@ -215,27 +296,88 @@
       return {
         id: el.id,
         seq: index + 1,
-        type: freq.value != null && freq.value < 1 - EPS ? "A" : "C",
+        type: el.type === "A" ? "A" : "C",
         film,
         newVideo,
         frequency: freq.value,
+        quantity: qty.value,
         timeMinutes: time.minutes,
+        hasReading,
         subtractedTime,
         normalTime,
+        unitTime,
         errors,
         valid,
       };
     });
 
-    const kpis = computeKpis(params, sumNormal);
+    const summary = summarize(elements, rows, mode);
+    const kpis = computeKpis(params, summary.cycleNormal);
     return {
+      mode,
+      unit: timeUnit(study),
       rows,
+      summary,
       totals: { sumSubtracted, sumNormal },
       kpis,
       errorCount,
       filmCount: film,
       startError: start.error,
     };
+  }
+
+  /** Agrupa as linhas válidas pelo nome do elemento (equivale à aba "Listagem de Elementos"). */
+  function summarize(elements, rows, mode) {
+    const groups = new Map();
+    rows.forEach((row, i) => {
+      if (!row.valid || !row.hasReading) return;
+      const el = elements[i];
+      const name = String(el.description || "").trim().replace(/\s+/g, " ");
+      const key = name ? elementKey(name) : `#${el.id}`;
+      let g = groups.get(key);
+      if (!g) {
+        g = {
+          key,
+          name: name || `(sem descrição — linha ${row.seq})`,
+          type: row.type,
+          value: "",
+          waste: "",
+          firstSeq: row.seq,
+          occurrences: 0,
+          sumSubtracted: 0,
+          sumNormal: 0,
+          sumQuantity: 0,
+          conflicts: [],
+        };
+        groups.set(key, g);
+      } else if (g.type !== row.type && !g.conflicts.includes("tipo")) {
+        g.conflicts.push("tipo");
+      }
+      const value = VALUES[el.value] ? el.value : "";
+      if (value) {
+        if (!g.value) g.value = value;
+        else if (g.value !== value && !g.conflicts.includes("valor")) g.conflicts.push("valor");
+      }
+      if (WASTES[el.waste] && !g.waste) g.waste = el.waste;
+      g.occurrences += 1;
+      g.sumSubtracted += row.subtractedTime;
+      g.sumNormal += row.normalTime;
+      g.sumQuantity += mode === "quantidade" ? row.quantity : 1;
+    });
+
+    const list = Array.from(groups.values());
+    list.forEach((g) => {
+      if (mode === "quantidade") g.cycleTime = g.type === "A" ? g.sumNormal : g.sumNormal / g.sumQuantity;
+      else g.cycleTime = g.sumNormal / g.occurrences;
+      g.avgQuantity = g.sumQuantity / g.occurrences;
+      g.action = VALUES[g.value] ? VALUES[g.value].action : "Classificar valor";
+    });
+    const cycleNormal = list.reduce((acc, g) => acc + g.cycleTime, 0);
+    list.forEach((g, i) => {
+      g.seq = i + 1;
+      g.sharePct = cycleNormal > EPS ? (g.cycleTime / cycleNormal) * 100 : 0;
+    });
+    return { elements: list, cycleNormal, conflictCount: list.filter((g) => g.conflicts.length).length };
   }
 
   /**
@@ -361,12 +503,24 @@
   }
 
   function defaultShiftParams() {
-    return { shiftTimeMin: 528, plannedStopsMin: 48, dailyDemandPcs: 240, tolerancePct: 5 };
+    return { shiftTimeMin: 528, plannedStopsMin: 48, dailyDemandPcs: 240, tolerancePct: 0 };
   }
 
   function createElement(overrides) {
     return Object.assign(
-      { id: generateId(), description: "", frequency: "1", videoTime: "", pace: "100", kaizen: "", newVideo: false },
+      {
+        id: generateId(),
+        description: "",
+        type: "C",
+        quantity: "1",
+        frequency: "1",
+        videoTime: "",
+        pace: "100",
+        value: "",
+        waste: "",
+        kaizen: "",
+        newVideo: false,
+      },
       overrides || {}
     );
   }
@@ -387,6 +541,8 @@
       clientName: String(o.clientName || "").trim(),
       processName: String(o.processName || "").trim(),
       videoStart: "",
+      // Novos estudos seguem a planilha REV2: lançamento por quantidade e tempos em segundos.
+      settings: Object.assign({ entryMode: "quantidade", timeUnit: "s" }, o.settings || {}),
       shiftParams: Object.assign(defaultShiftParams(), o.shiftParams || {}),
       elements: [createElement()],
     };
@@ -440,6 +596,11 @@
       clientName: str(raw.clientName),
       processName: str(raw.processName),
       videoStart: str(raw.videoStart),
+      // Arquivos anteriores a esta versão não têm "settings": mantêm frequência e minutos.
+      settings: {
+        entryMode: ENTRY_MODES.includes(raw.settings && raw.settings.entryMode) ? raw.settings.entryMode : "frequencia",
+        timeUnit: TIME_UNITS[raw.settings && raw.settings.timeUnit] ? raw.settings.timeUnit : "min",
+      },
       shiftParams: {
         shiftTimeMin: num(params.shiftTimeMin, null),
         plannedStopsMin: num(params.plannedStopsMin, null),
@@ -452,9 +613,14 @@
           createElement({
             id: typeof e.id === "string" && e.id ? e.id : generateId(),
             description: str(e.description),
+            // Sem tipo gravado (versão anterior): deduz da frequência, como antes.
+            type: e.type === "A" || e.type === "C" ? e.type : (parseFrequency(e.frequency).value || 1) < 1 - EPS ? "A" : "C",
+            quantity: e.quantity == null || e.quantity === "" ? "1" : str(e.quantity),
             frequency: e.frequency == null || e.frequency === "" ? "1" : str(e.frequency),
             videoTime: str(e.videoTime),
             pace: e.pace == null || e.pace === "" ? "100" : str(e.pace),
+            value: VALUES[e.value] ? e.value : "",
+            waste: WASTES[e.waste] ? e.waste : "",
             kaizen: str(e.kaizen),
             newVideo: e.newVideo === true,
           })
@@ -474,14 +640,30 @@
       results: {
         calculatedAt: new Date().toISOString(),
         unit: "minutos centesimais",
+        entryMode: r.mode,
         netTimeMin: round(r.kpis.netTime, 4),
         taktTimeMin: round(r.kpis.taktTime, 4),
-        sumNormalTimeMin: round(r.kpis.sumNormal, 4),
+        cycleNormalTimeMin: round(r.kpis.sumNormal, 4),
         standardTimeMin: round(r.kpis.standardTime, 4),
         capacityPcsDay: r.kpis.capacity,
         status: r.kpis.status,
+        observedTimeMin: round(r.totals.sumSubtracted, 4),
         rowsWithErrors: r.errorCount,
         filmCount: r.filmCount,
+        summary: r.summary.elements.map((g) => ({
+          seq: g.seq,
+          element: g.name,
+          type: g.type,
+          occurrences: g.occurrences,
+          quantity: round(g.sumQuantity, 4),
+          totalTimeMin: round(g.sumNormal, 4),
+          cycleTimeMin: round(g.cycleTime, 4),
+          sharePct: round(g.sharePct, 2),
+          value: g.value ? VALUES[g.value].label : "",
+          waste: g.waste ? WASTES[g.waste] : "",
+          action: g.action,
+          conflicts: g.conflicts,
+        })),
         elements: r.rows.map((row) => ({
           id: row.id,
           seq: row.seq,
@@ -489,6 +671,7 @@
           type: row.type,
           subtractedTimeMin: round(row.subtractedTime, 4),
           normalTimeMin: round(row.normalTime, 4),
+          unitTimeMin: round(row.unitTime, 4),
           errors: row.errors,
         })),
       },
@@ -515,14 +698,19 @@
 
   function buildCSV(study) {
     const r = computeStudy(study);
+    const unit = r.unit;
+    const u = TIME_UNITS[unit].label;
     const q = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-    const n3 = (v) => formatNumber(v, 3).replace(/\./g, "");
+    const nt = (minutes) => (minutes == null ? "" : formatTime(minutes, unit).replace(/\./g, ""));
     const n4 = (v) => (v == null ? "" : formatNumber(v, 4).replace(/\./g, ""));
+    const qtyMode = r.mode === "quantidade";
 
     const lines = [];
     lines.push(["Cliente", q(study.clientName)].join(";"));
     lines.push(["Posto / Operação", q(study.processName)].join(";"));
     lines.push(["Leitura inicial (1ª filmagem)", q(study.videoStart || "00:00")].join(";"));
+    lines.push(["Lançamento", qtyMode ? "Quantidade (planilha B+P)" : "Frequência"].join(";"));
+    lines.push(["Unidade de tempo", TIME_UNITS[unit].name].join(";"));
     lines.push("");
     lines.push(
       [
@@ -530,12 +718,15 @@
         "Filmagem",
         "Elemento",
         "Tipo",
-        "Frequência (texto)",
-        "Frequência (decimal)",
+        qtyMode ? "Quantidade" : "Frequência (texto)",
+        qtyMode ? "" : "Frequência (decimal)",
         "Tempo final (vídeo)",
-        "Tempo subtraído (min)",
+        `Tempo subtraído (${u})`,
         "Ritmo (%)",
-        "Tempo normal (min)",
+        `Tempo normal (${u})`,
+        qtyMode ? `Tempo / un (${u})` : "",
+        "Valor",
+        "Desperdício",
         "Ação Kaizen (ECRS)",
         "Erros",
       ].join(";")
@@ -549,29 +740,56 @@
           q(el.description),
           row.type === "A" ? "Acíclico" : "Cíclico",
           // Fórmula ="1/50" impede que o Excel converta a fração em data (ex.: 1/5 → 01/mai).
-          q(`="${el.frequency}"`),
-          n4(row.frequency),
+          qtyMode ? q(el.quantity) : q(`="${el.frequency}"`),
+          qtyMode ? "" : n4(row.frequency),
           q(el.videoTime),
-          n3(row.subtractedTime),
+          nt(row.subtractedTime),
           q(el.pace),
-          n3(row.normalTime),
+          nt(row.normalTime),
+          qtyMode ? nt(row.unitTime) : "",
+          q(VALUES[el.value] ? VALUES[el.value].label : ""),
+          q(WASTES[el.waste] || ""),
           q(el.kaizen),
           q(row.errors.join(" | ")),
         ].join(";")
       );
     });
+
+    lines.push("");
+    lines.push("RESUMO POR ELEMENTO (Listagem de Elementos)");
+    lines.push(
+      ["Nº", "Elemento", "Tipo", "Ocorrências", qtyMode ? "Qtd total" : "", `Tempo total (${u})`, `Tempo no ciclo (${u})`, "% do ciclo", "Valor", "Desperdício", "Ação"].join(";")
+    );
+    r.summary.elements.forEach((g) => {
+      lines.push(
+        [
+          g.seq,
+          q(g.name),
+          g.type === "A" ? "Acíclico" : "Cíclico",
+          g.occurrences,
+          qtyMode ? n4(g.sumQuantity) : "",
+          nt(g.sumNormal),
+          nt(g.cycleTime),
+          formatNumber(g.sharePct, 1),
+          q(g.value ? VALUES[g.value].label : ""),
+          q(g.waste ? WASTES[g.waste] : ""),
+          q(g.action),
+        ].join(";")
+      );
+    });
+
     lines.push("");
     const k = r.kpis;
     lines.push(["Filmagens", r.filmCount].join(";"));
-    lines.push(["Total tempo subtraído (min)", n3(r.totals.sumSubtracted)].join(";"));
-    lines.push(["Total tempo normal (min)", n3(k.sumNormal)].join(";"));
+    lines.push([`Tempo observado (${u})`, nt(r.totals.sumSubtracted)].join(";"));
+    lines.push([`Tempo normal do ciclo (${u})`, nt(k.sumNormal)].join(";"));
     lines.push(["Tolerância (%)", n4(toFiniteOrNull(study.shiftParams.tolerancePct))].join(";"));
-    lines.push(["Tempo padrão (min/pç)", n3(k.standardTime)].join(";"));
-    lines.push(["Tempo líquido disponível (min/dia)", n3(k.netTime)].join(";"));
-    lines.push(["Takt time (min/pç)", n3(k.taktTime)].join(";"));
+    lines.push([`Tempo padrão (${u}/pç)`, nt(k.standardTime)].join(";"));
+    lines.push(["Tempo líquido disponível (min/dia)", n4(k.netTime)].join(";"));
+    lines.push([`Takt time (${u}/pç)`, nt(k.taktTime)].join(";"));
     lines.push(["Capacidade (pçs/dia)", k.capacity == null ? "" : k.capacity].join(";"));
     lines.push(["Status", q(STATUS_LABELS[k.status])].join(";"));
-    return "﻿" + lines.join("\r\n");
+    return "\uFEFF" + lines.join("\r\n");
   }
 
   /* ==========================================================================
@@ -612,6 +830,16 @@
     PACE_MIN,
     PACE_MAX,
     STATUS_LABELS,
+    VALUES,
+    WASTES,
+    TIME_UNITS,
+    ENTRY_MODES,
+    timeUnit,
+    entryMode,
+    toUnit,
+    formatTime,
+    parseQuantity,
+    elementKey,
     parseTimeInput,
     formatVideoTime,
     parseFrequency,

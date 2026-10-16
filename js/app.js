@@ -103,7 +103,35 @@
       const el = findElement(id);
       if (!el || el[field] === value) return;
       el[field] = value;
-      markChanged({ recompute: field === "frequency" || field === "pace" });
+      // A descrição define o agrupamento do resumo; só o Kaizen não altera cálculos.
+      markChanged({ recompute: field !== "kaizen" });
+    },
+
+    /**
+     * Ao confirmar a descrição: se o elemento já existe em outra linha, copia o tipo,
+     * o valor e o desperdício (linha ainda não classificada). Retorna o que foi copiado.
+     */
+    onDescriptionCommit(id) {
+      const el = findElement(id);
+      if (!el || el.value) return null;
+      const key = Calc.elementKey(el.description);
+      if (!key) return null;
+      const src = state.study.elements.find((e) => e !== el && e.value && Calc.elementKey(e.description) === key);
+      if (!src) return null;
+      el.type = src.type;
+      el.value = src.value;
+      el.waste = src.waste;
+      markChanged();
+      return { type: el.type, value: el.value, waste: el.waste };
+    },
+
+    /** Configurações do estudo: modo de lançamento e unidade de exibição. */
+    onSettingChange(key, value) {
+      if (!state.study) return;
+      const settings = state.study.settings || (state.study.settings = {});
+      if (settings[key] === value) return;
+      settings[key] = value;
+      markChanged({ rerender: true });
     },
 
     onTimeCommit(id, raw) {
@@ -203,6 +231,7 @@
         clientName,
         processName,
         shiftParams: state.study ? Object.assign({}, state.study.shiftParams) : undefined,
+        settings: state.study ? Object.assign({}, state.study.settings) : undefined,
       });
       setCurrent({ study, diskRevision: null, dirty: true, exportedAt: null });
       await persistLocal();

@@ -556,7 +556,7 @@ button:focus-visible,
 
 .chrono-table {
   width: 100%;
-  min-width: 1080px;
+  min-width: 1240px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -581,13 +581,17 @@ button:focus-visible,
 col.col-num    { width: 44px; }
 col.col-elem   { width: auto; }
 col.col-type   { width: 56px; }
-col.col-freq   { width: 80px; }
-col.col-tfinal { width: 110px; }
-col.col-tsub   { width: 110px; }
-col.col-pace   { width: 90px; }
-col.col-tnorm  { width: 110px; }
-col.col-action { width: 240px; }
-col.col-del    { width: 40px; }
+col.col-freq   { width: 70px; }
+col.col-tfinal { width: 96px; }
+col.col-tsub   { width: 96px; }
+col.col-pace   { width: 76px; }
+col.col-tnorm  { width: 100px; }
+col.col-value  { width: 112px; }
+col.col-waste  { width: 132px; }
+col.col-action { width: 170px; }
+col.col-del    { width: 36px; }
+col.col-occ    { width: 76px; }
+col.col-act    { width: 150px; }
 
 .chrono-table thead th:first-child { text-align: center; }
 
@@ -686,6 +690,50 @@ col.col-del    { width: 40px; }
   color: var(--status-danger-text);
 }
 
+/* Listas de seleção dentro das células (tipo, valor, desperdício) */
+select.input-cell {
+  padding: 0 4px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+select.input-type {
+  text-align: center;
+  font-weight: 700;
+}
+select.input-type.is-acyclic {
+  background-color: var(--status-warn-bg);
+  color: var(--status-warn-text);
+}
+
+.inline-field select {
+  padding: 5px 6px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--bg-surface);
+}
+
+/* Resumo por elemento */
+.summary-section { flex: none; }
+.summary-container { max-height: none; min-height: 0; }
+.summary-note { font-size: 12px; color: var(--text-secondary); font-weight: 600; }
+.summary-note.has-conflict { color: var(--status-danger-text); }
+.summary-table { min-width: 1000px; }
+.summary-table td { height: 32px; }
+.summary-table .cell-text {
+  padding: 0 8px;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.summary-table .text-muted { color: var(--text-muted); }
+.summary-table .value-AG { color: var(--status-ok-text); font-weight: 600; }
+.summary-table .value-NA { color: var(--status-danger-text); font-weight: 600; }
+.summary-table .value-IN { color: var(--status-warn-text); font-weight: 600; }
+.summary-table tr.row-conflict .cell-text:nth-child(2) { color: var(--status-danger-text); }
+
 .mono {
   font-family: var(--font-mono);
   text-align: right;
@@ -697,6 +745,7 @@ col.col-del    { width: 40px; }
   color: var(--primary-700);
 }
 
+.chrono-table td.cell-readonly,
 .cell-readonly {
   padding: 0 10px;
   background-color: var(--bg-subtle);
@@ -1001,6 +1050,7 @@ col.col-del    { width: 40px; }
   input, select { font-size: 16px !important; }
   .chrono-table td { height: 44px; }
   .input-cell, .btn-icon-del, .btn-seq { min-height: 44px; }
+  .summary-table td { height: 40px; }
 }
 
 /* Impressão / PDF para relatório ao cliente */

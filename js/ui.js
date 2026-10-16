@@ -20,9 +20,13 @@
   /** Ordem do fluxo rápido com Enter. Frequência e Kaizen ficam fora (acesso por Tab). */
   const ENTER_FLOW = {
     description: "videoTime",
+    type: "__qty__",
+    quantity: "videoTime",
     frequency: "videoTime",
     videoTime: "pace",
     pace: "__next_row__",
+    value: "waste",
+    waste: "kaizen",
     kaizen: "__next_row__",
   };
 
@@ -63,6 +67,15 @@
       totalTnorm: $("total-tnorm"),
       totalErrors: $("total-errors"),
       totalFilms: $("total-films"),
+      settings: Array.from(document.querySelectorAll("[data-setting]")),
+      thQty: $("th-qty"),
+      thNormal: $("th-normal"),
+      thSumQty: $("th-sum-qty"),
+      summaryTbody: $("summary-tbody"),
+      summaryTotal: $("summary-total"),
+      summaryNote: $("summary-note"),
+      summaryHint: $("summary-hint"),
+      names: $("element-names"),
       dialog: $("study-dialog"),
       btnCloseDialog: $("btn-close-dialog"),
       newStudyForm: $("new-study-form"),
@@ -90,6 +103,9 @@
         input.classList.toggle("input-invalid", !ok);
       });
     });
+
+    // Modo de lançamento e unidade de tempo
+    els.settings.forEach((sel) => sel.addEventListener("change", () => h.onSettingChange(sel.dataset.setting, sel.value)));
 
     // Leitura inicial do vídeo
     els.videoStart.addEventListener("change", commitVideoStart);
@@ -175,6 +191,17 @@
       }
     }
     if (info.field === "pace") commitPace(info, e.target, true);
+    if (info.field === "description") commitDescription(info);
+  }
+
+  /** Elemento já classificado em outra linha: copia tipo, valor e desperdício. */
+  function commitDescription(info) {
+    const copied = h.onDescriptionCommit(info.id);
+    if (!copied) return;
+    ["type", "value", "waste"].forEach((f) => {
+      const sel = info.tr.querySelector(`[data-field="${f}"]`);
+      if (sel) sel.value = copied[f];
+    });
   }
 
   /** Confirma o tempo final. Retorna true se válido. */
@@ -228,6 +255,7 @@
           e.target.classList.remove("input-invalid");
         }
       }
+      if (info.field === "description") commitDescription(info);
       if (info.field === "pace") {
         const res = commitPace(info, e.target, true);
         if (!res.ok) {
@@ -237,12 +265,14 @@
       }
       const next = ENTER_FLOW[info.field];
       if (next === "__next_row__") goToNextRow(info.index);
+      else if (next === "__qty__") focusQty(info.index);
       else focusCell(info.index, next);
       return;
     }
 
     // Setas ↑ ↓: mesma coluna, linha anterior/seguinte
-    if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !e.altKey && !e.ctrlKey && !e.shiftKey) {
+    // (em listas de seleção as setas trocam a opção, então não mudam de linha)
+    if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !e.altKey && !e.ctrlKey && !e.shiftKey && e.target.tagName !== "SELECT") {
       const target = info.index + (e.key === "ArrowUp" ? -1 : 1);
       if (target >= 0 && target < els.tbody.rows.length) {
         e.preventDefault();
@@ -340,6 +370,15 @@
     }
   }
 
+  function focusQty(index) {
+    const tr = els.tbody.rows[index];
+    const input = tr && tr.querySelector(".input-qty");
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }
+
   function focusCell(index, field) {
     const tr = els.tbody.rows[index];
     if (!tr) return;
@@ -365,6 +404,7 @@
     });
     els.videoStart.value = study.videoStart || "";
     els.videoStart.classList.remove("input-invalid");
+    els.settings.forEach((sel) => (sel.value = Calc[sel.dataset.setting](study)));
     renderRows(study, computed);
     document.title = `${study.processName || "Estudo"} — ${study.clientName || "Lean Chrono"} | Cronoanálise & MFV`;
   }
@@ -372,9 +412,24 @@
   /** Recria as linhas da grade (usado ao abrir estudo, incluir ou excluir linha). */
   function renderRows(study, computed) {
     const frag = document.createDocumentFragment();
+    const qtyMode = Calc.entryMode(study) === "quantidade";
+    // A mesma coluna recebe Quantidade (padrão planilha) ou Frequência (1/50), conforme o modo.
+    els.thQty.textContent = qtyMode ? "Qtd." : "Freq.";
+    els.thQty.title = qtyMode
+      ? "Quantidade de unidades produzidas no trecho (tempo/un = tempo ÷ qtd)"
+      : "1 = uma vez por peça | 1/50 = uma vez a cada 50 peças";
+    els.thNormal.title = qtyMode ? "Tempo subtraído × (Ritmo/100)" : "Tempo subtraído × (Ritmo/100) × Frequência";
+    els.thSumQty.textContent = qtyMode ? "Qtd. total" : "—";
+    els.summaryHint.textContent = qtyMode
+      ? "Padrão planilha B+P: Tipo C = Σtempo ÷ Σquantidade (média por unidade) • Tipo A = Σtempo"
+      : "Modo frequência: média das ocorrências (a frequência já rateia o acíclico)";
     study.elements.forEach((el) => {
       const tr = els.rowTemplate.content.firstElementChild.cloneNode(true);
       tr.dataset.id = el.id;
+      const qtyInput = tr.querySelector(".input-qty");
+      qtyInput.dataset.field = qtyMode ? "quantity" : "frequency";
+      qtyInput.setAttribute("aria-label", qtyMode ? "Quantidade" : "Frequência");
+      qtyInput.inputMode = qtyMode ? "decimal" : "text";
       tr.querySelectorAll("[data-field]").forEach((input) => {
         input.value = el[input.dataset.field] == null ? "" : el[input.dataset.field];
       });
@@ -386,6 +441,10 @@
 
   /** Atualiza apenas os valores calculados (não recria campos → não perde o foco). */
   function updateComputed(computed) {
+    const unit = computed.unit;
+    const ft = (minutes) => Calc.formatTime(minutes, unit);
+    document.querySelectorAll(".unit-label").forEach((n) => (n.textContent = Calc.TIME_UNITS[unit].label));
+
     const rows = els.tbody.rows;
     computed.rows.forEach((row, i) => {
       const tr = rows[i];
@@ -399,40 +458,113 @@
       tr.querySelector(".btn-seq").title = row.newVideo
         ? `Início da filmagem ${row.film}. Clique (ou Alt+N) para desmarcar.`
         : "Marcar o início de uma nova filmagem (Alt+N)";
-      const tag = tr.querySelector(".tag-type");
-      tag.textContent = row.type;
-      tag.classList.toggle("is-acyclic", row.type === "A");
-      tag.title = row.type === "A" ? "Acíclico (frequência < 1)" : "Cíclico";
-      tr.querySelector('[data-out="tsub"]').textContent = fmt(row.subtractedTime, 3);
-      tr.querySelector('[data-out="tnorm"]').textContent = fmt(row.normalTime, 3);
+      tr.querySelector(".input-type").classList.toggle("is-acyclic", row.type === "A");
+      tr.querySelector('[data-out="tsub"]').textContent = ft(row.subtractedTime);
+      const tnorm = tr.querySelector('[data-out="tnorm"]');
+      tnorm.textContent = ft(row.normalTime);
+      tnorm.title = computed.mode === "quantidade" && row.hasReading ? `Tempo por unidade: ${ft(row.unitTime)} ${Calc.TIME_UNITS[unit].label}` : "";
       tr.classList.toggle("row-error", !row.valid);
       tr.title = row.errors.join(" • ");
 
       const timeInput = tr.querySelector('[data-field="videoTime"]');
       if (document.activeElement !== timeInput) {
-        timeInput.classList.toggle("input-invalid", row.errors.some((m) => !/Frequência|ritmo/i.test(m)));
+        timeInput.classList.toggle("input-invalid", row.errors.some((m) => !/Frequência|Quantidade|ritmo/i.test(m)));
       }
-      const freqInput = tr.querySelector('[data-field="frequency"]');
-      freqInput.classList.toggle("input-invalid", row.errors.some((m) => /Frequência/i.test(m)));
+      tr.querySelector(".input-qty").classList.toggle("input-invalid", row.errors.some((m) => /Frequência|Quantidade/.test(m)));
     });
 
-    els.totalTsub.textContent = fmt(computed.totals.sumSubtracted, 3);
-    els.totalTnorm.textContent = fmt(computed.totals.sumNormal, 3);
+    els.totalTsub.textContent = ft(computed.totals.sumSubtracted);
+    els.totalTnorm.textContent = ft(computed.totals.sumNormal);
     els.totalFilms.textContent = computed.filmCount > 1 ? ` · ${computed.filmCount} filmagens` : "";
     els.totalErrors.textContent = computed.errorCount
       ? `⚠ ${computed.errorCount} linha(s) com erro fora dos totais`
       : "";
 
+    renderSummary(computed);
     renderKpis(computed);
+  }
+
+  /** Tabela "Resumo por elemento" (equivale à aba Listagem de Elementos). */
+  function renderSummary(computed) {
+    const unit = computed.unit;
+    const ft = (minutes) => Calc.formatTime(minutes, unit);
+    const qtyMode = computed.mode === "quantidade";
+    const cell = (text, cls, title) => {
+      const td = document.createElement("td");
+      if (cls) td.className = cls;
+      td.textContent = text;
+      if (title) td.title = title;
+      return td;
+    };
+    const frag = document.createDocumentFragment();
+    computed.summary.elements.forEach((g) => {
+      const tr = document.createElement("tr");
+      if (g.conflicts.length) tr.classList.add("row-conflict");
+      const conflictMsg = g.conflicts.length
+        ? `Linhas com ${g.conflicts.join(" e ")} diferentes para o mesmo elemento. Prevalece a 1ª ocorrência (linha ${g.firstSeq}).`
+        : "";
+      const tag = document.createElement("span");
+      tag.className = "tag-type" + (g.type === "A" ? " is-acyclic" : "");
+      tag.textContent = g.type;
+      const typeTd = cell("", "cell-type");
+      typeTd.appendChild(tag);
+      tr.append(
+        cell(String(g.seq).padStart(2, "0"), "cell-num"),
+        cell((g.conflicts.length ? "⚠ " : "") + g.name, "cell-text", conflictMsg),
+        typeTd,
+        cell(String(g.occurrences), "cell-readonly mono"),
+        cell(qtyMode ? fmt(g.sumQuantity, g.sumQuantity % 1 ? 2 : 0) : "—", "cell-readonly mono"),
+        cell(ft(g.sumNormal), "cell-readonly mono"),
+        cell(ft(g.cycleTime), "cell-readonly mono highlight-col"),
+        cell(fmt(g.sharePct, 1) + "%", "cell-readonly mono"),
+        cell(g.value ? Calc.VALUES[g.value].label : "—", "cell-text value-" + (g.value || "none")),
+        cell(g.waste ? Calc.WASTES[g.waste] : "—", "cell-text"),
+        cell(g.action, "cell-text" + (g.value ? "" : " text-muted"))
+      );
+      frag.appendChild(tr);
+    });
+    if (!computed.summary.elements.length) {
+      const tr = document.createElement("tr");
+      const td = cell("Os elementos aparecem aqui conforme os tempos são lançados na grade.", "cell-text text-muted");
+      td.colSpan = 11;
+      tr.appendChild(td);
+      frag.appendChild(tr);
+    }
+    els.summaryTbody.replaceChildren(frag);
+    els.summaryTotal.textContent = ft(computed.summary.cycleNormal);
+    const notes = [];
+    if (computed.summary.conflictCount) notes.push(`⚠ ${computed.summary.conflictCount} elemento(s) com classificação divergente`);
+    notes.push(`${computed.summary.elements.length} elemento(s) • observado: ${ft(computed.totals.sumSubtracted)} ${Calc.TIME_UNITS[unit].label}`);
+    els.summaryNote.textContent = notes.join(" • ");
+    els.summaryNote.classList.toggle("has-conflict", computed.summary.conflictCount > 0);
+
+    // Autocompletar com os nomes já usados (mesmo nome = mesmo elemento no resumo)
+    const names = computed.summary.elements.filter((g) => !g.key.startsWith("#")).map((g) => g.name);
+    const sig = names.join("\n");
+    if (els.names.dataset.sig !== sig) {
+      els.names.dataset.sig = sig;
+      els.names.replaceChildren(
+        ...names.map((n) => {
+          const o = document.createElement("option");
+          o.value = n;
+          return o;
+        })
+      );
+    }
   }
 
   function renderKpis(computed) {
     const k = computed.kpis;
     els.kpiNet.textContent = fmt(k.netTime, 1);
-    els.kpiTakt.textContent = fmt(k.taktTime, 2);
-    els.kpiTaktSec.textContent = k.taktTime != null ? `Equivale a ${fmt(k.taktTime * 60, 1)} s/pç` : "Informe jornada e demanda";
-    els.kpiCycle.textContent = k.standardTime != null && k.standardTime > 0 ? fmt(k.standardTime, 2) : "--";
-    els.kpiNormal.textContent = `ΣTempo normal: ${fmt(k.sumNormal, 3)} min`;
+    const unit = computed.unit;
+    const u = Calc.TIME_UNITS[unit].label;
+    const kd = { s: 1, min: 2, h: 4 }[unit];
+    els.kpiTakt.textContent = Calc.formatTime(k.taktTime, unit, kd);
+    const alt = unit === "s" ? "min" : "s";
+    els.kpiTaktSec.textContent =
+      k.taktTime != null ? `Equivale a ${Calc.formatTime(k.taktTime, alt)} ${alt}/pç` : "Informe jornada e demanda";
+    els.kpiCycle.textContent = k.standardTime != null && k.standardTime > 0 ? Calc.formatTime(k.standardTime, unit, kd) : "--";
+    els.kpiNormal.textContent = `Tempo normal do ciclo: ${Calc.formatTime(k.sumNormal, unit)} ${u}`;
     els.kpiCapacity.textContent = k.capacity != null ? fmt(k.capacity, 0) : "--";
 
     els.kpiCard.classList.remove("is-bottleneck", "is-balanced", "is-invalid");
