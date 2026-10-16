@@ -81,6 +81,10 @@
       chartWaste: $("chart-waste"),
       notes: $("study-notes"),
       btnExportXlsx: $("btn-export-xlsx"),
+      templateInfo: $("template-info"),
+      templateInput: $("input-template"),
+      btnRemoveTemplate: $("btn-remove-template"),
+      btnExportSimple: $("btn-export-simple"),
       dialog: $("study-dialog"),
       btnCloseDialog: $("btn-close-dialog"),
       newStudyForm: $("new-study-form"),
@@ -126,6 +130,13 @@
     els.btnExportJson.addEventListener("click", () => h.onExportJSON());
     els.btnExportCsv.addEventListener("click", () => h.onExportCSV());
     els.btnExportXlsx.addEventListener("click", () => h.onExportXlsx());
+    els.btnExportSimple.addEventListener("click", () => h.onExportXlsxSimple());
+    els.btnRemoveTemplate.addEventListener("click", () => h.onRemoveTemplate());
+    els.templateInput.addEventListener("change", () => {
+      const file = els.templateInput.files && els.templateInput.files[0];
+      els.templateInput.value = "";
+      if (file) h.onLoadTemplate(file);
+    });
     els.notes.addEventListener("input", () => h.onMetaChange("notes", els.notes.value));
 
     // Grade (delegação de eventos: funciona para linhas criadas dinamicamente)
@@ -702,6 +713,20 @@
     els.conflictBanner.hidden = true;
   }
 
+  /** meta = { name, size, savedAt, macro } | null */
+  function setTemplateInfo(meta) {
+    if (meta) {
+      els.templateInfo.textContent =
+        `✅ ${meta.name} (${Math.round(meta.size / 1024)} KB${meta.macro ? ", com macros" : ""}) — carregado em ${formatDateTime(meta.savedAt)}. ` +
+        "Exportar Excel preenche este modelo (fórmulas, gráficos e macros preservados).";
+      els.btnExportXlsx.textContent = "Exportar Excel (modelo B+P)";
+    } else {
+      els.templateInfo.textContent = 'Nenhum modelo carregado: o botão "Exportar Excel" gera o Excel simples.';
+      els.btnExportXlsx.textContent = "Exportar Excel (simples)";
+    }
+    els.btnRemoveTemplate.hidden = !meta;
+  }
+
   function toast(message, kind, timeoutMs) {
     const div = document.createElement("div");
     div.className = `toast toast-${kind || "info"}`;
@@ -835,6 +860,7 @@
     showConflict,
     hideConflict,
     toast,
+    setTemplateInfo,
     openDialog,
     closeDialog,
     focusCell,

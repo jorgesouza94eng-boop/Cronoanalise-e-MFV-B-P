@@ -3,7 +3,7 @@
  * Estratégia: cache primeiro, com atualização em segundo plano.
  * Ao alterar qualquer arquivo do aplicativo, incremente CACHE_VERSION.
  */
-const CACHE_VERSION = "lean-chrono-v5";
+const CACHE_VERSION = "lean-chrono-v6";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -13,6 +13,7 @@ const APP_SHELL = [
   "./manifest.webmanifest",
   "./js/calc.js",
   "./js/xlsx.js",
+  "./js/xlsx-template.js",
   "./js/mfv-calc.js",
   "./js/mfv-app.js",
   "./js/storage.js",

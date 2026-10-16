@@ -325,6 +325,33 @@
     }
   }
 
+  /** Grava um arquivo binário (ex.: modelo Excel) numa subpasta da pasta conectada. */
+  async function writeBinaryFile(subdir, fileName, bytes) {
+    const dir = subdir ? await dirHandle.getDirectoryHandle(subdir, { create: true }) : dirHandle;
+    const fh = await dir.getFileHandle(fileName, { create: true });
+    const w = await fh.createWritable();
+    await w.write(bytes);
+    await w.close();
+  }
+
+  /** Lista arquivos binários de uma subpasta: [{ name, bytes, lastModified }]. Subpasta ausente = []. */
+  async function readBinaryFiles(subdir, pattern) {
+    let dir;
+    try {
+      dir = await dirHandle.getDirectoryHandle(subdir);
+    } catch (err) {
+      if (err && err.name === "NotFoundError") return [];
+      throw err;
+    }
+    const out = [];
+    for await (const entry of dir.values()) {
+      if (entry.kind !== "file" || (pattern && !pattern.test(entry.name))) continue;
+      const file = await entry.getFile();
+      out.push({ name: entry.name, bytes: new Uint8Array(await file.arrayBuffer()), lastModified: file.lastModified });
+    }
+    return out.sort((a, b) => b.lastModified - a.lastModified);
+  }
+
   function conflictFileName(fileName) {
     const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
     return fileName.replace(/\.json$/i, `${CONFLICT_MARK}${stamp}.json`);
@@ -421,6 +448,9 @@
     listFolderStudies,
     writeStudy,
     writeTextFile,
+    writeBinaryFile,
+    readBinaryFiles,
+    canStoreBinary: () => backend === "idb" || backend === "memory",
     downloadText,
     readImportFile,
   };

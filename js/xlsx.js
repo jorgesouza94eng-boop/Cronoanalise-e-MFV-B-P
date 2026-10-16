@@ -36,7 +36,11 @@
     return (c ^ 0xffffffff) >>> 0;
   }
 
-  /** files: [{ name, data: Uint8Array }] → Uint8Array do arquivo .zip */
+  /**
+   * files: [{ name, data: Uint8Array }] → Uint8Array do arquivo .zip (sem compressão).
+   * Uma entrada também pode vir já compactada, copiada de outro ZIP sem alteração:
+   * { name, raw: { method, compressed, crc, size } } — usado para preservar o modelo B+P.
+   */
   function zip(files) {
     const enc = new TextEncoder();
     const chunks = [];
@@ -47,20 +51,23 @@
 
     files.forEach((f) => {
       const name = enc.encode(f.name);
-      const crc = crc32(f.data);
-      const size = f.data.length;
+      const method = f.raw ? f.raw.method : 0;
+      const payload = f.raw ? f.raw.compressed : f.data;
+      const crc = f.raw ? f.raw.crc : crc32(f.data);
+      const size = f.raw ? f.raw.size : f.data.length;
+      const csize = payload.length;
       // Cabeçalho local (bit 11 = nomes em UTF-8; data fixa 01/01/2026)
       const header = [
-        ...u32(0x04034b50), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x5c21),
-        ...u32(crc), ...u32(size), ...u32(size), ...u16(name.length), ...u16(0),
+        ...u32(0x04034b50), ...u16(20), ...u16(0x0800), ...u16(method), ...u16(0), ...u16(0x5c21),
+        ...u32(crc), ...u32(csize), ...u32(size), ...u16(name.length), ...u16(0),
       ];
-      chunks.push(Uint8Array.from(header), name, f.data);
+      chunks.push(Uint8Array.from(header), name, payload);
       central.push([
-        ...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x5c21),
-        ...u32(crc), ...u32(size), ...u32(size), ...u16(name.length), ...u16(0), ...u16(0),
+        ...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0x0800), ...u16(method), ...u16(0), ...u16(0x5c21),
+        ...u32(crc), ...u32(csize), ...u32(size), ...u16(name.length), ...u16(0), ...u16(0),
         ...u16(0), ...u16(0), ...u32(0), ...u32(offset),
       ], name);
-      offset += header.length + name.length + size;
+      offset += header.length + name.length + csize;
     });
 
     let centralSize = 0;
@@ -355,5 +362,5 @@
     return buildWorkbook(buildBPSheets(study));
   }
 
-  return { buildWorkbook, buildBPSheets, buildBPWorkbook, crc32, zip, colName };
+  return { buildWorkbook, buildBPSheets, buildBPWorkbook, crc32, zip, colName, esc };
 });

@@ -97,14 +97,29 @@ O campo **Constatações e soluções** é salvo no estudo e vai para o Excel.
 
 ![Compilação](docs/tela-compilacao.png)
 
-### Exportar Excel (padrão B+P)
+### Exportar Excel
 
-O botão **Exportar Excel (B+P)** gera um `.xlsx` com as abas **GERAL**, **Listagem de Elementos**, **Compilação e Soluções** e **Análise** (indicadores):
-- tempos em **segundos**, como na planilha REV2;
-- início e fim no formato `hh:mm:ss`;
-- funciona offline, sem biblioteca externa.
+O botão **Exportar Excel** tem dois modos:
 
-A conferência foi feita no LibreOffice e com os dados reais da Laje Forte: deu 912 s e Qt. 2,125 em "Corte das Treliças", e 7.681 s de ciclo. O Excel exporta **valores**, sem fórmulas e sem gráficos nativos; os gráficos ficam no app.
+| Modo | Quando | Resultado |
+|---|---|---|
+| **Modelo B+P** | Há um modelo carregado (em *Estudos → Modelo Excel → Carregar modelo*) | A **sua própria planilha** (`.xlsm`/`.xlsx`) preenchida. Fórmulas, gráficos, macros, logotipos, cores e abas ocultas ficam preservados, e o Excel recalcula tudo ao abrir |
+| **Excel simples** | Sem modelo, ou pelo botão *Exportar Excel simples* | Layout próprio do app (GERAL, Listagem, Compilação, Análise), só com valores |
+
+**Como funciona o modelo:**
+- **Carregar uma vez.** O app reconhece a REV2 pelos cabeçalhos da linha 8 e guarda o modelo no navegador e na pasta **`_Modelos`** do OneDrive. O outro notebook encontra o modelo sozinho ao conectar a pasta.
+- **Células preenchidas:**
+  - GERAL (linhas 10–300): Elemento, Início, Fim (00:00 nas novas filmagens), Quantidade, Tipo e a lista de elementos;
+  - Listagem (linhas 9–134): Elemento, Tempo (s), Qt., Valor e Desperdício, com os textos exatos da planilha;
+  - Compilação: constatações em B55;
+  - Análise: identificação em C16.
+- **Limpeza:** dados e observações deixados no modelo por estudos anteriores são apagados nas áreas preenchidas.
+- **Limites vigiados:** 291 lançamentos e 126 elementos. Há um aviso quando passa de 40 elementos, porque a aba Análise da planilha soma só T25:T64.
+- **Arquivo gerado:** `Crono_<Cliente>_<Posto>_<data>.xlsm`.
+
+O fluxo foi conferido com a planilha real da Laje Forte (149 lançamentos, 9 filmagens). Depois do recálculo, as fórmulas da própria planilha chegaram a **7.681 s** (Análise!G3) e os gráficos de pizza se atualizaram.
+
+> Dica: use como modelo uma cópia **em branco** da planilha. O app limpa as áreas que preenche, mas abas ocultas como "Listagem de Elementos (2)" e textos fora dessas áreas ficam como estão no modelo.
 
 ### Várias filmagens no mesmo estudo
 
@@ -229,7 +244,8 @@ O bloco `results` é um **resumo para leitura externa** (Excel, Power BI). Ele �
 index.html            Estrutura da tela
 style.css             Estilos (desktop, tablet, celular e impressão)
 js/calc.js            Motor de cálculo e modelo de dados (funções puras, testadas)
-js/xlsx.js            Exportação Excel no layout B+P (gerador .xlsx próprio, sem dependências)
+js/xlsx.js            Excel simples (gerador .xlsx próprio, sem dependências)
+js/xlsx-template.js   Preenchimento do modelo B+P do consultor (preserva fórmulas, gráficos e macros)
 js/storage.js         IndexedDB, pasta do OneDrive, exportar/importar
 js/ui.js              Renderização e navegação por teclado
 js/app.js             Orquestração: estado, autosave, conflitos, gerenciador de estudos
@@ -248,7 +264,7 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 74 testes: cálculo, compilação, Excel e MFV (Node 18+, sem dependências)
+npm test             # 83 testes: cálculo, compilação, Excel, modelo B+P e MFV (Node 18+, sem dependências)
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

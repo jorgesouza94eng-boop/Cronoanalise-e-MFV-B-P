@@ -1,0 +1,170 @@
+/**
+ * Testes do preenchimento do modelo Excel B+P (js/xlsx-template.js).
+ * Usa um modelo SINTÉTICO com a mesma estrutura da REV2 (cabeçalhos na linha 8,
+ * textos compartilhados, fórmulas, partes compactadas e "macro"), para não
+ * versionar a planilha de cliente.
+ */
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const zlib = require("zlib");
+const C = require("../js/calc.js");
+const X = require("../js/xlsx.js");
+const T = require("../js/xlsx-template.js");
+
+const inflate = (b) => new Uint8Array(zlib.inflateRawSync(b));
+const enc = new TextEncoder();
+const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+const sheet = (rows) => `<?xml version="1.0"?><worksheet ${NS}><sheetData>${rows}</sheetData></worksheet>`;
+
+/** Entrada compactada (deflate), como num .xlsm real. */
+function deflated(name, text) {
+  const data = typeof text === "string" ? enc.encode(text) : text;
+  return { name, raw: { method: 8, compressed: new Uint8Array(zlib.deflateRawSync(data)), crc: X.crc32(data), size: data.length } };
+}
+
+function buildTemplate() {
+  const sst = ["Nº", "Elemento", "Tempo (Inicio)", "Tempo (Fim)", "Quantidade", "agrega?", "Tipo", "todos elementos", "Tempo (s)", "Qt.", "Valor", "Ação",
+    "Agrega", "Não agrega", "Incidental", "Espera", "Transporte", "Processamento Excessivo", "Movimentação ", "Elemento antigo do cliente anterior", "Texto antigo"];
+  const s = (i) => `t="s"><v>${i}</v>`;
+  const geral =
+    `<row r="8" spans="2:19"><c r="B8" s="1" ${s(0)}</c><c r="C8" s="1" ${s(1)}</c><c r="D8" s="1" ${s(2)}</c><c r="E8" s="1" ${s(3)}</c>` +
+    `<c r="G8" s="1" ${s(4)}</c><c r="H8" s="1" ${s(5)}</c><c r="I8" s="1" ${s(6)}</c><c r="L8" s="1" ${s(7)}</c></row>` +
+    `<row r="10" spans="2:19"><c r="B10" s="2"><v>1</v></c><c r="C10" s="3" ${s(19)}</c><c r="D10" s="4"><v>0</v></c><c r="E10" s="4"><v>0.01</v></c>` +
+    `<c r="G10" s="5"><v>3</v></c><c r="H10" s="6" t="str"><f>IF(C10="","",C10)</f><v>Elemento antigo</v></c><c r="I10" s="7" t="s"><v>6</v></c>` +
+    `<c r="K10" s="8"><f t="shared" ref="K10:K11" si="0">IF(C10="","",E10-D10)</f><v>0.01</v></c><c r="L10" s="3" ${s(19)}</c><c r="S10" ${s(20)}</c></row>` +
+    `<row r="11"><c r="C11" s="3" ${s(19)}</c><c r="K11" s="8"><f t="shared" si="0"/><v>0</v></c></row>`;
+  const listagem =
+    `<row r="8"><c r="B8" ${s(1)}</c><c r="C8" ${s(8)}</c><c r="D8" ${s(9)}</c><c r="E8" ${s(10)}</c><c r="F8" ${s(11)}</c></row>` +
+    `<row r="9"><c r="A9"><v>1</v></c><c r="B9" s="9" ${s(19)}</c><c r="C9" s="10"><v>999</v></c><c r="E9" ${s(12)}</c>` +
+    `<c r="F9" t="str"><f>IF(E9=BD!$A$1,"Manter Atividade","x")</f><v>Manter Atividade</v></c></row>`;
+  const compil = [15, 16, 17, 18].map((i, k) => `<row r="${39 + k}"><c r="D${39 + k}" ${s(i)}</c><c r="E${39 + k}"><f>COUNTIF(G:G,D${39 + k})</f><v>0</v></c></row>`).join("") +
+    `<row r="55"><c r="B55" s="11" ${s(20)}</c></row>`;
+  const bd = `<row r="1"><c r="A1" ${s(12)}</c></row><row r="2"><c r="A2" ${s(13)}</c></row><row r="3"><c r="A3" ${s(14)}</c></row>`;
+  const analise = `<row r="15"><c r="F15" ${s(20)}</c></row><row r="16"><c r="C16" ${s(20)}</c></row>`;
+  const names = ["GERAL", "Listagem de Elementos", "Compilação e Soluções", "Análise", "BD"];
+  const sheets = [geral, listagem, compil, analise, bd];
+  const sstXml = `<?xml version="1.0"?><sst ${NS}>${sst.map((t) => `<si><t xml:space="preserve">${X.esc(t)}</t></si>`).join("")}</sst>`;
+  const files = [
+    deflated("[Content_Types].xml", "<Types/>"),
+    deflated("xl/workbook.xml", `<?xml version="1.0"?><workbook ${NS}><sheets>${names.map((n, i) => `<sheet name="${X.esc(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets><calcPr calcId="191029"/></workbook>`),
+    deflated("xl/_rels/workbook.xml.rels", `<Relationships>${names.map((n, i) => `<Relationship Id="rId${i + 1}" Type="x" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}</Relationships>`),
+    deflated("xl/sharedStrings.xml", sstXml),
+    ...sheets.map((rows, i) => deflated(`xl/worksheets/sheet${i + 1}.xml`, sheet(rows))),
+    deflated("xl/vbaProject.bin", new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])),
+    { name: "xl/media/logo.png", data: new Uint8Array([137, 80, 78, 71]) },
+  ];
+  return X.zip(files);
+}
+
+function study() {
+  const s = C.createStudy({ clientName: "Metal Alfa", processName: "Corte" });
+  s.elements = [
+    { description: "Corte", videoTime: "30", quantity: "2", type: "C", value: "AG" },
+    { description: "Transporte", videoTime: "45", type: "A", value: "NA", waste: "transporte" },
+    { description: "corte", videoTime: "1:05", quantity: "1", type: "C", value: "AG" },
+    { description: "Abastecer", videoTime: "00:20", type: "A", value: "IN", waste: "superproducao", newVideo: true },
+    { description: "Sem tempo", videoTime: "" },
+  ].map((e) => C.createElement(e));
+  s.notes = "Constatação & solução <teste>";
+  return s;
+}
+
+async function filled() {
+  const tpl = await T.loadTemplate(buildTemplate(), { inflate });
+  const out = T.fillTemplate(tpl, study());
+  const entries = T.readZip(out.bytes);
+  const text = async (name) => {
+    const e = entries.find((x) => x.name === name);
+    return new TextDecoder().decode(e.method === 0 ? e.compressed : inflate(e.compressed));
+  };
+  return { tpl, out, entries, text };
+}
+
+test("modelo: reconhece a REV2 e lê os rótulos da aba BD e do quadro de desperdícios", async () => {
+  const tpl = await T.loadTemplate(buildTemplate(), { inflate });
+  assert.equal(tpl.kind, "crono-rev2");
+  assert.equal(tpl.macro, true);
+  assert.deepEqual(tpl.valueLabels, { AG: "Agrega", NA: "Não agrega", IN: "Incidental" });
+  assert.equal(tpl.wasteLabels.movimentacao, "Movimentação ", "mantém o espaço do texto original (usado no CONT.SE)");
+  assert.equal(tpl.wasteLabels.processamento, "Processamento Excessivo");
+});
+
+test("modelo: recusa planilha que não é a REV2", async () => {
+  const other = X.buildWorkbook([{ name: "Plan1", rows: [["a"]] }]);
+  await assert.rejects(T.loadTemplate(other, { inflate }), /faltam as abas/);
+  await assert.rejects(T.loadTemplate(new Uint8Array([1, 2, 3]), { inflate }), /não é um Excel válido/);
+});
+
+test("GERAL: preenche elemento, início, fim, quantidade e tipo; nova filmagem começa em 00:00", async () => {
+  const { text, out } = await filled();
+  const g = await text("xl/worksheets/sheet1.xml");
+  assert.equal(out.lines, 4, "linha sem tempo não é exportada");
+  assert.match(g, /<c r="C10" s="3" t="inlineStr"><is><t xml:space="preserve">Corte<\/t><\/is><\/c>/, "mantém o estilo da célula");
+  assert.match(g, /<c r="E10" s="4"><v>0\.000347222/);
+  assert.match(g, /<c r="C12" t="inlineStr"><is><t xml:space="preserve">Corte<\/t>/, "'corte' vira o nome canônico 'Corte'");
+  assert.match(g, /<c r="D13"><v>0<\/v><\/c>/, "linha de nova filmagem: início 00:00");
+  assert.match(g, /<c r="I11" t="inlineStr"><is><t xml:space="preserve">A<\/t>/);
+  assert.match(g, /<c r="L10" s="3" t="inlineStr"><is><t xml:space="preserve">Corte<\/t>/, "lista de elementos únicos");
+  assert.match(g, /<c r="S10"\/>/, "observação do modelo anterior apagada");
+  assert.ok(!g.includes("Elemento antigo"), "nenhum dado do cliente anterior");
+});
+
+test("GERAL: fórmulas preservadas, sem valor guardado (o Excel recalcula)", async () => {
+  const { text } = await filled();
+  const g = await text("xl/worksheets/sheet1.xml");
+  assert.match(g, /<c r="H10" s="6"><f>IF\(C10="","",C10\)<\/f><\/c>/);
+  assert.match(g, /<c r="K10" s="8"><f t="shared" ref="K10:K11" si="0">IF\(C10="","",E10-D10\)<\/f><\/c>/);
+  assert.match(g, /<c r="K11" s="8"><f t="shared" si="0"\/><\/c>/);
+  const wb = await text("xl/workbook.xml");
+  assert.match(wb, /<calcPr calcId="191029" fullCalcOnLoad="1"\/>/);
+});
+
+test("Listagem: valores do resumo do app, rótulos exatos e fórmula da ação intacta", async () => {
+  const { text, out } = await filled();
+  const l = await text("xl/worksheets/sheet2.xml");
+  assert.equal(out.elements, 3);
+  assert.match(l, /<c r="B9" s="9" t="inlineStr"><is><t xml:space="preserve">Corte<\/t>/);
+  assert.match(l, /<c r="C9" s="10"><v>16\.667<\/v><\/c>/, "Corte (C): (30 + 20) s ÷ (2 + 1) un = 16,667 s");
+  assert.ok(!/<row r="12">/.test(l), "não cria linhas vazias que não existiam no modelo");
+  assert.match(l, /<c r="E10" t="inlineStr"><is><t xml:space="preserve">Não agrega<\/t>/);
+  assert.match(l, /<c r="G10" t="inlineStr"><is><t xml:space="preserve">Transporte<\/t>/);
+  assert.match(l, /<c r="F9" t="str">|<c r="F9"><f>/);
+  assert.ok(out.warnings.some((w) => /Superprodução/.test(w)), "avisa desperdício sem linha no quadro da planilha");
+});
+
+test("Compilação e Análise: constatações (escapadas) e identificação do estudo", async () => {
+  const { text } = await filled();
+  const c = await text("xl/worksheets/sheet3.xml");
+  assert.match(c, /<c r="B55" s="11" t="inlineStr"><is><t xml:space="preserve">Constatação &amp; solução &lt;teste&gt;<\/t>/);
+  const a = await text("xl/worksheets/sheet4.xml");
+  assert.match(a, /Metal Alfa — Corte \(2 filmagem\(ns\)/);
+  assert.match(a, /<c r="F15"\/>/);
+});
+
+test("partes não alteradas são copiadas byte a byte (macros, imagens, textos compartilhados)", async () => {
+  const original = T.readZip(buildTemplate());
+  const { entries } = await filled();
+  for (const name of ["xl/vbaProject.bin", "xl/media/logo.png", "xl/sharedStrings.xml", "xl/worksheets/sheet5.xml"]) {
+    const a = original.find((e) => e.name === name);
+    const b = entries.find((e) => e.name === name);
+    assert.equal(b.method, a.method, name);
+    assert.deepEqual(Buffer.from(b.compressed), Buffer.from(a.compressed), name);
+    assert.equal(b.crc, a.crc, name);
+  }
+  assert.equal(entries.length, original.length);
+});
+
+test("limites do modelo: mais lançamentos que linhas disponíveis é recusado", async () => {
+  const tpl = await T.loadTemplate(buildTemplate(), { inflate });
+  const s = C.createStudy({ clientName: "A", processName: "B" });
+  s.elements = Array.from({ length: 292 }, (_, i) => C.createElement({ description: `E${i % 3}`, videoTime: C.formatVideoTime((i + 1) / 60) }));
+  assert.throws(() => T.fillTemplate(tpl, s), /comporta 291/);
+});
+
+test("nome do arquivo exportado: Crono_<Cliente>_<Posto>_<data>.xlsm", () => {
+  const name = T.exportFileName({ clientName: "Indústria Alfa", processName: "Posto 01" }, "modelo.xlsm");
+  assert.match(name, /^Crono_Industria_Alfa_Posto_01_\d{4}-\d\d-\d\d\.xlsm$/);
+  assert.match(T.exportFileName({ clientName: "A", processName: "B" }, "m.xlsx"), /\.xlsx$/);
+});

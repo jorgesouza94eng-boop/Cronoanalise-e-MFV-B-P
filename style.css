@@ -1137,6 +1137,9 @@ select.input-type.is-acyclic {
 
 .file-button { cursor: pointer; }
 
+.template-block { padding: 12px 20px 0; }
+.template-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
 /* ==========================================================================
    NOTIFICAÇÕES
    ========================================================================== */

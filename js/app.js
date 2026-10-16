@@ -20,6 +20,58 @@
   const DISK_SAVE_DELAY_MS = 3000; // proteção contra conflito de sincronização do OneDrive
   const DISK_RETRY_DELAY_MS = 10000;
 
+  const Tpl = root.LeanXlsxTemplate;
+  const TEMPLATE_KEY = "template:crono";
+  const TEMPLATE_DIR = "_Modelos";
+  let templateMeta = null;
+  let memoryTemplate = null; // usado só quando o navegador não permite guardar binários
+
+  /* ---- Modelo Excel B+P (navegador + pasta _Modelos) ----------------------- */
+
+  async function getTemplate() {
+    try {
+      const rec = await Store.getKV(TEMPLATE_KEY);
+      return rec && rec.bytes ? rec : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async function saveTemplate(name, bytes, macro) {
+    const rec = { name, size: bytes.length, savedAt: new Date().toISOString(), macro: !!macro, bytes };
+    templateMeta = { name: rec.name, size: rec.size, savedAt: rec.savedAt, macro: rec.macro };
+    if (Store.canStoreBinary()) await Store.setKV(TEMPLATE_KEY, rec);
+    else UI.toast("Este navegador não permite guardar o modelo: ele valerá só até fechar a página.", "warn");
+    if (!Store.canStoreBinary()) memoryTemplate = rec;
+    UI.setTemplateInfo(templateMeta);
+    return templateMeta;
+  }
+
+  /** Pasta conectada: envia o modelo do navegador para _Modelos ou traz de lá se o navegador não tiver. */
+  async function syncTemplateFromFolder(quiet) {
+    try {
+      const local = (await getTemplate()) || memoryTemplate;
+      const files = await Store.readBinaryFiles(TEMPLATE_DIR, /\.xls[xm]$/i);
+      if (local) {
+        if (!files.some((f) => f.name === local.name)) await Store.writeBinaryFile(TEMPLATE_DIR, local.name, local.bytes);
+        return local;
+      }
+      for (const f of files) {
+        try {
+          const tpl = await Tpl.loadTemplate(f.bytes);
+          await saveTemplate(f.name, f.bytes, tpl.macro);
+          if (!quiet) UI.toast(`Modelo Excel encontrado na pasta ${TEMPLATE_DIR}: ${f.name}`, "ok");
+          return getTemplate().then((r) => r || memoryTemplate);
+        } catch (err) {
+          /* arquivo que não é o modelo REV2: ignora */
+        }
+      }
+    } catch (err) {
+      console.warn("Não foi possível sincronizar o modelo com a pasta:", err);
+    }
+    return null;
+  }
+
   const state = {
     study: null,
     computed: null,
@@ -206,11 +258,60 @@
       UI.toast(`CSV exportado: ${name}`, "ok");
     },
 
-    onExportXlsx() {
+    /** Com modelo carregado: preenche a planilha B+P. Sem modelo: Excel simples. */
+    async onExportXlsx() {
+      if (!state.study) return;
+      let rec = (await getTemplate()) || memoryTemplate;
+      if (!rec && state.folder === "granted") rec = await syncTemplateFromFolder(true);
+      if (!rec) return handlers.onExportXlsxSimple();
+      try {
+        const res = await Tpl.fillFromBytes(rec.bytes, state.study);
+        const name = Tpl.exportFileName(state.study, rec.name);
+        const mime = /\.xlsm$/i.test(name)
+          ? "application/vnd.ms-excel.sheet.macroEnabled.12"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        Store.downloadText(name, res.bytes, mime);
+        UI.toast(`Excel (modelo B+P) exportado: ${name} — ${res.lines} lançamento(s), ${res.elements} elemento(s).`, "ok", 6000);
+        res.warnings.forEach((w) => UI.toast(w, "warn", 9000));
+      } catch (err) {
+        console.error("Falha ao preencher o modelo:", err);
+        UI.toast(`Não foi possível usar o modelo: ${err.message || err}. Foi exportado o Excel simples.`, "error", 9000);
+        handlers.onExportXlsxSimple();
+      }
+    },
+
+    onExportXlsxSimple() {
       if (!state.study) return;
       const name = state.study.fileName.replace(/\.json$/i, "_BP.xlsx");
       Store.downloadText(name, root.LeanXlsx.buildBPWorkbook(state.study), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      UI.toast(`Excel exportado: ${name}`, "ok");
+      UI.toast(`Excel simples exportado: ${name}`, "ok");
+    },
+
+    async onLoadTemplate(file) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let tpl;
+      try {
+        tpl = await Tpl.loadTemplate(bytes);
+      } catch (err) {
+        UI.toast(`Modelo recusado: ${err.message || err}`, "error", 9000);
+        return;
+      }
+      const meta = await saveTemplate(file.name, bytes, tpl.macro);
+      if (state.folder === "granted") {
+        try {
+          await Store.writeBinaryFile(TEMPLATE_DIR, file.name, bytes);
+        } catch (err) {
+          UI.toast(`Modelo guardado no navegador, mas não na pasta ${TEMPLATE_DIR}: ${err.message || err}`, "warn");
+        }
+      }
+      UI.toast(`Modelo REV2 reconhecido ✅ ${meta.name}${tpl.macro ? " (com macros)" : ""}.`, "ok", 6000);
+    },
+
+    async onRemoveTemplate() {
+      if (!root.confirm("Remover o modelo Excel deste navegador? (a cópia na pasta _Modelos do OneDrive é mantida)")) return;
+      await Store.setKV(TEMPLATE_KEY, null);
+      templateMeta = null;
+      UI.setTemplateInfo(null);
     },
 
     onFlush() {
@@ -609,6 +710,8 @@
       await openStudy(state.study.id, state.study.fileName);
     }
 
+    await syncTemplateFromFolder(false);
+
     if (isNewFolder) {
       try {
         const { studies } = await Store.listFolderStudies();
@@ -794,6 +897,11 @@
       state.folder = r.handle ? (r.permission === "granted" ? "granted" : "prompt") : "none";
     }
     updateFolderButton();
+
+    const tplRec = await getTemplate();
+    templateMeta = tplRec ? { name: tplRec.name, size: tplRec.size, savedAt: tplRec.savedAt, macro: tplRec.macro } : null;
+    UI.setTemplateInfo(templateMeta);
+    if (!templateMeta && state.folder === "granted") syncTemplateFromFolder(false);
 
     let opened = false;
     const lastId = await Store.getKV("lastStudyId");
