@@ -3,7 +3,7 @@
  * Estratégia: cache primeiro, com atualização em segundo plano.
  * Ao alterar qualquer arquivo do aplicativo, incremente CACHE_VERSION.
  */
-const CACHE_VERSION = "lean-chrono-v6";
+const CACHE_VERSION = "lean-chrono-v7";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -19,6 +19,8 @@ const APP_SHELL = [
   "./js/storage.js",
   "./js/ui.js",
   "./js/app.js",
+  "./js/ai.js",
+  "./js/ai-ui.js",
 ];
 
 self.addEventListener("install", (event) => {

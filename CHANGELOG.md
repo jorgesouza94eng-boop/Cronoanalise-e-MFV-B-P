@@ -4,8 +4,29 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
-| **REV 1.1** | 16/10/2026 | Em desenvolvimento: assistente de IA (Gemini) |
+| **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.1 — 16/10/2026 (assistente de IA)
+
+Recurso **opcional**, que funciona só com internet e com a chave de API do próprio consultor (Google AI Studio).
+
+### Novidades
+- Botão **✨ IA** na barra da grade, com três usos:
+  1. **Classificar valor e desperdício** dos elementos ainda sem classificação;
+  2. **Sugerir ações Kaizen (ECRS)** para os elementos que não agregam ou são incidentais;
+  3. **Redigir constatações e soluções** a partir dos números do estudo (rascunho editável).
+- **A IA só sugere:** cada sugestão aparece com caixa de seleção e só é aplicada com aprovação, e apenas em campos vazios. Os cálculos (TS, TN, TP, takt, GBO) continuam sem IA.
+- **Anonimização ligada por padrão:** o nome do cliente e do posto não são enviados. As respostas voltam com os nomes reais.
+- **Chave guardada só no navegador do aparelho:** não vai para o GitHub, para a pasta do OneDrive nem para os arquivos do estudo. Há a opção de apagar.
+- **Modelos carregados da própria chave**, com sugestão de um modelo "flash" estável, para não depender de nomes que mudam.
+- Botões desabilitados sem internet.
+
+### Testes
+- 9 testes de unidade da IA (98 no total) e teste de navegador com a API **simulada**: anonimização, aplicação seletiva, persistência e chave fora do arquivo do estudo.
+- O uso com a chave real do consultor deve ser conferido no primeiro acesso, porque o ambiente de testes não tem acesso aos servidores do Google.
 
 ---
 

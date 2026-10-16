@@ -1,6 +1,6 @@
 # Lean Chrono & MFV — Cronoanálise e apoio ao Mapa de Fluxo de Valor
 
-> **Versão estável: REV 1.0** — veja o [histórico de revisões](CHANGELOG.md).
+> **Versão atual: REV 1.1** (assistente de IA opcional) • versão estável anterior: REV 1.0 — veja o [histórico de revisões](CHANGELOG.md).
 
 Aplicação web **local-first** e **100% sem servidor** para cronoanálise de vídeos de operação, voltada a consultorias de produtividade industrial (Programa **Brasil Mais Produtivo**).
 
@@ -179,6 +179,23 @@ Conferido com o MFV real da Laje Forte: depois do recálculo, 20 de 22 células 
 
 ![MFV](docs/tela-mfv.png)
 
+## 2.2 Assistente de IA (Gemini), opcional
+
+O botão **✨ IA** na barra da grade abre o assistente. Ele precisa de **internet** e de uma **chave de API do Google AI Studio** (aistudio.google.com → ícone 🔑 → *Create API key*).
+
+1. Na primeira vez: cole a chave → **Carregar modelos** → escolha o modelo (o app sugere um "flash") → **Salvar configuração**.
+2. Use os botões:
+   - **Classificar valor e desperdício:** para os elementos ainda sem classificação;
+   - **Sugerir ações Kaizen (ECRS):** para os elementos que não agregam ou são incidentais;
+   - **Redigir constatações e soluções:** um rascunho editável para a Compilação.
+3. Revise as sugestões, desmarque o que não concordar e clique em **Aplicar**. Só os campos vazios são preenchidos.
+
+**Privacidade:**
+- A chave fica **só neste navegador**.
+- Com **Anonimizar** (ligado por padrão), o nome do cliente e do posto não são enviados.
+- No nível gratuito do Gemini, o Google pode usar os dados enviados para melhorar os produtos; confira os termos da sua chave no AI Studio.
+- Os cálculos nunca usam IA.
+
 ## 3. Regras de cálculo
 
 | Indicador | Fórmula |
@@ -270,6 +287,8 @@ js/xlsx-template.js   Preenchimento do modelo B+P do consultor (preserva fórmul
 js/storage.js         IndexedDB, pasta do OneDrive, exportar/importar
 js/ui.js              Renderização e navegação por teclado
 js/app.js             Orquestração: estado, autosave, conflitos, gerenciador de estudos
+js/ai.js              Assistente de IA (Gemini): pedidos, anonimização e validação das respostas
+js/ai-ui.js           Tela do assistente de IA (configuração, sugestões e aplicação)
 mfv.html              Página do MFV (estado presente)
 js/mfv-calc.js        Motor de cálculo do MFV (aba EP: horário, takt, GBO, capacidade, atravessamento)
 js/mfv-app.js         Tela e salvamento do MFV (mesma pasta e proteção contra conflito)
@@ -285,7 +304,7 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 89 testes: cálculo, compilação, Excel, modelos B+P e MFV (Node 18+, sem dependências)
+npm test             # 98 testes: cálculo, compilação, Excel, modelos B+P, MFV e IA (Node 18+, sem dependências)
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

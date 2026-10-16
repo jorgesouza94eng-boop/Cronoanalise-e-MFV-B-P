@@ -174,6 +174,7 @@
                    title="Instante do vídeo em que o primeiro elemento da 1ª filmagem começa (MMSS ou MM:SS). As filmagens seguintes começam em 00:00.">
           </div>
           <button type="button" id="btn-add-row" class="btn-secondary" title="Nova linha (Ctrl+Enter)">+ Nova linha</button>
+          <button type="button" id="btn-ai" class="btn-outline btn-ai" title="Assistente de IA (Gemini): classificação, Kaizen e constatações">✨ IA</button>
           <button type="button" id="btn-export-json" class="btn-outline" title="Baixar o estudo em .json (backup ou envio para outro dispositivo)">Exportar JSON</button>
           <button type="button" id="btn-export-xlsx" class="btn-outline" title="Com modelo carregado: preenche a sua planilha B+P (fórmulas, gráficos e macros preservados). Sem modelo: Excel simples.">Exportar Excel</button>
           <button type="button" id="btn-export-csv" class="btn-outline" title="Baixar a grade em CSV">Exportar CSV</button>
@@ -378,6 +379,54 @@
     </div>
   </dialog>
 
+  <!-- ASSISTENTE DE IA (GEMINI) -->
+  <dialog id="ai-dialog" class="study-dialog ai-dialog" aria-labelledby="ai-dialog-title">
+    <div class="dialog-header">
+      <h2 id="ai-dialog-title">✨ Assistente de IA (Gemini)</h2>
+      <button type="button" class="btn-icon-close" id="btn-ai-close" aria-label="Fechar">&times;</button>
+    </div>
+
+    <details class="ai-config" id="ai-config">
+      <summary>Configuração <span id="ai-config-status" class="study-source"></span></summary>
+      <div class="new-study-grid ai-config-grid">
+        <div class="param-field">
+          <label for="ai-key">Chave de API (Google AI Studio)</label>
+          <input type="password" id="ai-key" autocomplete="off" placeholder="Cole aqui a sua chave">
+        </div>
+        <div class="param-field">
+          <label for="ai-model">Modelo</label>
+          <select id="ai-model"><option value="">Carregue os modelos da sua chave</option></select>
+        </div>
+        <button type="button" id="btn-ai-models" class="btn-outline">Carregar modelos</button>
+      </div>
+      <label class="ai-check"><input type="checkbox" id="ai-anon" checked> Anonimizar: não enviar o nome do cliente nem do posto</label>
+      <div class="template-actions">
+        <button type="button" id="btn-ai-save" class="btn-primary">Salvar configuração</button>
+        <button type="button" id="btn-ai-forget" class="btn-outline">Apagar chave deste aparelho</button>
+      </div>
+      <p class="form-hint">A chave fica <strong>só neste navegador</strong>: não vai para o GitHub, para a pasta do OneDrive nem para os arquivos do estudo.
+        A IA apenas <strong>sugere</strong>; nada é alterado sem você aprovar. Os cálculos (TS, TN, TP, takt) não usam IA.</p>
+    </details>
+
+    <div class="ai-actions">
+      <button type="button" class="btn-secondary" data-ai="classify">Classificar valor e desperdício</button>
+      <button type="button" class="btn-secondary" data-ai="kaizen">Sugerir ações Kaizen (ECRS)</button>
+      <button type="button" class="btn-secondary" data-ai="notes">Redigir constatações e soluções</button>
+    </div>
+    <p id="ai-status" class="form-hint ai-status" role="status" aria-live="polite"></p>
+
+    <div id="ai-results" class="ai-results" hidden>
+      <div class="study-list-header"><div class="card-header-mini" id="ai-results-title">Sugestões</div></div>
+      <ul id="ai-list" class="study-list ai-list"></ul>
+      <textarea id="ai-notes" class="ai-notes" rows="10" hidden></textarea>
+      <div class="dialog-footer">
+        <button type="button" id="btn-ai-apply" class="btn-primary">Aplicar selecionadas</button>
+        <button type="button" id="btn-ai-append" class="btn-outline" hidden>Acrescentar às constatações</button>
+        <span class="form-hint">Revise antes de aplicar. Só preenche campos ainda vazios.</span>
+      </div>
+    </div>
+  </dialog>
+
   <!-- NOTIFICAÇÕES -->
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>
 
@@ -388,5 +437,7 @@
   <script src="js/storage.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/ai-ui.js"></script>
 </body>
 </html>

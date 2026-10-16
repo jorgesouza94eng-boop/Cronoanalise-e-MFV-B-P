@@ -1138,6 +1138,23 @@ select.input-type.is-acyclic {
 .file-button { cursor: pointer; }
 
 .template-block { padding: 12px 20px 0; }
+
+/* Assistente de IA */
+.btn-ai { border-color: #c4b5fd; color: #5b21b6; }
+.btn-ai:hover { background: #f5f3ff; color: #4c1d95; }
+.ai-config { margin: 12px 20px 0; border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 8px 12px; }
+.ai-config summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.ai-config-grid { margin-top: 10px; }
+.ai-check { display: flex; gap: 8px; align-items: center; font-size: 12px; margin: 10px 0 4px; }
+.ai-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 20px 0; }
+.ai-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+.ai-status { padding: 0 20px; min-height: 18px; }
+.ai-status.is-error { color: var(--status-danger-text); }
+.ai-list li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border-light); font-size: 13px; }
+.ai-list input { margin-top: 3px; }
+.ai-item-title { font-weight: 600; }
+.ai-item-detail { color: var(--text-secondary); font-size: 12px; }
+.ai-notes { margin: 0 20px; width: calc(100% - 40px); padding: 10px 12px; border: 1px solid var(--border-light); border-radius: var(--radius-sm); font: inherit; font-size: 13px; line-height: 1.5; }
 .template-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 
 /* ==========================================================================

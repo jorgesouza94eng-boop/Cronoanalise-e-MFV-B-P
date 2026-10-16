@@ -936,8 +936,47 @@
   }
 
   // Exposto para diagnóstico e testes automatizados.
+  /**
+   * Aplica sugestões aprovadas da IA. Só preenche campos ainda vazios do estudo.
+   * classify: [{ name, value, waste }] | kaizen: [{ name, text }] | notes: { text, mode: "replace"|"append" }
+   */
+  function applyAi(s) {
+    if (!state.study) return 0;
+    let changed = 0;
+    const els = state.study.elements;
+    (s.classify || []).forEach((c) => {
+      const key = Calc.elementKey(c.name);
+      els.forEach((el) => {
+        if (Calc.elementKey(el.description) === key && !el.value) {
+          el.value = c.value;
+          el.waste = c.waste || "";
+          changed += 1;
+        }
+      });
+    });
+    (s.kaizen || []).forEach((k) => {
+      const key = Calc.elementKey(k.name);
+      const rows = els.filter((el) => Calc.elementKey(el.description) === key);
+      // Uma ação por elemento: na 1ª linha com o campo vazio (se nenhuma já tiver ação)
+      if (rows.length && !rows.some((el) => el.kaizen)) {
+        rows[0].kaizen = k.text;
+        changed += 1;
+      }
+    });
+    if (s.notes && s.notes.text) {
+      state.study.notes = s.notes.mode === "append" && state.study.notes ? `${state.study.notes}\n\n${s.notes.text}` : s.notes.text;
+      changed += 1;
+    }
+    if (changed) {
+      markChanged({ rerender: true });
+      UI.renderStudy(state.study, state.computed);
+    }
+    return changed;
+  }
+
   root.LeanApp = {
     state,
+    applyAi,
     flushSave,
     openStudy,
     showStudies,
