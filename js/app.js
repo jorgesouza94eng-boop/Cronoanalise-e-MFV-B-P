@@ -58,7 +58,7 @@
       }
       for (const f of files) {
         try {
-          const tpl = await Tpl.loadTemplate(f.bytes);
+          const tpl = await Tpl.loadTemplate(f.bytes, { expect: "crono" });
           await saveTemplate(f.name, f.bytes, tpl.macro);
           if (!quiet) UI.toast(`Modelo Excel encontrado na pasta ${TEMPLATE_DIR}: ${f.name}`, "ok");
           return getTemplate().then((r) => r || memoryTemplate);
@@ -291,7 +291,7 @@
       const bytes = new Uint8Array(await file.arrayBuffer());
       let tpl;
       try {
-        tpl = await Tpl.loadTemplate(bytes);
+        tpl = await Tpl.loadTemplate(bytes, { expect: "crono" });
       } catch (err) {
         UI.toast(`Modelo recusado: ${err.message || err}`, "error", 9000);
         return;

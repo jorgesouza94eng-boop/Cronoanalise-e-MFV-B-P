@@ -90,6 +90,10 @@
               <input type="text" id="availability" data-doc="availabilityPct" inputmode="decimal" autocomplete="off">
             </div>
             <div class="param-field">
+              <label for="ops-line-total" title="Equipe compartilhada entre as etapas (planilha: K37). Vazio = soma dos operadores das etapas">Nº total de operadores</label>
+              <input type="text" id="ops-line-total" data-doc="operatorsTotal" inputmode="decimal" placeholder="soma das etapas" autocomplete="off">
+            </div>
+            <div class="param-field">
               <label for="mfv-time-unit">Unidade de tempo (TC e takt)</label>
               <select id="mfv-time-unit" data-doc="timeUnit">
                 <option value="s">Segundos</option><option value="min">Minutos</option><option value="h">Horas</option>
@@ -224,6 +228,7 @@
         <textarea id="mfv-notes" data-doc="notes" rows="9"
                   placeholder="Ex.: unidade 'peça' = m² de laje; demanda = capacidade declarada; pendências de estoques..."></textarea>
         <div class="notes-actions">
+          <button type="button" id="btn-export-xlsx-mfv" class="btn-secondary" title="Preenche o seu modelo MFV Simplificado (fórmulas e gráficos preservados)">Exportar Excel (modelo B+P)</button>
           <button type="button" id="btn-export-mfv" class="btn-outline">Exportar JSON</button>
         </div>
       </div>
@@ -250,6 +255,18 @@
       <span id="doc-source" class="study-source"></span>
     </div>
     <ul id="doc-list" class="study-list" aria-label="MFVs salvos"></ul>
+    <div class="template-block">
+      <div class="card-header-mini">Modelo Excel (MFV Simplificado)</div>
+      <p id="template-info-mfv" class="form-hint">Nenhum modelo carregado.</p>
+      <div class="template-actions">
+        <label class="btn-outline file-button" title="Escolha a sua planilha MFV Simplificado (abas EP/EF)">
+          Carregar modelo
+          <input type="file" id="input-template-mfv" accept=".xlsx,.xlsm" hidden>
+        </label>
+        <button type="button" id="btn-remove-template-mfv" class="btn-outline" hidden>Remover modelo</button>
+      </div>
+    </div>
+
     <div class="dialog-footer">
       <label class="btn-outline file-button">Importar JSON
         <input type="file" id="input-import-mfv" accept=".json,application/json" hidden>
@@ -261,6 +278,8 @@
 
   <!-- Scripts clássicos (sem módulos ES) para funcionar também via file:// -->
   <script src="js/calc.js"></script>
+  <script src="js/xlsx.js"></script>
+  <script src="js/xlsx-template.js"></script>
   <script src="js/mfv-calc.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/mfv-app.js"></script>

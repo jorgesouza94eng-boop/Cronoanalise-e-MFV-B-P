@@ -156,6 +156,25 @@ Conferência com o MFV real da Laje Forte (aba EP): deram os mesmos 440 min/dia,
 
 > Na planilha, a "Capacidade de Produção Diária da Linha" (K46) usa as horas sem descontar a disponibilidade da família, enquanto o setor Kaizen (N46) desconta. O app usa o **tempo disponível com a disponibilidade** nos dois casos. Com disponibilidade de 100%, os resultados são idênticos.
 
+**Nº total de operadores:** se a mesma equipe faz várias etapas (como na Laje Forte), informe o total da linha em *Demanda e disponibilidade*, como no K37 da planilha. Vazio = soma dos operadores das etapas.
+
+### Exportar Excel do MFV (modelo B+P)
+
+Em **MFVs → Modelo Excel → Carregar modelo**, escolha a planilha "MFV Simplificado". O botão **Exportar Excel (modelo B+P)** passa a preencher:
+
+| Aba | Células |
+|---|---|
+| **EP** | Empresa e família (D5:D6), horário (C22:F28), disponibilidade (K28), demanda e dias úteis (O21, O26), unidades (P21:P27, D54, I46:I51), etapas (B39:G51: Kaizen, etapa, TC, nº ops, uptime), total de operadores (K37), estoques (B55:D64) e premissas (B76:B95) |
+| **EF** | Mesmos dados gerais do EP, com as etapas e os estoques em branco, para você montar o estado futuro |
+
+**Como os dados são tratados:**
+- Os TCs vão em **horas** ("HORAS / peça"). É a única unidade em que todas as fórmulas da planilha (O27, K46, N46, U45) calculam de forma consistente. O takt sai na unidade escolhida no app.
+- Contas digitadas pelo consultor em células de entrada (ex.: demanda `=1240/6*26`) são substituídas pelo valor do app. As **fórmulas de cálculo** da planilha são preservadas.
+- Onde o modelo não tem a fórmula das horas do dia (ex.: sábado da aba EF), o app grava as horas calculadas.
+- O **fluxograma** é uma imagem do modelo e precisa ser atualizado manualmente.
+
+Conferido com o MFV real da Laje Forte: depois do recálculo, 20 de 22 células de resultado ficaram idênticas à planilha original. As duas restantes diferem só pela ordem dos estoques digitados no teste, e o total de 8 dias de atravessamento bateu.
+
 ![MFV](docs/tela-mfv.png)
 
 ## 3. Regras de cálculo
@@ -264,7 +283,7 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 83 testes: cálculo, compilação, Excel, modelo B+P e MFV (Node 18+, sem dependências)
+npm test             # 89 testes: cálculo, compilação, Excel, modelos B+P e MFV (Node 18+, sem dependências)
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:
@@ -285,7 +304,7 @@ As instruções estão no cabeçalho do arquivo.
 ## 8. Limitações conhecidas (MVP)
 
 - O cálculo estatístico do número de ciclos necessários e o MFV **estado futuro** (aba EF) ficam para as próximas etapas.
-- O MFV ainda não tem exportação Excel nem o desenho do fluxograma.
+- O MFV não gera o desenho do fluxograma (ele continua como imagem no modelo).
 - No celular a grade usa rolagem horizontal; o modo "cartão" fica para a fase 2.
 - Estudos alterados no navegador sem pasta conectada só são gravados na pasta quando forem abertos novamente com a pasta conectada (o gerenciador marca "Alterações não gravadas na pasta").
 - A gravação na pasta usa a File System Access API, disponível no Chrome e no Edge para computador.

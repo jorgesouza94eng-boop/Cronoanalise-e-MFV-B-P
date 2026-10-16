@@ -20,6 +20,10 @@
   const $ = (id) => document.getElementById(id);
   const fmt = Calc.formatNumber;
 
+  const Tpl = root.LeanXlsxTemplate;
+  const TEMPLATE_KEY = "template:mfv";
+  const TEMPLATE_DIR = "_Modelos";
+
   const state = {
     doc: null,
     computed: null,
@@ -215,6 +219,7 @@
     state.lastError = null;
     updateFolderButton();
     await loadStudies();
+    await syncTemplate();
     if (state.doc) await openDoc(state.doc.id, state.doc.fileName);
     else showDocs();
     toast(`Pasta conectada: ${Store.getDirHandle().name}`, "ok");
@@ -535,6 +540,7 @@
     $("kpi-bottleneck-unit").textContent = r.bottleneck ? `${u}/${pu()}` : "";
     $("kpi-bottleneck-name").textContent = r.bottleneck ? `${r.bottleneck.seq}. ${r.bottleneck.name}` : "Sem etapas";
     $("kpi-ops").textContent = fmt(r.opsTotal, 2);
+    $("kpi-ops").title = r.opsTyped ? `Digitado (equipe compartilhada). Soma das etapas: ${fmt(r.opsSum, 2)}` : "Soma dos operadores efetivos das etapas";
     $("kpi-ops-ideal").textContent = `Ideal (ΣTC ÷ takt): ${r.opsIdeal != null ? fmt(r.opsIdeal, 2) : "--"}`;
     $("kpi-cap").textContent = fmt(r.line.capacityDay, 1);
     $("kpi-cap-unit").textContent = `${pu()}/dia`;
@@ -725,6 +731,18 @@
     // Cabeçalho, conflito, exportação
     $("btn-connect-folder").addEventListener("click", connectFolder);
     $("btn-docs").addEventListener("click", () => showDocs());
+    $("btn-export-xlsx-mfv").addEventListener("click", exportXlsx);
+    $("input-template-mfv").addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (file) loadTemplateFile(file);
+    });
+    $("btn-remove-template-mfv").addEventListener("click", async () => {
+      if (!root.confirm("Remover o modelo do MFV deste navegador? (a cópia na pasta _Modelos é mantida)")) return;
+      await Store.setKV(TEMPLATE_KEY, null);
+      state.template = null;
+      setTemplateInfo(null);
+    });
     $("btn-export-mfv").addEventListener("click", () => {
       Store.downloadText(state.doc.fileName, M.serializeMfv(state.doc), "application/json");
       toast(`Arquivo exportado: ${state.doc.fileName}`, "ok");
@@ -850,6 +868,101 @@
   }
 
   /* ==========================================================================
+     MODELO EXCEL DO MFV (navegador + pasta _Modelos)
+     ========================================================================== */
+
+  async function getTemplate() {
+    try {
+      const rec = await Store.getKV(TEMPLATE_KEY);
+      return rec && rec.bytes ? rec : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function setTemplateInfo(rec) {
+    $("template-info-mfv").textContent = rec
+      ? `✅ ${rec.name} (${Math.round(rec.size / 1024)} KB) — carregado em ${new Date(rec.savedAt).toLocaleString("pt-BR")}. "Exportar Excel" preenche as abas EP e EF.`
+      : 'Nenhum modelo carregado. Carregue a planilha "MFV Simplificado" para exportar no padrão B+P.';
+    $("btn-remove-template-mfv").hidden = !rec;
+  }
+
+  async function saveTemplate(name, bytes) {
+    const rec = { name, size: bytes.length, savedAt: new Date().toISOString(), bytes };
+    if (Store.canStoreBinary()) await Store.setKV(TEMPLATE_KEY, rec);
+    state.template = rec;
+    setTemplateInfo(rec);
+    return rec;
+  }
+
+  async function loadTemplateFile(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    try {
+      await Tpl.loadTemplate(bytes, { expect: "mfv" });
+    } catch (err) {
+      return toast(`Modelo recusado: ${err.message || err}`, "error", 9000);
+    }
+    await saveTemplate(file.name, bytes);
+    if (state.folder === "granted") {
+      try {
+        await Store.writeBinaryFile(TEMPLATE_DIR, file.name, bytes);
+      } catch (err) {
+        toast(`Modelo guardado no navegador, mas não na pasta ${TEMPLATE_DIR}.`, "warn");
+      }
+    }
+    toast(`Modelo MFV reconhecido ✅ ${file.name}`, "ok");
+  }
+
+  /** Pasta conectada: envia o modelo para _Modelos ou traz de lá se o navegador não tiver. */
+  async function syncTemplate() {
+    if (!(await Store.folderReady())) return null;
+    try {
+      const local = (await getTemplate()) || state.template;
+      const files = await Store.readBinaryFiles(TEMPLATE_DIR, /\.xls[xm]$/i);
+      if (local) {
+        if (!files.some((f) => f.name === local.name)) await Store.writeBinaryFile(TEMPLATE_DIR, local.name, local.bytes);
+        return local;
+      }
+      for (const f of files) {
+        try {
+          await Tpl.loadTemplate(f.bytes, { expect: "mfv" });
+          toast(`Modelo MFV encontrado na pasta ${TEMPLATE_DIR}: ${f.name}`, "ok");
+          return saveTemplate(f.name, f.bytes);
+        } catch (err) {
+          /* não é o modelo do MFV */
+        }
+      }
+    } catch (err) {
+      console.warn("Não foi possível sincronizar o modelo do MFV:", err);
+    }
+    return null;
+  }
+
+  async function exportXlsx() {
+    if (!state.doc) return;
+    await flushSave();
+    const rec = (await getTemplate()) || state.template || (await syncTemplate());
+    if (!rec) {
+      toast('Carregue o modelo "MFV Simplificado" em MFVs → Modelo Excel para exportar no padrão B+P.', "warn", 8000);
+      return showDocs();
+    }
+    try {
+      const res = await Tpl.fillFromBytes(rec.bytes, state.doc, { expect: "mfv" });
+      const name = Tpl.exportMfvFileName(state.doc, rec.name);
+      Store.downloadText(
+        name,
+        res.bytes,
+        /\.xlsm$/i.test(name) ? "application/vnd.ms-excel.sheet.macroEnabled.12" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      toast(`Excel (modelo B+P) exportado: ${name} — ${res.steps} etapa(s).`, "ok", 6000);
+      res.warnings.forEach((w) => toast(w, "warn", 9000));
+    } catch (err) {
+      console.error("Falha ao preencher o modelo do MFV:", err);
+      toast(`Não foi possível exportar: ${err.message || err}`, "error", 9000);
+    }
+  }
+
+  /* ==========================================================================
      INICIALIZAÇÃO
      ========================================================================== */
 
@@ -862,6 +975,8 @@
       state.folder = r.handle ? (r.permission === "granted" ? "granted" : "prompt") : "none";
     }
     updateFolderButton();
+    setTemplateInfo(await getTemplate());
+    syncTemplate();
     await loadStudies();
     let opened = false;
     const lastId = await Store.getKV("lastMfvId");

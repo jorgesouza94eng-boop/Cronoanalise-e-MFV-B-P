@@ -14,6 +14,12 @@
  *   Compilação e Soluções: B55 constatações e soluções
  *   Análise: C16 identificação do estudo
  *
+ * Mapeamento (planilha "04_MFV_SIMPLIFICADO" REV1, aba EP — estado presente):
+ *   D5 empresa | D6 família | C22:F28 horário (entrada, saída, pausas, refeição) |
+ *   K28 disponibilidade | O21 demanda mensal | O26 dias úteis | P23 unidade do takt |
+ *   D35 unidade do TC | B39:G51 etapas (X Kaizen, etapa, TC, nº ops, uptime) | K37 operadores |
+ *   B55:D64 estoques | B76:B95 premissas. A aba EF recebe os dados gerais com etapas em branco.
+ *
  * Depende de: LeanCalc (calc.js) e LeanXlsx (xlsx.js). Também roda no Node (testes).
  * ============================================================================
  */
@@ -160,7 +166,7 @@
    * Aplica alterações: updates = Map<"C10", valor>. Valor: número, texto ou null (limpa
    * mantendo a formatação da célula). Fórmulas nunca são alteradas.
    */
-  function applyUpdates(parts, updates) {
+  function applyUpdates(parts, updates, force) {
     const byRow = new Map();
     updates.forEach((value, ref) => {
       const n = Number(ref.match(/\d+/)[0]);
@@ -174,7 +180,9 @@
       const { attrs, cells } = existing ? rowCells(existing) : { attrs: ` r="${n}"`, cells: new Map() };
       list.forEach(([ref, value]) => {
         const old = cells.get(ref);
-        if (old && /<f[\s>/]/.test(old)) return; // nunca sobrescreve fórmula
+        // Nunca sobrescreve fórmula — exceto células de ENTRADA em que o consultor digitou
+        // uma conta (ex.: demanda "=1240/6*26" no MFV da Laje Forte), listadas em "force".
+        if (old && /<f[\s>/]/.test(old) && !(force && force.has(ref))) return;
         if (!old && (value == null || value === "")) return; // nada a limpar
         const style = old ? (old.match(/\bs="(\d+)"/) || [])[0] : null;
         const s = style ? ` ${style}` : "";
@@ -235,6 +243,12 @@
       const target = relTarget.get((m[0].match(/\br:id="([^"]+)"/) || [])[1]);
       if (target) sheetPath.set(name, target.startsWith("/") ? target.slice(1) : `xl/${target.replace(/^\.\//, "")}`);
     }
+    const expect = options && options.expect;
+    if (sheetPath.has("EP") && !sheetPath.has(SHEETS.geral)) {
+      if (expect === "crono") throw new Error("Este arquivo é o modelo do MFV: carregue-o na página do MFV.");
+      return recognizeMfv({ entries, byName, text, workbook, sheetPath });
+    }
+    if (expect === "mfv") throw new Error("Este arquivo não é o modelo do MFV Simplificado (aba EP não encontrada).");
     const missing = [SHEETS.geral, SHEETS.listagem, SHEETS.compilacao].filter((n) => !sheetPath.has(n));
     if (missing.length) throw new Error(`Modelo não reconhecido: faltam as abas ${missing.join(", ")}`);
 
@@ -367,32 +381,165 @@
       );
     }
 
-    // ---- Monta o arquivo: partes alteradas sem compressão; demais copiadas byte a byte
+    return { bytes: buildOutput(tpl, [tpl.sheets.bd]), warnings, lines: lines.length, elements: elements.length };
+  }
+
+  /** Monta o arquivo: abas alteradas sem compressão; todo o resto copiado byte a byte. */
+  function buildOutput(tpl, untouchedSheets) {
     const enc = new TextEncoder();
     const changed = new Map();
     Object.values(tpl.sheets).forEach((sh) => {
-      if (sh === tpl.sheets.bd) return;
+      if (!sh || (untouchedSheets || []).includes(sh)) return;
       changed.set(sh.path, dropCachedFormulaValues(joinRows(sh.parts)));
     });
     // Excel recalcula todas as fórmulas (e os gráficos) ao abrir
     changed.set(
       "xl/workbook.xml",
       /<calcPr\b/.test(tpl.workbook)
-        ? tpl.workbook.replace(/<calcPr\b([^>]*?)\s*(\/?)>/, (m, a, sl) => `<calcPr${a.replace(/\s+fullCalcOnLoad="[^"]*"/, "")} fullCalcOnLoad="1"${sl ? "/" : ""}>`)
+        ? tpl.workbook.replace(/<calcPr\b([^>]*?)\s*(\/?)>/, (m, a, sl) =>
+            `<calcPr${a.replace(/\s+(?:fullCalcOnLoad|calcCompleted)="[^"]*"/g, "")} fullCalcOnLoad="1"${sl ? "/" : ""}>`
+          )
         : tpl.workbook.replace("</workbook>", '<calcPr fullCalcOnLoad="1"/></workbook>')
     );
     const files = tpl.entries.map((e) =>
-        changed.has(e.name)
-          ? { name: e.name, data: enc.encode(changed.get(e.name)) }
-          : { name: e.name, raw: { method: e.method, compressed: e.compressed, crc: e.crc, size: e.size } }
-      );
-    return { bytes: Xlsx.zip(files), warnings, lines: lines.length, elements: elements.length };
+      changed.has(e.name)
+        ? { name: e.name, data: enc.encode(changed.get(e.name)) }
+        : { name: e.name, raw: { method: e.method, compressed: e.compressed, crc: e.crc, size: e.size } }
+    );
+    return Xlsx.zip(files);
   }
 
-  /** O preenchimento altera as linhas do modelo carregado: sempre trabalhar numa cópia. */
-  async function fillFromBytes(templateBytes, study, options) {
+  /* ==========================================================================
+     MODELO DO MFV SIMPLIFICADO (ABA EP / EF)
+     ========================================================================== */
+
+  const MFV = { stepsFirst: 39, stepsLast: 51, stockFirst: 55, stockLast: 64, notesFirst: 76, notesLast: 95, days: [22, 28] };
+  const TAKT_UNITS = { s: "SEGUNDOS", min: "MINUTOS", h: "HORAS" };
+
+  async function recognizeMfv(wb) {
+    const sst = parseSharedStrings(await wb.text("xl/sharedStrings.xml"));
+    const sheets = {};
+    for (const name of ["EP", "EF"]) {
+      if (wb.sheetPath.has(name)) sheets[name] = { name, path: wb.sheetPath.get(name), parts: splitRows(await wb.text(wb.sheetPath.get(name))) };
+    }
+    const ep = sheets.EP.parts;
+    const checks = { B20: "horario de trabalho", B21: "dias da semana", C38: "etapa", E38: "tc", F38: "num. ops", B54: "estoques" };
+    const bad = Object.entries(checks).filter(([ref, label]) => !norm(getCell(ep, ref, sst)).startsWith(label));
+    if (bad.length) {
+      throw new Error(`Layout diferente do MFV Simplificado REV1 (${bad.slice(0, 3).map(([r, l]) => `EP!${r} ≠ "${l}"`).join("; ")}).`);
+    }
+    return { kind: "mfv-rev1", entries: wb.entries, sst, sheets, workbook: wb.workbook, macro: wb.byName.has("xl/vbaProject.bin") };
+  }
+
+  function getMfvLib() {
+    if (typeof self !== "undefined" && self.LeanMfv) return self.LeanMfv;
+    return require("./mfv-calc.js"); // Node (testes)
+  }
+
+  /**
+   * Preenche o MFV. TCs exportados em HORAS ("HORAS / peça"): é a única unidade em que
+   * todas as fórmulas da planilha (O27, K46, N46, U45) calculam de forma consistente.
+   */
+  function fillMfvTemplate(tpl, doc) {
+    const M = getMfvLib();
+    const r = M.computeMfv(doc);
+    const warnings = [];
+    const pu = doc.productUnit || "pç";
+    const clock = (v) => {
+      const p = M.parseClock(v);
+      return p.minutes == null || p.error ? null : p.minutes / 1440;
+    };
+    const num = (v) => {
+      const n = Calc.parseNumber(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const maxSteps = MFV.stepsLast - MFV.stepsFirst + 1;
+    if (doc.steps.length > maxSteps) throw new Error(`O MFV tem ${doc.steps.length} etapas; a planilha comporta ${maxSteps} (linhas ${MFV.stepsFirst}–${MFV.stepsLast}).`);
+    const maxStock = MFV.stockLast - MFV.stockFirst + 1;
+    if (doc.inventories.length > maxStock) throw new Error(`O MFV tem ${doc.inventories.length} estoques; a planilha comporta ${maxStock}.`);
+
+    /** Dados gerais (cliente, horário, demanda, unidades) — iguais no EP e no EF. */
+    const general = () => {
+      const u = new Map([
+        ["D5", doc.clientName || null],
+        ["D6", doc.family || null],
+        ["K28", num(doc.availabilityPct) != null ? num(doc.availabilityPct) / 100 : 1],
+        ["O21", num(doc.demandMonthly)],
+        ["O26", num(doc.workDaysMonth)],
+        ["P21", `${pu} / MÊS`],
+        ["P22", `${pu} / DIA`],
+        ["P23", TAKT_UNITS[doc.timeUnit] || "MINUTOS"],
+        ["P27", `${pu} / HORA`],
+        ["D35", "HORAS / peça"],
+        ["D54", pu],
+        ["I46", `${pu} / dia`],
+        ["I47", `${pu} / hora`],
+        ["I50", `${pu} / dia / operador`],
+        ["I51", `${pu} / hora / operador`],
+        ["T45", `${pu} / dia`],
+      ]);
+      doc.schedule.forEach((d, i) => {
+        const row = MFV.days[0] + i;
+        const day = r.days[i];
+        u.set(`C${row}`, clock(d.start));
+        u.set(`D${row}`, clock(d.end));
+        // G/H (horas sem paradas / efetivas): só entram onde o modelo NÃO tem fórmula
+        // (ex.: sábado da aba EF do modelo Laje Forte); fórmulas existentes são preservadas.
+        u.set(`G${row}`, day.worked ? day.gross / 1440 : null);
+        u.set(`H${row}`, day.worked ? day.net / 1440 : null);
+        u.set(`E${row}`, clock(d.breaks) == null && clock(d.start) != null ? 0 : clock(d.breaks));
+        u.set(`F${row}`, clock(d.meal) == null && clock(d.start) != null ? 0 : clock(d.meal));
+      });
+      return u;
+    };
+    const force = new Set(["O21", "O26", "K28", "K37"]);
+    for (let n = MFV.stepsFirst; n <= MFV.stepsLast; n++) ["B", "C", "E", "F", "G"].forEach((c) => force.add(`${c}${n}`));
+    for (let n = MFV.stockFirst; n <= MFV.stockLast; n++) ["B", "D"].forEach((c) => force.add(`${c}${n}`));
+
+    // ---- EP (estado presente)
+    const ep = general();
+    for (let n = MFV.stepsFirst; n <= MFV.stepsLast; n++) {
+      const st = doc.steps[n - MFV.stepsFirst];
+      const calc = r.steps[n - MFV.stepsFirst];
+      ep.set(`B${n}`, st && st.kaizen ? "X" : null);
+      ep.set(`C${n}`, st ? st.name || calc.name : null);
+      ep.set(`E${n}`, st && calc.tc != null ? Math.round((calc.tc / 60) * 1e7) / 1e7 : null);
+      ep.set(`F${n}`, st ? num(st.operators) : null);
+      ep.set(`G${n}`, st && num(st.uptimePct) ? num(st.uptimePct) / 100 : null);
+      if (st && calc.tc == null) warnings.push(`Etapa "${calc.name}" sem TC: exportada sem tempo.`);
+    }
+    ep.set("K37", Math.round(r.opsTotal * 1000) / 1000 || null);
+    for (let n = MFV.stockFirst; n <= MFV.stockLast; n++) {
+      const inv = doc.inventories[n - MFV.stockFirst];
+      ep.set(`B${n}`, inv ? inv.name || null : null);
+      ep.set(`D${n}`, inv ? num(inv.quantity) : null);
+    }
+    const notes = String(doc.notes || "").split(/\r?\n/).filter((l, i, arr) => l.trim() || i < arr.length - 1);
+    const maxNotes = MFV.notesLast - MFV.notesFirst;
+    ep.set(`B${MFV.notesFirst}`, `PREMISSAS E OBSERVAÇÕES (exportado do Lean Chrono em ${new Date().toLocaleDateString("pt-BR")}):`);
+    for (let n = MFV.notesFirst + 1; n <= MFV.notesLast; n++) ep.set(`B${n}`, notes[n - MFV.notesFirst - 1] || null);
+    if (notes.length > maxNotes) warnings.push(`Premissas com ${notes.length} linhas: só as ${maxNotes} primeiras cabem na planilha.`);
+    if (!doc.steps.some((s) => s.kaizen)) warnings.push('Nenhuma etapa marcada como Kaizen: as fórmulas do "Processo Kaizen" da planilha ficarão em erro (#N/D).');
+    applyUpdates(tpl.sheets.EP.parts, ep, force);
+
+    // ---- EF (estado futuro): dados gerais do EP, etapas e estoques em branco
+    if (tpl.sheets.EF) {
+      const ef = general();
+      for (let n = MFV.stepsFirst; n <= MFV.stepsLast; n++) ["B", "C", "E", "F", "G"].forEach((c) => ef.set(`${c}${n}`, null));
+      for (let n = MFV.stockFirst; n <= MFV.stockLast; n++) ef.set(`D${n}`, null);
+      ef.set("K37", null);
+      applyUpdates(tpl.sheets.EF.parts, ef, force);
+      warnings.push("Aba EF (estado futuro) preparada com os dados gerais do EP; preencha as etapas futuras no Excel.");
+    }
+    warnings.push("O fluxograma do processo é uma imagem do modelo: atualize-o manualmente no Excel.");
+    return { bytes: buildOutput(tpl, []), warnings, steps: doc.steps.length };
+  }
+
+
+  /** O preenchimento altera as linhas do modelo carregado: sempre parte dos bytes originais. */
+  async function fillFromBytes(templateBytes, docOrStudy, options) {
     const tpl = await loadTemplate(templateBytes, options);
-    return fillTemplate(tpl, study);
+    return tpl.kind === "mfv-rev1" ? fillMfvTemplate(tpl, docOrStudy) : fillTemplate(tpl, docOrStudy);
   }
 
   function exportFileName(study, templateName) {
@@ -401,5 +548,23 @@
     return `Crono_${Calc.slugify(study.clientName, "Cliente")}_${Calc.slugify(study.processName, "Posto")}_${date}.${ext}`;
   }
 
-  return { LIMITS, readZip, loadTemplate, fillTemplate, fillFromBytes, exportFileName, parseSharedStrings, dropCachedFormulaValues };
+  function exportMfvFileName(doc, templateName) {
+    const ext = /\.xlsm$/i.test(templateName || "") ? "xlsm" : "xlsx";
+    const date = new Date().toISOString().slice(0, 10);
+    return `MFV_${Calc.slugify(doc.clientName, "Cliente")}_${Calc.slugify(doc.family, "Familia")}_${date}.${ext}`;
+  }
+
+  return {
+    LIMITS,
+    MFV,
+    readZip,
+    loadTemplate,
+    fillTemplate,
+    fillMfvTemplate,
+    fillFromBytes,
+    exportFileName,
+    exportMfvFileName,
+    parseSharedStrings,
+    dropCachedFormulaValues,
+  };
 });

@@ -137,6 +137,7 @@
       availabilityPct: "100",
       demandMonthly: "",
       workDaysMonth: "22",
+      operatorsTotal: "", // vazio = soma dos operadores das etapas
       steps: [],
       inventories: [
         createInventory({ name: "Matéria-prima" }),
@@ -177,6 +178,7 @@
       availabilityPct: raw.availabilityPct == null ? "100" : str(raw.availabilityPct),
       demandMonthly: str(raw.demandMonthly),
       workDaysMonth: raw.workDaysMonth == null ? "22" : str(raw.workDaysMonth),
+      operatorsTotal: str(raw.operatorsTotal),
       steps: (Array.isArray(raw.steps) ? raw.steps : [])
         .filter((s) => s && typeof s === "object")
         .map((s) =>
@@ -212,6 +214,7 @@
    *  - Demanda diária = Demanda mensal ÷ Dias úteis.
    *  - Takt = Tempo disponível/dia ÷ Demanda diária.
    *  - Operadores efetivos da etapa = Nº ops × Uptime (%) [se informado].
+   *  - Nº total de operadores = valor digitado (equipe compartilhada) ou soma das etapas.
    *  - Nº ideal de operadores = ΣTC ÷ Takt.
    *  - Capacidade da linha = Tempo disponível/dia ÷ maior TC (gargalo).
    *  - Produtividade = Capacidade ÷ Nº de operadores (por dia e por hora).
@@ -280,7 +283,11 @@
     const valid = steps.filter((s) => s.tc != null);
     const tcTotal = valid.reduce((a, s) => a + s.tc, 0);
     const bottleneck = valid.reduce((m, s) => (!m || s.tc > m.tc ? s : m), null);
-    const opsTotal = steps.reduce((a, s) => a + s.opsEff, 0);
+    // Nº total de operadores da linha: digitado (equipe compartilhada entre etapas, como na
+    // planilha K37) ou, se vazio, a soma dos operadores efetivos das etapas.
+    const opsSum = steps.reduce((a, s) => a + s.opsEff, 0);
+    const opsTyped = num(doc.operatorsTotal);
+    const opsTotal = opsTyped > 0 ? opsTyped : opsSum;
     const line = lineResults(availDayMin, bottleneck ? bottleneck.tc : null, opsTotal);
     const kaizenStep = steps.find((s) => s.kaizen) || null;
     const kaizen = kaizenStep
@@ -305,6 +312,8 @@
       tcTotal,
       bottleneck: bottleneck ? { seq: bottleneck.seq, name: bottleneck.name, tc: bottleneck.tc } : null,
       opsTotal,
+      opsSum,
+      opsTyped: opsTyped > 0,
       opsIdeal: takt && tcTotal ? tcTotal / takt : null,
       line,
       kaizen,

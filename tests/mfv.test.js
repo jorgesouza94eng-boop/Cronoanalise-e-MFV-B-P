@@ -122,3 +122,19 @@ test("arquivo MFV: nome fixo, ida e volta JSON e recusa de outros arquivos", () 
   const out = JSON.parse(M.serializeMfv(d));
   assert.equal(out.results.leadTimeDays, 8);
 });
+
+test("operadores: total digitado (equipe compartilhada) prevalece sobre a soma das etapas", () => {
+  const d = lajeForte();
+  d.steps = [
+    M.createStep({ name: "Corte", tcManualMin: 0.3, operators: "2" }),
+    M.createStep({ name: "Concretagem", tcManualMin: 1.2, operators: "2" }),
+  ];
+  let r = M.computeMfv(d);
+  assert.equal(r.opsTotal, 4, "sem total digitado: soma das etapas");
+  d.operatorsTotal = "2";
+  r = M.computeMfv(d);
+  assert.equal(r.opsTotal, 2);
+  assert.equal(r.opsSum, 4);
+  assert.equal(r.opsTyped, true);
+  close(r.line.productivityDay, r.line.capacityDay / 2);
+});

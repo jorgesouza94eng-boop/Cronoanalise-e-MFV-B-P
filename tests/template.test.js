@@ -168,3 +168,110 @@ test("nome do arquivo exportado: Crono_<Cliente>_<Posto>_<data>.xlsm", () => {
   assert.match(name, /^Crono_Industria_Alfa_Posto_01_\d{4}-\d\d-\d\d\.xlsm$/);
   assert.match(T.exportFileName({ clientName: "A", processName: "B" }, "m.xlsx"), /\.xlsx$/);
 });
+
+/* ==========================================================================
+   MODELO DO MFV SIMPLIFICADO (ABAS EP / EF)
+   ========================================================================== */
+
+const M = require("../js/mfv-calc.js");
+
+function buildMfvTemplate() {
+  const sst = ["HORÁRIO DE TRABALHO - ESTADO PRESENTE", "Dias da Semana", "Etapa", "TC", "NÚM. OPs", "Estoques", "Hiper Aço", "Sucata antiga"];
+  const s = (i) => `t="s"><v>${i}</v>`;
+  const ep =
+    `<row r="5"><c r="D5" s="1" ${s(6)}</c></row>` +
+    `<row r="20"><c r="B20" ${s(0)}</c></row><row r="21"><c r="B21" ${s(1)}</c><c r="O21" s="2"><f>1240/6*26</f><v>5373</v></c></row>` +
+    `<row r="22"><c r="C22" s="3"><v>0.3</v></c><c r="D22" s="3"><v>0.7</v></c><c r="G22" s="3"><f>D22-C22</f><v>0.4</v></c><c r="H22" s="3"><f>G22-F22-E22</f><v>0.4</v></c></row>` +
+    `<row r="27"><c r="C27" s="3"/><c r="D27" s="3"/></row>` +
+    `<row r="38"><c r="C38" ${s(2)}</c><c r="E38" ${s(3)}</c><c r="F38" ${s(4)}</c></row>` +
+    `<row r="39"><c r="C39" s="4" ${s(7)}</c><c r="E39" s="5"><v>0.09</v></c></row>` +
+    `<row r="46"><c r="E46" s="5"><f>SUM(E39:E45)</f><v>0.09</v></c></row>` +
+    `<row r="54"><c r="B54" ${s(5)}</c></row><row r="56"><c r="D56" s="6"><f>1*O22</f><v>206</v></c></row>`;
+  const names = ["EP", "EF"];
+  const files = [
+    deflated("xl/workbook.xml", `<?xml version="1.0"?><workbook ${NS}><sheets>${names.map((n, i) => `<sheet name="${n}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets><calcPr calcId="191029" calcCompleted="0"/></workbook>`),
+    deflated("xl/_rels/workbook.xml.rels", `<Relationships>${names.map((n, i) => `<Relationship Id="rId${i + 1}" Type="x" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}</Relationships>`),
+    deflated("xl/sharedStrings.xml", `<?xml version="1.0"?><sst ${NS}>${sst.map((t) => `<si><t>${X.esc(t)}</t></si>`).join("")}</sst>`),
+    deflated("xl/worksheets/sheet1.xml", sheet(ep)),
+    deflated("xl/worksheets/sheet2.xml", sheet(ep)),
+    deflated("xl/media/fluxograma.png", new Uint8Array([9, 9, 9])),
+  ];
+  return X.zip(files);
+}
+
+function mfvDoc() {
+  const d = M.createMfv({ clientName: "Laje Forte", family: "Lajes" });
+  d.productUnit = "m²";
+  d.timeUnit = "h";
+  d.demandMonthly = "5373,33";
+  d.workDaysMonth = "26";
+  d.operatorsTotal = "2";
+  d.schedule[5] = { day: "SÁB", start: "07:30", end: "11:30", breaks: "", meal: "" };
+  d.steps = [
+    M.createStep({ name: "Corte", tcManualMin: 0.6, operators: "2", uptimePct: "50" }),
+    M.createStep({ name: "Concretagem", tcManualMin: 1.2, operators: "2", kaizen: true }),
+  ];
+  d.inventories = [M.createInventory({ name: "Cura", quantity: "1446,67" })];
+  d.notes = "Premissa 1\nPremissa 2";
+  return d;
+}
+
+async function mfvFilled() {
+  const out = await T.fillFromBytes(buildMfvTemplate(), mfvDoc(), { inflate, expect: "mfv" });
+  const entries = T.readZip(out.bytes);
+  const text = (name) => {
+    const e = entries.find((x) => x.name === name);
+    return new TextDecoder().decode(e.method === 0 ? e.compressed : inflate(e.compressed));
+  };
+  return { out, entries, text };
+}
+
+test("MFV: modelo reconhecido e não confundido com o da cronoanálise", async () => {
+  const tpl = await T.loadTemplate(buildMfvTemplate(), { inflate });
+  assert.equal(tpl.kind, "mfv-rev1");
+  await assert.rejects(T.loadTemplate(buildMfvTemplate(), { inflate, expect: "crono" }), /modelo do MFV/);
+  await assert.rejects(T.loadTemplate(buildTemplate(), { inflate, expect: "mfv" }), /não é o modelo do MFV/);
+});
+
+test("MFV/EP: dados gerais, demanda sobre fórmula do consultor e TCs em HORAS", async () => {
+  const { text } = await mfvFilled();
+  const ep = text("xl/worksheets/sheet1.xml");
+  assert.match(ep, /<c r="D5" s="1" t="inlineStr"><is><t xml:space="preserve">Laje Forte<\/t>/);
+  assert.match(ep, /<c r="O21" s="2"><v>5373\.33<\/v><\/c>/, "demanda digitada substitui a conta '=1240/6*26'");
+  assert.match(ep, /<c r="E39" s="5"><v>0\.01<\/v><\/c>/, "TC 0,6 min = 0,01 h");
+  assert.match(ep, /<c r="G39"[^>]*><v>0\.5<\/v><\/c>/, "uptime 50% = 0,5");
+  assert.match(ep, /<c r="B40"[^>]*><is><t xml:space="preserve">X<\/t>/, "processo Kaizen marcado");
+  assert.match(ep, /<c r="C39" s="4" t="inlineStr"><is><t xml:space="preserve">Corte<\/t>/);
+  assert.match(ep, /<c r="E46" s="5"\/>/, "linha extra do modelo (antiga soma) limpa");
+  assert.match(ep, /<c r="K37"[^>]*><v>2<\/v>/, "total de operadores digitado");
+  assert.match(ep, /<c r="D35"[^>]*><is><t xml:space="preserve">HORAS \/ peça<\/t>/);
+  assert.match(ep, /<c r="D56" s="6"\/>/, "estoque antigo (fórmula) limpo");
+  assert.match(ep, /<c r="D55"[^>]*><v>1446\.67<\/v>/);
+  assert.match(ep, /Premissa 2/);
+  assert.ok(!ep.includes("Sucata antiga") || !/C39[^<]*Sucata/.test(ep));
+});
+
+test("MFV/EP: horas do dia só onde o modelo não tem fórmula", async () => {
+  const { text } = await mfvFilled();
+  const ep = text("xl/worksheets/sheet1.xml");
+  assert.match(ep, /<c r="H22" s="3"><f>G22-F22-E22<\/f><\/c>/, "fórmula preservada (sem valor guardado)");
+  assert.match(ep, /<c r="H27"><v>0\.16666666/, "sábado sem fórmula: 4 h preenchidas");
+  assert.match(ep, /<c r="C27" s="3"><v>0\.3125<\/v>/, "07:30");
+});
+
+test("MFV/EF: dados gerais copiados, etapas em branco; arquivo marcado para recalcular", async () => {
+  const { text, out } = await mfvFilled();
+  const ef = text("xl/worksheets/sheet2.xml");
+  assert.match(ef, /Laje Forte/);
+  assert.ok(!ef.includes("Hiper Aço"), "sem dados do cliente anterior");
+  assert.match(ef, /<c r="C39" s="4"\/>/);
+  assert.match(ef, /<c r="E39" s="5"\/>/);
+  assert.match(text("xl/workbook.xml"), /<calcPr calcId="191029" fullCalcOnLoad="1"\/>/);
+  assert.ok(out.warnings.some((w) => /fluxograma/i.test(w)));
+});
+
+test("MFV: limite de 13 etapas da planilha", async () => {
+  const d = mfvDoc();
+  d.steps = Array.from({ length: 14 }, (_, i) => M.createStep({ name: `E${i}`, tcManualMin: 1 }));
+  await assert.rejects(T.fillFromBytes(buildMfvTemplate(), d, { inflate }), /comporta 13/);
+});
