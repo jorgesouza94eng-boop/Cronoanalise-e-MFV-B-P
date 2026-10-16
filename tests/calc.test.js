@@ -701,7 +701,7 @@ test("filmagens: peças gravadas no arquivo, normalizadas e resumidas no JSON", 
   const s = twoFilms();
   s.filmPieces = { [C.FIRST_FILM_KEY]: " 5 ", [s.elements[2].id]: 5, lixo: { x: 1 }, vazio: "" };
   const json = JSON.parse(C.serializeStudy(s));
-  assert.equal(json.schemaVersion, 2);
+  assert.equal(json.schemaVersion, C.SCHEMA_VERSION);
   assert.equal(json.results.acyclicTime, "por-unidade");
   assert.equal(json.results.films.length, 2);
   const back = C.normalizeStudy(json).study;
@@ -709,4 +709,94 @@ test("filmagens: peças gravadas no arquivo, normalizadas e resumidas no JSON", 
   // Arquivo da versão anterior (sem filmPieces) abre normalmente.
   const old = C.normalizeStudy({ schema: C.SCHEMA_ID, schemaVersion: 1, id: "x", elements: [] }).study;
   assert.deepEqual(old.filmPieces, {});
+});
+
+/* ==========================================================================
+   REV 1.3: INÍCIO POR FILMAGEM E PRODUTO POR LINHA
+   ========================================================================== */
+
+test("início por filmagem: a 1ª linha da filmagem desconta o início digitado", () => {
+  const s = twoFilms();
+  // F2 começa em 00:00 (padrão): 1ª linha = 10 s
+  close(sec(C.computeStudy(s).rows[2].subtractedTime), 10);
+  // F2 começa em 00:04: 1ª linha = 10 − 4 = 6 s; a linha seguinte não muda (30 − 10 = 20 s)
+  s.filmStarts = { [s.elements[2].id]: "04" };
+  const r = C.computeStudy(s);
+  close(sec(r.rows[2].subtractedTime), 6);
+  close(sec(r.rows[3].subtractedTime), 20);
+  close(sec(r.filmList[1].start), 4);
+  close(sec(r.filmList[1].observed), 26, "observado da F2 conta só o trecho analisado");
+  // Tempo menor que o início da filmagem é erro (não é "corrigido")
+  s.filmStarts = { [s.elements[2].id]: "15" };
+  const bad = C.computeStudy(s);
+  assert.equal(bad.rows[2].valid, false);
+  assert.match(bad.rows[2].errors[0], /00:15/);
+  // A 1ª filmagem continua usando a Leitura inicial
+  s.filmStarts = {};
+  s.videoStart = "05";
+  const f1 = C.computeStudy(s);
+  close(sec(f1.rows[0].subtractedTime), 5);
+  assert.equal(f1.filmList[0].startRaw, "05");
+});
+
+function twoProducts() {
+  const s = C.createStudy({ clientName: "Cliente", processName: "Posto" });
+  s.settings.entryMode = "quantidade";
+  s.elements = [
+    C.createElement({ product: "Produto A", description: "Furar", type: "C", videoTime: "12" }),
+    C.createElement({ product: "Produto A", description: "Furar", type: "C", videoTime: "24" }),
+    C.createElement({ product: "Produto B", description: "Setup", type: "A", videoTime: "54" }),
+    C.createElement({ product: "produto b", description: "Furar", type: "C", videoTime: "1:14" }),
+    C.createElement({ product: "Produto B", description: "Furar", type: "C", videoTime: "1:34" }),
+  ];
+  return s;
+}
+
+test("produtos: resumo, ciclo e tempo padrão separados por produto", () => {
+  const s = twoProducts();
+  const r = C.computeStudy(s);
+  assert.equal(r.multiProduct, true);
+  assert.deepEqual(r.products.map((p) => p.name), ["Produto A", "Produto B"], "maiúsculas não criam produto novo");
+  const [a, b] = r.products;
+  close(sec(a.summary.cycleNormal), 12, "A: Furar = 12 s");
+  close(sec(b.summary.cycleNormal), 30 + 20, "B: Setup 30 s (total) + Furar 20 s");
+  assert.equal(r.product.key, a.key, "sem escolha, mostra o 1º produto");
+  s.settings.product = b.key;
+  assert.equal(C.computeStudy(s).kpis.sumNormal, b.kpis.sumNormal);
+  // Sem produto em nenhuma linha: estudo de produto único (como antes)
+  s.elements.forEach((e) => (e.product = ""));
+  const one = C.computeStudy(s);
+  assert.equal(one.multiProduct, false);
+  assert.equal(one.products.length, 1);
+});
+
+test("produtos: peças por filmagem informadas por produto quando a filmagem tem os dois", () => {
+  const s = twoProducts();
+  const r = C.computeStudy(s);
+  const segs = r.filmList[0].segments;
+  assert.equal(segs.length, 2);
+  assert.notEqual(segs[0].key, segs[1].key);
+  close(sec(segs[1].observed), 70, "B observado = 94 − 24 s");
+  s.filmPieces = { [segs[0].key]: "2", [segs[1].key]: "2" };
+  const b = C.computeStudy(s).products[1];
+  assert.equal(b.summary.acyclic, "por-unidade");
+  close(sec(b.summary.cycleNormal), 30 / 2 + 20, "setup rateado só pelas peças de B");
+});
+
+test("produtos e início: gravados, normalizados e resumidos no JSON", () => {
+  const s = twoProducts();
+  s.elements[2].newVideo = true;
+  s.filmStarts = { [s.elements[2].id]: "00:10" };
+  s.settings.multiProduct = true;
+  const json = JSON.parse(C.serializeStudy(s));
+  assert.equal(json.results.products.length, 2);
+  assert.equal(json.results.films[1].startMin, 0.1667, "arredondado a 4 casas");
+  const back = C.normalizeStudy(json).study;
+  assert.equal(back.elements[0].product, "Produto A");
+  assert.deepEqual(back.filmStarts, { [s.elements[2].id]: "00:10" });
+  assert.equal(back.settings.multiProduct, true);
+  // Arquivo da REV 1.2 (v2) abre sem produtos nem início por filmagem
+  const old = C.normalizeStudy({ schema: C.SCHEMA_ID, schemaVersion: 2, id: "x", elements: [{ description: "y" }] }).study;
+  assert.deepEqual(old.filmStarts, {});
+  assert.equal(old.elements[0].product, "");
 });

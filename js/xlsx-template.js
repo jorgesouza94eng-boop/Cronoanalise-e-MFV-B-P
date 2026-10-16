@@ -304,8 +304,11 @@
     // ---- GERAL: só linhas com leitura válida (como na planilha: elemento + início + fim)
     const lines = [];
     let skipped = 0;
+    // Vários produtos: a planilha recebe só o produto escolhido no resumo (um arquivo por produto).
+    const onlyProduct = r.multiProduct ? r.product.key : null;
     study.elements.forEach((el, i) => {
       const row = r.rows[i];
+      if (onlyProduct != null && row.productKey !== onlyProduct) return;
       if (!row.hasReading || !row.valid) {
         if (el.description || el.videoTime) skipped += 1;
         return;
@@ -320,6 +323,12 @@
       });
     });
     if (skipped) warnings.push(`${skipped} linha(s) sem tempo ou com erro não foram exportadas.`);
+    if (r.summary.acyclic === "por-unidade") {
+      warnings.push("Acíclicos por unidade: a Listagem recebe o tempo do app (Σtempo ÷ peças), mas o ciclo da aba Análise (G3, soma da GERAL) continua com o tempo total do tipo A.");
+    }
+    if (r.multiProduct && r.products.length > 1) {
+      warnings.push(`Estudo com ${r.products.length} produtos: exportado só "${r.product.name}". Escolha o outro produto no resumo e exporte de novo.`);
+    }
     if (!qtyMode) warnings.push("O estudo está no modo Frequência: a planilha usa Quantidade (exportado como 1 ÷ frequência).");
     const capacity = LIMITS.geralLast - LIMITS.geralFirst + 1;
     if (lines.length > capacity) throw new Error(`O estudo tem ${lines.length} lançamentos; o modelo comporta ${capacity} (linhas ${LIMITS.geralFirst}–${LIMITS.geralLast}).`);
@@ -375,7 +384,7 @@
       applyUpdates(
         tpl.sheets.analise.parts,
         new Map([
-          ["C16", `${study.clientName || "Cliente"} — ${study.processName || "Posto"} (${r.filmCount} filmagem(ns), exportado pelo Lean Chrono)`],
+          ["C16", `${study.clientName || "Cliente"} — ${study.processName || "Posto"}${r.multiProduct ? ` — ${r.product.name}` : ""} (${r.filmCount} filmagem(ns), exportado pelo Lean Chrono)`],
           ["F15", null], // comentário da revisão anterior do modelo
         ])
       );
@@ -545,7 +554,9 @@
   function exportFileName(study, templateName) {
     const ext = /\.xlsm$/i.test(templateName || "") ? "xlsm" : "xlsx";
     const date = new Date().toISOString().slice(0, 10);
-    return `Crono_${Calc.slugify(study.clientName, "Cliente")}_${Calc.slugify(study.processName, "Posto")}_${date}.${ext}`;
+    const r = Calc.computeStudy(study);
+    const product = r.multiProduct && r.products.length > 1 ? `_${Calc.slugify(r.product.name, "Produto")}` : "";
+    return `Crono_${Calc.slugify(study.clientName, "Cliente")}_${Calc.slugify(study.processName, "Posto")}${product}_${date}.${ext}`;
   }
 
   function exportMfvFileName(doc, templateName) {

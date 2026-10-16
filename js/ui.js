@@ -16,6 +16,11 @@
 
   let els = {};
   let h = {}; // handlers fornecidos pelo app.js
+  let lastComputed = null;
+
+  /** Filtros da grade e do resumo: só exibição (não são gravados e não alteram cálculos). */
+  const filter = { text: "", product: "", type: "", value: "", waste: "", film: "", errors: false };
+  const filterActive = () => !!(filter.text || filter.product || filter.type || filter.value || filter.waste || filter.film || filter.errors);
 
   /** Ordem do fluxo rápido com Enter. Frequência e Kaizen ficam fora (acesso por Tab). */
   const ENTER_FLOW = {
@@ -76,6 +81,24 @@
       summaryNote: $("summary-note"),
       summaryHint: $("summary-hint"),
       filmsPanel: $("films-panel"),
+      multiProduct: $("opt-multi-product"),
+      thProduct: $("th-product"),
+      colProduct: $("col-product"),
+      colElem: $("col-elem"),
+      tfootLabel: $("tfoot-label"),
+      productNames: $("product-names"),
+      summaryProductField: $("summary-product-field"),
+      summaryProduct: $("summary-product"),
+      filterBar: $("filter-bar"),
+      fltText: $("flt-text"),
+      fltProduct: $("flt-product"),
+      fltType: $("flt-type"),
+      fltValue: $("flt-value"),
+      fltWaste: $("flt-waste"),
+      fltFilm: $("flt-film"),
+      fltErrors: $("flt-errors"),
+      fltStatus: $("flt-status"),
+      btnClearFilter: $("btn-clear-filter"),
       filmsList: $("films-list"),
       filmsHint: $("films-hint"),
       names: $("element-names"),
@@ -108,10 +131,51 @@
     els.btnConflictDisk.addEventListener("click", () => h.onConflictUseDisk());
     els.btnConflictLocal.addEventListener("click", () => h.onConflictKeepLocal());
 
-    // Peças produzidas por filmagem
+    // Filmagens do estudo: peças (a cada tecla) e início (ao confirmar)
     els.filmsList.addEventListener("input", (e) => {
       const key = e.target.dataset && e.target.dataset.filmKey;
       if (key) h.onFilmPiecesChange(key, e.target.value);
+    });
+    const commitStart = (input) => {
+      const res = h.onFilmStartCommit(input.dataset.filmStart, input.value);
+      input.classList.toggle("input-invalid", !res.ok);
+      if (res.ok) input.value = res.formatted;
+      else toast(`Início da filmagem: ${res.error}`, "error");
+      return res.ok;
+    };
+    els.filmsList.addEventListener("change", (e) => {
+      if (e.target.dataset && e.target.dataset.filmStart) commitStart(e.target);
+    });
+    els.filmsList.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && e.target.dataset && e.target.dataset.filmStart) {
+        e.preventDefault();
+        commitStart(e.target);
+      }
+    });
+
+    // Vários produtos (coluna Produto) e produto exibido no resumo/indicadores
+    els.multiProduct.addEventListener("change", () => {
+      const ok = h.onMultiProductToggle(els.multiProduct.checked);
+      if (!ok) els.multiProduct.checked = !els.multiProduct.checked;
+    });
+    els.summaryProduct.addEventListener("change", () => h.onProductSelect(els.summaryProduct.value));
+
+    // Filtros
+    const onFilter = () => {
+      filter.text = els.fltText.value.trim();
+      filter.product = els.fltProduct.value;
+      filter.type = els.fltType.value;
+      filter.value = els.fltValue.value;
+      filter.waste = els.fltWaste.value;
+      filter.film = els.fltFilm.value;
+      filter.errors = els.fltErrors.checked;
+      applyFilters(true);
+    };
+    els.fltText.addEventListener("input", onFilter);
+    [els.fltProduct, els.fltType, els.fltValue, els.fltWaste, els.fltFilm, els.fltErrors].forEach((c) => c.addEventListener("change", onFilter));
+    els.btnClearFilter.addEventListener("click", () => {
+      clearFilters();
+      els.fltText.focus();
     });
 
     // Parâmetros da jornada
@@ -300,8 +364,8 @@
     // Setas ↑ ↓: mesma coluna, linha anterior/seguinte
     // (em listas de seleção as setas trocam a opção, então não mudam de linha)
     if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !e.altKey && !e.ctrlKey && !e.shiftKey && e.target.tagName !== "SELECT") {
-      const target = info.index + (e.key === "ArrowUp" ? -1 : 1);
-      if (target >= 0 && target < els.tbody.rows.length) {
+      const target = visibleRow(info.index, e.key === "ArrowUp" ? -1 : 1);
+      if (target >= 0) {
         e.preventDefault();
         focusCell(target, info.field);
       }
@@ -330,9 +394,13 @@
       toast(`Linha 1: ${res.rowError}. Ajuste a leitura inicial ou o tempo final.`, "error");
       return false;
     }
+    if (res.newVideo) {
+      toast(`Linha ${info.index + 1}: ${res.rowError}. Ajuste o início da filmagem F${res.film} (bloco "Filmagens do estudo") ou o tempo final.`, "error", 8000);
+      return false;
+    }
     const ok = root.confirm(
       `Linha ${info.index + 1}: o tempo ${res.formatted} é menor que a leitura anterior.\n\n` +
-        "Esta linha é o INÍCIO DE UMA NOVA FILMAGEM (vídeo começando em 00:00)?\n\n" +
+        "Esta linha é o INÍCIO DE UMA NOVA FILMAGEM (outro vídeo)?\n\n" +
         "OK (Enter) = sim, nova filmagem\nCancelar (Esc) = não, corrigir o tempo"
     );
     if (!ok) {
@@ -344,7 +412,7 @@
       toast(r.error, "error");
       return false;
     }
-    toast(`Linha ${info.index + 1}: início da filmagem ${r.film} (leitura reiniciada em 00:00).`, "ok");
+    toast(`Linha ${info.index + 1}: início da filmagem ${r.film} (leitura reiniciada em 00:00; ajuste o início em "Filmagens do estudo", se preciso).`, "ok", 6000);
     return true;
   }
 
@@ -370,15 +438,34 @@
     }
     h.onDeleteRow(info.id);
     const total = els.tbody.rows.length;
-    focusCell(Math.min(info.index, total - 1), info.field || "description");
+    let target = Math.min(info.index, total - 1);
+    if (els.tbody.rows[target] && els.tbody.rows[target].hidden) {
+      const down = visibleRow(target, 1);
+      target = down >= 0 ? down : visibleRow(target, -1);
+    }
+    if (target >= 0) focusCell(target, info.field || "description");
+  }
+
+  /** Próxima linha visível (os filtros escondem linhas). -1 se não houver. */
+  function visibleRow(index, step) {
+    for (let i = index + step; i >= 0 && i < els.tbody.rows.length; i += step) {
+      if (!els.tbody.rows[i].hidden) return i;
+    }
+    return -1;
   }
 
   function goToNextRow(index) {
-    if (index < els.tbody.rows.length - 1) focusCell(index + 1, "description");
+    const next = visibleRow(index, 1);
+    if (next >= 0) focusCell(next, "description");
     else addRowAndFocus();
   }
 
   function addRowAndFocus() {
+    // Com filtro, a linha nova entraria fora da sequência do vídeo sem o consultor ver.
+    if (filterActive()) {
+      toast("Filtro ativo: limpe o filtro para incluir linhas (a leitura contínua depende da sequência completa).", "warn", 6000);
+      return;
+    }
     const index = h.onAddRow();
     focusCell(index, "description");
   }
@@ -433,6 +520,7 @@
     els.videoStart.classList.remove("input-invalid");
     els.settings.forEach((sel) => (sel.value = Calc[sel.dataset.setting](study)));
     els.notes.value = study.notes || "";
+    clearFilters(true);
     renderRows(study, computed);
     document.title = `${study.processName || "Estudo"} — ${study.clientName || "Lean Chrono"} | Cronoanálise & MFV`;
   }
@@ -451,9 +539,17 @@
     els.summaryHint.textContent = qtyMode
       ? "Padrão planilha B+P: Tipo C = Σtempo ÷ Σquantidade (média por unidade) • Tipo A = Σtempo, ou Σtempo ÷ Σpeças com as peças das filmagens"
       : "Modo frequência: média das ocorrências (a frequência já rateia o acíclico)";
+    // Coluna Produto: aparece com "Vários produtos" marcado ou quando alguma linha tem produto
+    const showProduct = !!(study.settings && study.settings.multiProduct) || study.elements.some((e) => String(e.product || "").trim());
+    els.multiProduct.checked = showProduct;
+    els.thProduct.hidden = !showProduct;
+    if (showProduct && !els.colProduct.isConnected) els.colElem.before(els.colProduct);
+    if (!showProduct && els.colProduct.isConnected) els.colProduct.remove();
+    els.tfootLabel.colSpan = showProduct ? 6 : 5;
     study.elements.forEach((el) => {
       const tr = els.rowTemplate.content.firstElementChild.cloneNode(true);
       tr.dataset.id = el.id;
+      if (!showProduct) tr.querySelector(".cell-product").remove();
       const qtyInput = tr.querySelector(".input-qty");
       qtyInput.dataset.field = qtyMode ? "quantity" : "frequency";
       qtyInput.setAttribute("aria-label", qtyMode ? "Quantidade" : "Frequência");
@@ -508,10 +604,121 @@
       ? `⚠ ${computed.errorCount} linha(s) com erro fora dos totais`
       : "";
 
+    lastComputed = computed;
+    renderProducts(computed);
     renderFilms(computed);
     renderSummary(computed);
     renderCompilation(computed);
     renderKpis(computed);
+    applyFilters(false);
+  }
+
+  /** Lista de produtos: autocompletar, seletor do resumo e filtro. */
+  function renderProducts(computed) {
+    const names = computed.multiProduct ? computed.products.filter((p) => p.key).map((p) => p.name) : [];
+    const sig = names.join("\n");
+    if (els.productNames.dataset.sig !== sig) {
+      els.productNames.dataset.sig = sig;
+      els.productNames.replaceChildren(...names.map((n) => Object.assign(document.createElement("option"), { value: n })));
+    }
+    const multi = computed.multiProduct && computed.products.length > 1;
+    els.summaryProductField.hidden = !multi;
+    els.fltProduct.hidden = !computed.multiProduct;
+    const options = (sel, list, first) => {
+      const want = first.concat(list.map((p) => [p.key, p.name]));
+      const cur = Array.from(sel.options).map((o) => [o.value, o.textContent]);
+      if (JSON.stringify(cur) !== JSON.stringify(want)) {
+        const keep = sel.value;
+        sel.replaceChildren(...want.map(([v, t]) => Object.assign(document.createElement("option"), { value: v, textContent: t })));
+        sel.value = want.some(([v]) => v === keep) ? keep : want[0] ? want[0][0] : "";
+      }
+    };
+    options(els.summaryProduct, computed.products, []);
+    if (multi) els.summaryProduct.value = computed.product.key;
+    options(els.fltProduct, computed.multiProduct ? computed.products : [], [["", "Produto: todos"]]);
+    filter.product = els.fltProduct.value;
+    const films = [["", "Filmagem: todas"]].concat(computed.filmList.map((f) => [String(f.film), `F${f.film}`]));
+    const curFilms = Array.from(els.fltFilm.options).map((o) => [o.value, o.textContent]);
+    if (JSON.stringify(curFilms) !== JSON.stringify(films)) {
+      const keep = els.fltFilm.value;
+      els.fltFilm.replaceChildren(...films.map(([v, t]) => Object.assign(document.createElement("option"), { value: v, textContent: t })));
+      els.fltFilm.value = films.some(([v]) => v === keep) ? keep : "";
+    }
+    filter.film = els.fltFilm.value;
+    els.fltFilm.hidden = computed.filmList.length < 2 && !filter.film;
+  }
+
+  /* ==========================================================================
+     FILTROS (SÓ EXIBIÇÃO)
+     ========================================================================== */
+
+  function clearFilters(silent) {
+    Object.assign(filter, { text: "", product: "", type: "", value: "", waste: "", film: "", errors: false });
+    els.fltText.value = "";
+    [els.fltProduct, els.fltType, els.fltValue, els.fltWaste, els.fltFilm].forEach((c) => (c.value = ""));
+    els.fltErrors.checked = false;
+    if (!silent) applyFilters(true);
+  }
+
+  const matchText = (name) => !filter.text || Calc.elementKey(name).includes(Calc.elementKey(filter.text));
+  const matchValue = (v) => !filter.value || (filter.value === "none" ? !v : v === filter.value);
+  const matchWaste = (w) => !filter.waste || (filter.waste === "none" ? !w : w === filter.waste);
+
+  /**
+   * Esconde as linhas da grade e do resumo que não atendem aos filtros.
+   * force=false (recálculo durante a digitação): a linha em edição nunca some.
+   */
+  function applyFilters(force) {
+    const computed = lastComputed;
+    if (!computed) return;
+    const active = filterActive();
+    const focusRow = document.activeElement && document.activeElement.closest ? document.activeElement.closest("#chrono-tbody tr") : null;
+    let shown = 0;
+    Array.from(els.tbody.rows).forEach((tr, i) => {
+      const row = computed.rows[i];
+      const el = h.getElement(tr.dataset.id);
+      if (!row || !el) return;
+      const ok =
+        !active ||
+        (matchText(el.description) &&
+          (!filter.product || row.productKey === filter.product) &&
+          (!filter.type || row.type === filter.type) &&
+          matchValue(el.value) &&
+          matchWaste(el.waste) &&
+          (!filter.film || String(row.film) === filter.film) &&
+          (!filter.errors || !row.valid));
+      const hide = !ok && (force || tr !== focusRow);
+      tr.hidden = hide;
+      if (!hide) shown += 1;
+    });
+    // Resumo: nome, tipo, valor e desperdício (o produto é o do seletor do resumo)
+    let sumShown = 0;
+    let timeShown = 0;
+    Array.from(els.summaryTbody.rows).forEach((tr, i) => {
+      const g = computed.summary.elements[i];
+      if (!g) return;
+      const ok = !active || (matchText(g.name) && (!filter.type || g.type === filter.type) && matchValue(g.value) && matchWaste(g.waste));
+      tr.classList.toggle("row-filtered-out", !ok);
+      if (ok) {
+        sumShown += 1;
+        timeShown += g.cycleTime;
+      }
+    });
+    const total = els.tbody.rows.length;
+    els.filterBar.classList.toggle("is-filtering", active);
+    els.btnClearFilter.hidden = !active;
+    els.btnAddRow.disabled = active;
+    els.btnAddRow.title = active ? "Limpe o filtro para incluir linhas" : "Nova linha (Ctrl+Enter)";
+    [els.fltText, els.fltProduct, els.fltType, els.fltValue, els.fltWaste, els.fltFilm].forEach((c) => c.classList.toggle("is-active", !!c.value));
+    if (active) {
+      const ft = (m) => Calc.formatTime(m, computed.unit);
+      const cyc = computed.summary.cycleNormal;
+      els.fltStatus.textContent =
+        `Filtro ativo: ${shown} de ${total} linha(s) • resumo: ${sumShown} elemento(s), ${ft(timeShown)} ${Calc.TIME_UNITS[computed.unit].label}` +
+        (cyc > 0 ? ` (${fmt((timeShown / cyc) * 100, 1)}% do ciclo)` : "");
+    } else {
+      els.fltStatus.textContent = "";
+    }
   }
 
   /* Cores semânticas do valor agregado (sempre acompanhadas do rótulo) e tom único para desperdícios. */
@@ -584,59 +791,104 @@
   }
 
   /**
-   * Peças produzidas por filmagem (modo quantidade). Os campos só são recriados quando as
-   * filmagens mudam, para não perder o foco durante a digitação.
+   * Filmagens do estudo: início da análise em cada vídeo (todas as filmagens) e peças
+   * produzidas (modo quantidade; por produto quando a filmagem tem mais de um).
+   * Os campos só são recriados quando as filmagens mudam, para não perder o foco.
    */
   function renderFilms(computed) {
-    const info = computed.films;
-    const show = computed.mode === "quantidade";
-    els.filmsPanel.hidden = !show;
-    if (!show) return;
+    const qty = computed.mode === "quantidade";
     const unit = computed.unit;
     const u = Calc.TIME_UNITS[unit].label;
     const ft = (minutes) => Calc.formatTime(minutes, unit);
-    const sig = info.list.map((f) => f.key).join("|");
+    // Peças de cada segmento (filmagem × produto), vindas do produto correspondente
+    const seg = new Map();
+    computed.products.forEach((p) => p.films.list.forEach((x) => seg.set(x.key, x)));
+    const sig = [qty ? "q" : "f"].concat(computed.filmList.map((f) => `${f.key}:${f.segments.map((sg) => sg.key).join(",")}`)).join("|");
     if (els.filmsList.dataset.sig !== sig) {
       els.filmsList.dataset.sig = sig;
       els.filmsList.replaceChildren(
-        ...info.list.map((f) => {
-          const box = document.createElement("label");
+        ...computed.filmList.map((f) => {
+          const box = document.createElement("div");
           box.className = "film-box";
+          box.dataset.film = f.film;
           const tag = document.createElement("span");
           tag.className = "film-tag";
           tag.textContent = `F${f.film}`;
-          const input = document.createElement("input");
-          input.type = "text";
-          input.className = "input-cell mono film-pieces";
-          input.inputMode = "decimal";
-          input.autocomplete = "off";
-          input.placeholder = "peças";
-          input.value = f.raw;
-          input.dataset.filmKey = f.key;
-          input.setAttribute("aria-label", `Peças produzidas na filmagem ${f.film}`);
+          const lbl = document.createElement("span");
+          lbl.className = "film-label";
+          lbl.textContent = "Início";
+          const start = document.createElement("input");
+          start.type = "text";
+          start.className = "input-cell mono film-start";
+          start.inputMode = "numeric";
+          start.autocomplete = "off";
+          start.placeholder = "00:00";
+          start.dataset.filmStart = f.key;
+          start.setAttribute("aria-label", `Início da análise na filmagem ${f.film}`);
+          box.append(tag, lbl, start);
+          if (qty) {
+            f.segments.forEach((sg) => {
+              const wrap = document.createElement("span");
+              wrap.className = "film-seg";
+              const pl = document.createElement("span");
+              pl.className = "film-label";
+              pl.textContent = f.segments.length > 1 || computed.multiProduct ? `Peças ${sg.productName || ""}`.trim() : "Peças";
+              const input = document.createElement("input");
+              input.type = "text";
+              input.className = "input-cell mono film-pieces";
+              input.inputMode = "decimal";
+              input.autocomplete = "off";
+              input.placeholder = "peças";
+              input.dataset.filmKey = sg.key;
+              input.setAttribute("aria-label", `Peças produzidas na filmagem ${f.film}${sg.productName ? ` (${sg.productName})` : ""}`);
+              wrap.append(pl, input);
+              box.append(wrap);
+            });
+          }
           const out = document.createElement("span");
           out.className = "film-out";
-          box.append(tag, input, out);
+          box.append(out);
           return box;
         })
       );
     }
     els.filmsList.querySelectorAll(".film-box").forEach((box, i) => {
-      const f = info.list[i];
-      const input = box.querySelector("input");
-      if (document.activeElement !== input && input.value !== f.raw) input.value = f.raw;
-      input.classList.toggle("input-invalid", !!f.error);
-      input.title = f.error || `Linha ${f.startSeq} em diante`;
-      box.querySelector(".film-out").textContent =
-        `obs. ${ft(f.observed)} ${u}` + (f.observedPerPiece != null ? ` • ${ft(f.observedPerPiece)} ${u}/un` : "");
+      const f = computed.filmList[i];
+      if (!f) return;
+      const start = box.querySelector(".film-start");
+      if (document.activeElement !== start) {
+        const v = f.startRaw;
+        if (start.value !== v) start.value = v;
+        start.classList.toggle("input-invalid", !!f.startError);
+      }
+      start.title = f.startError || `Instante do vídeo em que a análise começa (linha ${f.startSeq}). Vazio = 00:00`;
+      const perPiece = [];
+      box.querySelectorAll(".film-pieces").forEach((input) => {
+        const x = seg.get(input.dataset.filmKey);
+        if (!x) return;
+        if (document.activeElement !== input && input.value !== x.raw) input.value = x.raw;
+        input.classList.toggle("input-invalid", !!x.error);
+        input.title = x.error || "Peças produzidas neste trecho";
+        if (x.observedPerPiece != null) perPiece.push(`${ft(x.observedPerPiece)} ${u}/un`);
+      });
+      box.querySelector(".film-out").textContent = `obs. ${ft(f.observed)} ${u}` + (perPiece.length ? ` • ${perPiece.join(" • ")}` : "");
     });
-    const hint = {
-      total: "Opcional. Informe as peças de todas as filmagens para converter os acíclicos (tipo A) em tempo por unidade.",
-      incompleto: `⚠ Faltam peças em ${info.list.length - info.filled} filmagem(ns): os acíclicos continuam como tempo total.`,
-      "por-unidade": `Tipo A = Σtempo ÷ ${fmt(info.piecesTotal, info.piecesTotal % 1 ? 2 : 0)} peças. Ciclo real observado: ${ft(info.observedPerPiece)} ${u}/un (inclui tudo, no ritmo filmado).`,
-    }[info.acyclic];
+    // A Leitura inicial da barra é o início da F1 (os dois campos ficam sincronizados)
+    if (document.activeElement !== els.videoStart && computed.filmList[0] && els.videoStart.value !== computed.filmList[0].startRaw) {
+      els.videoStart.value = computed.filmList[0].startRaw;
+    }
+    const info = computed.films;
+    const name = computed.multiProduct ? ` (${computed.product.name})` : "";
+    let hint = "Início vazio = 00:00 (a 1ª filmagem usa a Leitura inicial).";
+    if (qty) {
+      hint += {
+        total: " Informe as peças de todas as filmagens para converter os acíclicos (tipo A) em tempo por unidade.",
+        incompleto: ` ⚠ Faltam peças em ${info.list.length - info.filled} trecho(s)${name}: os acíclicos continuam como tempo total.`,
+        "por-unidade": ` Tipo A${name} = Σtempo ÷ ${fmt(info.piecesTotal, info.piecesTotal % 1 ? 2 : 0)} peças. Ciclo real observado: ${ft(info.observedPerPiece)} ${u}/un (inclui tudo, no ritmo filmado).`,
+      }[info.acyclic];
+    }
     els.filmsHint.textContent = hint;
-    els.filmsHint.classList.toggle("has-conflict", info.acyclic === "incompleto");
+    els.filmsHint.classList.toggle("has-conflict", qty && info.acyclic === "incompleto");
   }
 
   /** Tabela "Resumo por elemento" (equivale à aba Listagem de Elementos). */
@@ -720,7 +972,8 @@
     els.kpiTaktSec.textContent =
       k.taktTime != null ? `Equivale a ${Calc.formatTime(k.taktTime, alt)} ${alt}/pç` : "Informe jornada e demanda";
     els.kpiCycle.textContent = k.standardTime != null && k.standardTime > 0 ? Calc.formatTime(k.standardTime, unit, kd) : "--";
-    els.kpiNormal.textContent = `Tempo normal do ciclo: ${Calc.formatTime(k.sumNormal, unit)} ${u}`;
+    els.kpiNormal.textContent =
+      (computed.multiProduct ? `${computed.product.name} • ` : "") + `Tempo normal do ciclo: ${Calc.formatTime(k.sumNormal, unit)} ${u}`;
     els.kpiCapacity.textContent = k.capacity != null ? fmt(k.capacity, 0) : "--";
 
     els.kpiCard.classList.remove("is-bottleneck", "is-balanced", "is-invalid");

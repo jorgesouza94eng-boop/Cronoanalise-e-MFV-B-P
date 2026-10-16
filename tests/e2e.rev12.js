@@ -45,16 +45,16 @@ function studyJson() {
   check(await p.isVisible("#films-panel"), "painel de peças por filmagem visível (modo quantidade)");
   check(await p.$$eval("#films-list .film-box", (b) => b.length) === 2, "um campo por filmagem (F1 e F2)");
   check(await txt("#summary-total") === "60,0", "sem peças: ciclo = 60 s (acíclicos como tempo total)");
-  await p.fill("#films-list .film-box:nth-child(1) input", "5");
+  await p.fill("#films-list .film-box:nth-child(1) .film-pieces", "5");
   check((await txt("#films-hint")).includes("Faltam peças"), "peças incompletas: aviso");
-  await p.fill("#films-list .film-box:nth-child(2) input", "5");
+  await p.fill("#films-list .film-box:nth-child(2) .film-pieces", "5");
   check(await txt("#summary-total") === "15,0", "com peças: ciclo = 10 + 30/10 + 20/10 = 15 s");
   check((await txt("#films-hint")).includes("7,0 s/un"), "ciclo real observado = 70 s ÷ 10 = 7 s/un");
   check(await p.evaluate(() => document.activeElement.classList.contains("film-pieces")), "foco preservado durante a digitação");
   await p.evaluate(() => LeanApp.flushSave());
   await p.reload();
   await p.waitForFunction(() => window.LeanApp && LeanApp.state.study);
-  check(await p.inputValue("#films-list .film-box:nth-child(2) input") === "5" && (await txt("#summary-total")) === "15,0", "peças preservadas após recarregar");
+  check(await p.inputValue("#films-list .film-box:nth-child(2) .film-pieces") === "5" && (await txt("#summary-total")) === "15,0", "peças preservadas após recarregar");
 
   // ---- MFV: produtividade real (pç/HH) e payback
   await p.goto(base + "mfv.html");

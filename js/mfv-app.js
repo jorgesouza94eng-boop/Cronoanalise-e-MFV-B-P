@@ -298,14 +298,17 @@
     const add = (study, fileName) => {
       const prev = map.get(study.id);
       if (prev && String(prev.updatedAt) >= String(study.updatedAt)) return;
-      const k = Calc.computeStudy(study).kpis;
+      // Estudo com vários produtos: uma opção por produto (cada um com o seu tempo padrão)
+      const r = Calc.computeStudy(study);
+      const tc = (k) => (k.standardTime > 0 ? k.standardTime : k.sumNormal > 0 ? k.sumNormal : null);
       map.set(study.id, {
         id: study.id,
         fileName: fileName || study.fileName,
         clientName: study.clientName,
         processName: study.processName,
         updatedAt: study.updatedAt,
-        tcMin: k.standardTime > 0 ? k.standardTime : k.sumNormal > 0 ? k.sumNormal : null,
+        tcMin: tc(r.kpis),
+        products: r.multiProduct ? r.products.map((p) => ({ key: p.key, name: p.name, tcMin: tc(p.kpis) })) : [],
       });
     };
     (await Store.listLocal()).forEach((r) => r && r.study && add(r.study));
@@ -317,7 +320,12 @@
         console.warn("Erro ao ler estudos da pasta:", err);
       }
     }
-    state.studies = Array.from(map.values());
+    // Lista plana: estudo de produto único = 1 opção; com vários produtos = 1 opção por produto
+    state.studies = [];
+    map.forEach((st) => {
+      if (!st.products.length) state.studies.push(Object.assign({ key: st.id, product: "", productName: "" }, st));
+      else st.products.forEach((p) => state.studies.push(Object.assign({}, st, { key: `${st.id}::${p.key}`, product: p.key, productName: p.name, tcMin: p.tcMin })));
+    });
     renderStudyPicker();
   }
 
@@ -333,8 +341,8 @@
       el("option", { value: "", textContent: list.length ? "Selecione um estudo..." : "Nenhum estudo encontrado" }),
       ...list.map((s) =>
         el("option", {
-          value: s.id,
-          textContent: `${s.processName || "Sem posto"} — ${s.clientName || "Sem cliente"} (${s.tcMin ? ft(s.tcMin) + " " + Calc.TIME_UNITS[unitOf()].label : "sem tempo"})`,
+          value: s.key,
+          textContent: `${s.processName || "Sem posto"}${s.productName ? ` • ${s.productName}` : ""} — ${s.clientName || "Sem cliente"} (${s.tcMin ? ft(s.tcMin) + " " + Calc.TIME_UNITS[unitOf()].label : "sem tempo"})`,
         })
       )
     );
@@ -346,7 +354,7 @@
     let changed = 0;
     state.doc.steps.forEach((s) => {
       if (!s.studyId) return;
-      const st = state.studies.find((x) => x.id === s.studyId);
+      const st = findStudy(s);
       if (!st) return;
       if (st.tcMin !== s.tcStudyMin || st.fileName !== s.studyFileName) {
         s.tcStudyMin = st.tcMin;
@@ -577,8 +585,18 @@
     return tr;
   }
 
+  /** Estudo (e produto) vinculado à etapa. */
+  function findStudy(step) {
+    return (
+      state.studies.find((x) => x.id === step.studyId && x.product === (step.studyProduct || "")) ||
+      // produto renomeado ou estudo que passou a ter um produto só: usa o estudo, se for único
+      (state.studies.filter((x) => x.id === step.studyId).length === 1 ? state.studies.find((x) => x.id === step.studyId) : null)
+    );
+  }
+
   function studyLabel(s) {
-    const st = state.studies.find((x) => x.id === s.studyId);
+    const st = findStudy(s);
+    if (st && st.productName) return `${st.processName || st.fileName} • ${st.productName}`;
     return st ? st.processName || st.fileName : s.studyFileName || "estudo não encontrado";
   }
 
@@ -784,10 +802,17 @@
     });
 
     $("btn-add-study-step").addEventListener("click", () => {
-      const st = state.studies.find((x) => x.id === $("study-picker").value);
+      const st = state.studies.find((x) => x.key === $("study-picker").value);
       if (!st) return toast("Escolha um estudo na lista.", "warn");
       state.doc.steps.push(
-        M.createStep({ name: st.processName || "Etapa", source: "study", studyId: st.id, studyFileName: st.fileName, tcStudyMin: st.tcMin })
+        M.createStep({
+          name: st.productName ? `${st.processName || "Etapa"} • ${st.productName}` : st.processName || "Etapa",
+          source: "study",
+          studyId: st.id,
+          studyProduct: st.product,
+          studyFileName: st.fileName,
+          tcStudyMin: st.tcMin,
+        })
       );
       if (!state.doc.clientName && st.clientName) state.doc.clientName = st.clientName;
       markChanged({ render: true });

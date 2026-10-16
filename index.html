@@ -171,8 +171,11 @@
           <div class="inline-field">
             <label for="video-start" title="Instante do vídeo em que o primeiro elemento da 1ª filmagem começa">Leitura inicial</label>
             <input type="text" id="video-start" class="mono" inputmode="numeric" placeholder="00:00" autocomplete="off"
-                   title="Instante do vídeo em que o primeiro elemento da 1ª filmagem começa (MMSS ou MM:SS). As filmagens seguintes começam em 00:00.">
+                   title="Instante do vídeo em que o primeiro elemento da 1ª filmagem começa (MMSS ou MM:SS). O início das demais filmagens fica no bloco 'Filmagens do estudo'.">
           </div>
+          <label class="inline-check" for="opt-multi-product" title="Mostra a coluna Produto: resumo, ciclo e tempo padrão separados por produto">
+            <input type="checkbox" id="opt-multi-product"> Vários produtos
+          </label>
           <button type="button" id="btn-add-row" class="btn-secondary" title="Nova linha (Ctrl+Enter)">+ Nova linha</button>
           <button type="button" id="btn-ai" class="btn-outline btn-ai" title="Assistente de IA (Gemini): classificação, Kaizen e constatações">✨ IA</button>
           <button type="button" id="btn-export-json" class="btn-outline" title="Baixar o estudo em .json (backup ou envio para outro dispositivo)">Exportar JSON</button>
@@ -181,16 +184,41 @@
         </div>
       </div>
 
+      <!-- Filtros: só escondem linhas da tela; os cálculos usam sempre todas as linhas -->
+      <div class="filter-bar" id="filter-bar" role="search" aria-label="Filtrar a grade e o resumo">
+        <input type="search" id="flt-text" placeholder="Filtrar elemento..." autocomplete="off" aria-label="Filtrar pelo nome do elemento">
+        <select id="flt-product" aria-label="Filtrar por produto" hidden></select>
+        <select id="flt-type" aria-label="Filtrar por tipo">
+          <option value="">Tipo: todos</option><option value="C">C — cíclico</option><option value="A">A — acíclico</option>
+        </select>
+        <select id="flt-value" aria-label="Filtrar por valor agregado">
+          <option value="">Valor: todos</option><option value="AG">Agrega</option><option value="NA">Não agrega</option>
+          <option value="IN">Incidental</option><option value="none">Sem classificação</option>
+        </select>
+        <select id="flt-waste" aria-label="Filtrar por desperdício">
+          <option value="">Desperdício: todos</option><option value="superproducao">Superprodução</option><option value="espera">Espera</option>
+          <option value="transporte">Transporte</option><option value="processamento">Processamento excessivo</option>
+          <option value="estoque">Estoque</option><option value="movimentacao">Movimentação</option>
+          <option value="defeitos">Defeitos / retrabalho</option><option value="intelecto">Intelecto</option>
+          <option value="none">Sem desperdício</option>
+        </select>
+        <select id="flt-film" aria-label="Filtrar por filmagem"></select>
+        <label class="inline-check" for="flt-errors"><input type="checkbox" id="flt-errors"> Só com erro</label>
+        <span class="filter-status" id="flt-status" role="status" aria-live="polite"></span>
+        <button type="button" id="btn-clear-filter" class="btn-outline btn-small" hidden>Limpar filtro</button>
+      </div>
+
       <div class="table-container">
         <table class="chrono-table" id="chrono-table">
           <colgroup>
-            <col class="col-num"><col class="col-elem"><col class="col-type"><col class="col-freq">
+            <col class="col-num"><col class="col-product" id="col-product"><col class="col-elem" id="col-elem"><col class="col-type"><col class="col-freq">
             <col class="col-tfinal"><col class="col-tsub"><col class="col-pace"><col class="col-tnorm">
             <col class="col-value"><col class="col-waste"><col class="col-action"><col class="col-del">
           </colgroup>
           <thead>
             <tr>
               <th scope="col" title="Número do elemento. Toque no número (ou Alt+N) para marcar o início de uma nova filmagem">Nº</th>
+              <th scope="col" id="th-product" class="cell-product" title="Produto em análise na linha. A nova linha repete o produto da anterior">Produto</th>
               <th scope="col" title="Elementos com o MESMO NOME são agrupados no resumo (média se C, soma se A)">Elemento de trabalho (operação)</th>
               <th scope="col" title="C = cíclico (média das ocorrências) | A = acíclico (soma dos tempos). Digite C ou A">Tipo</th>
               <th scope="col" id="th-qty" title="Quantidade de unidades produzidas no trecho">Qtd.</th>
@@ -207,7 +235,7 @@
           <tbody id="chrono-tbody"></tbody>
           <tfoot>
             <tr>
-              <td colspan="5" class="tfoot-label">Totais observados (<span class="unit-label">min</span>)<span id="total-films"></span>:</td>
+              <td colspan="5" class="tfoot-label" id="tfoot-label">Totais observados (<span class="unit-label">min</span>)<span id="total-films"></span>:</td>
               <td class="cell-total mono" id="total-tsub">0,000</td>
               <td></td>
               <td class="cell-total mono highlight-col" id="total-tnorm">0,000</td>
@@ -225,11 +253,17 @@
           <h2>Resumo por elemento</h2>
           <span class="keyboard-hint" id="summary-hint"></span>
         </div>
+        <div class="toolbar-actions">
+          <div class="inline-field" id="summary-product-field" hidden>
+            <label for="summary-product" title="Resumo, compilação e indicadores do produto escolhido">Produto</label>
+            <select id="summary-product"></select>
+          </div>
+        </div>
       </div>
-      <!-- Peças produzidas em cada filmagem: convertem os acíclicos (tipo A) em tempo por unidade -->
-      <div class="films-panel" id="films-panel" hidden>
+      <!-- Filmagens: início da análise em cada vídeo e peças produzidas (acíclicos por unidade) -->
+      <div class="films-panel" id="films-panel">
         <div class="films-head">
-          <strong>Peças produzidas por filmagem</strong>
+          <strong>Filmagens do estudo</strong>
           <span class="form-hint" id="films-hint"></span>
         </div>
         <div class="films-list" id="films-list"></div>
@@ -302,6 +336,7 @@
 
   <!-- NOMES JÁ USADOS (autocompletar: garante o mesmo nome para o mesmo elemento) -->
   <datalist id="element-names"></datalist>
+  <datalist id="product-names"></datalist>
 
   <!-- MODELO DE LINHA DA GRADE -->
   <template id="row-template">
@@ -309,6 +344,8 @@
       <td class="cell-num"><button type="button" class="btn-seq" tabindex="-1"
                  title="Marcar/desmarcar o início de uma nova filmagem (Alt+N)"><span class="seq-num"></span><span
                  class="film-tag" hidden></span></button></td>
+      <td class="cell-product"><input type="text" class="input-cell input-product" data-field="product" aria-label="Produto"
+                 list="product-names" placeholder="Produto" autocomplete="off" enterkeyhint="next"></td>
       <td><input type="text" class="input-cell input-elem" data-field="description" aria-label="Elemento de trabalho"
                  list="element-names" placeholder="Descreva a operação..." autocomplete="off" enterkeyhint="next"></td>
       <td><select class="input-cell input-type" data-field="type" aria-label="Tipo: C cíclico ou A acíclico">

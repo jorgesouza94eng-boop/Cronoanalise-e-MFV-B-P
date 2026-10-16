@@ -17,7 +17,7 @@
   "use strict";
 
   const SCHEMA_ID = "lean-chrono-estudo";
-  const SCHEMA_VERSION = 2; // v2: peças por filmagem (filmPieces)
+  const SCHEMA_VERSION = 3; // v2: peças por filmagem • v3: início por filmagem e produto por linha
 
   /** Faixa aceita para o fator de ritmo (%). */
   const PACE_MIN = 50;
@@ -243,25 +243,32 @@
   function computeStudy(study) {
     const params = (study && study.shiftParams) || {};
     const mode = entryMode(study);
+    const elements = (study && study.elements) || [];
+    const multi = elements.some((e) => String(e.product || "").trim());
+    const starts = (study && study.filmStarts) || {};
     const start = parseTimeInput(study && study.videoStart);
     let previous = start.minutes != null ? start.minutes : 0;
     let film = 1;
     // Filmagens: chave estável = "inicio" (1ª) ou id da linha que marca a nova filmagem.
-    const films = [{ film: 1, key: FIRST_FILM_KEY, startSeq: 1, observed: 0 }];
+    // Início da 1ª = Leitura inicial; das demais = study.filmStarts[id] (vazio = 00:00).
+    const films = [
+      { film: 1, key: FIRST_FILM_KEY, startSeq: 1, startRaw: String((study && study.videoStart) || ""), start: start.minutes || 0, startError: start.error, observed: 0 },
+    ];
 
     let sumSubtracted = 0;
     let sumNormal = 0;
     let errorCount = 0;
-    const elements = (study && study.elements) || [];
 
     const rows = elements.map((el, index) => {
       const errors = [];
       // A primeira linha já inicia a filmagem 1; a marcação só vale a partir da 2ª.
       const newVideo = !!el.newVideo && index > 0;
       if (newVideo) {
-        previous = 0;
         film += 1;
-        films.push({ film, key: el.id, startSeq: index + 1, observed: 0 });
+        const raw = String(starts[el.id] == null ? "" : starts[el.id]).trim();
+        const st = parseTimeInput(raw);
+        previous = st.minutes != null ? st.minutes : 0;
+        films.push({ film, key: el.id, startSeq: index + 1, startRaw: raw, start: previous, startError: st.error, observed: 0 });
       }
       const time = parseTimeInput(el.videoTime);
       const freq = parseFrequency(el.frequency);
@@ -301,12 +308,15 @@
         errorCount += 1;
       }
 
+      const productName = multi ? String(el.product || "").trim().replace(/\s+/g, " ") : "";
       return {
         id: el.id,
         seq: index + 1,
         type: el.type === "A" ? "A" : "C",
         film,
         newVideo,
+        product: productName,
+        productKey: productName ? elementKey(productName) : "",
         frequency: freq.value,
         quantity: qty.value,
         timeMinutes: time.minutes,
@@ -319,20 +329,67 @@
       };
     });
 
-    const filmInfo = filmPieces(study, films, mode);
-    const summary = summarize(elements, rows, mode, filmInfo);
-    const kpis = computeKpis(params, summary.cycleNormal);
+    // ---- Produtos: cada produto tem resumo, ciclo, TP e capacidade próprios
+    const productMap = new Map();
+    const addProduct = (row) => {
+      if (!productMap.has(row.productKey)) {
+        productMap.set(row.productKey, { key: row.productKey, name: row.product || (multi ? "(sem produto)" : "") });
+      }
+    };
+    // Só linhas com leitura criam produto (linha nova ainda vazia não aparece na lista).
+    rows.filter((r) => r.hasReading).forEach(addProduct);
+    if (!productMap.size) rows.slice(0, 1).forEach(addProduct);
+    if (!productMap.size) productMap.set("", { key: "", name: "" });
+
+    // Filmagem × produto: as peças são informadas por produto quando a filmagem tem mais de um
+    const filmList = films.map((f) => {
+      const inFilm = rows.filter((r) => r.film === f.film && r.hasReading);
+      const keys = [];
+      inFilm.forEach((r) => {
+        if (!keys.includes(r.productKey)) keys.push(r.productKey);
+      });
+      if (!keys.length) keys.push(rows.find((r) => r.film === f.film) ? rows.find((r) => r.film === f.film).productKey : "");
+      const segments = keys.map((pk) => ({
+        productKey: pk,
+        productName: (productMap.get(pk) || { name: "" }).name,
+        key: keys.length > 1 ? `${f.key}|${pk}` : f.key,
+        observed: inFilm.filter((r) => r.productKey === pk && r.valid).reduce((a, r) => a + r.subtractedTime, 0),
+      }));
+      return Object.assign({}, f, { segments });
+    });
+
+    const products = Array.from(productMap.values()).map((p) => {
+      const segs = [];
+      filmList.forEach((f) =>
+        f.segments.filter((s) => s.productKey === p.key).forEach((s) => segs.push({ film: f.film, startSeq: f.startSeq, key: s.key, observed: s.observed }))
+      );
+      const filmInfo = filmPieces(study, segs, mode);
+      const summary = summarize(elements, rows, mode, filmInfo, p.key);
+      return Object.assign({}, p, {
+        films: filmInfo,
+        summary,
+        compilation: compile(summary),
+        kpis: computeKpis(params, summary.cycleNormal),
+      });
+    });
+    const wanted = study && study.settings && study.settings.product;
+    const current = products.find((p) => p.key === wanted) || products[0];
+
     return {
       mode,
       unit: timeUnit(study),
       rows,
-      summary,
-      compilation: compile(summary),
+      multiProduct: multi,
+      products,
+      product: current,
+      summary: current.summary,
+      compilation: current.compilation,
       totals: { sumSubtracted, sumNormal },
-      kpis,
+      kpis: current.kpis,
       errorCount,
       filmCount: film,
-      films: filmInfo,
+      filmList,
+      films: current.films,
       startError: start.error,
     };
   }
@@ -364,17 +421,18 @@
   }
 
   /**
-   * Peças produzidas por filmagem (modo quantidade). Quando TODAS as filmagens têm peças,
-   * os elementos acíclicos (tipo A) viram tempo por unidade: ΣTN do elemento ÷ Σpeças
-   * produzidas no período observado. Sem isso, o tipo A fica como Σtempo (padrão da planilha),
-   * que é o tempo total observado e não pode ser comparado com o takt.
+   * Peças produzidas por filmagem (modo quantidade). Quando TODAS as filmagens do produto
+   * têm peças, os elementos acíclicos (tipo A) viram tempo por unidade: ΣTN do elemento ÷
+   * Σpeças produzidas no período observado. Sem isso, o tipo A fica como Σtempo (padrão da
+   * planilha), que é o tempo total observado e não pode ser comparado com o takt.
+   * segments: [{ film, startSeq, key, observed }] — key é a chave em study.filmPieces.
    */
-  function filmPieces(study, films, mode) {
+  function filmPieces(study, segments, mode) {
     const raw = (study && study.filmPieces) || {};
     let piecesTotal = 0;
     let filled = 0;
     let errors = 0;
-    const list = films.map((f) => {
+    const list = segments.map((f) => {
       const s = String(raw[f.key] == null ? "" : raw[f.key]).trim();
       let pieces = null;
       let error = null;
@@ -408,11 +466,12 @@
     };
   }
 
-  function summarize(elements, rows, mode, filmInfo) {
+  function summarize(elements, rows, mode, filmInfo, productKey) {
     const perUnitA = !!(filmInfo && filmInfo.acyclic === "por-unidade");
     const groups = new Map();
     rows.forEach((row, i) => {
       if (!row.valid || !row.hasReading) return;
+      if (productKey != null && row.productKey !== productKey) return;
       const el = elements[i];
       const name = String(el.description || "").trim().replace(/\s+/g, " ");
       const key = name ? elementKey(name) : `#${el.id}`;
@@ -606,6 +665,7 @@
         waste: "",
         kaizen: "",
         newVideo: false,
+        product: "",
       },
       overrides || {}
     );
@@ -627,6 +687,7 @@
       clientName: String(o.clientName || "").trim(),
       processName: String(o.processName || "").trim(),
       videoStart: "",
+      filmStarts: {},
       filmPieces: {},
       notes: "",
       // Novos estudos seguem a planilha REV2: lançamento por quantidade e tempos em segundos.
@@ -684,12 +745,15 @@
       clientName: str(raw.clientName),
       processName: str(raw.processName),
       videoStart: str(raw.videoStart),
+      filmStarts: normalizeFilmPieces(raw.filmStarts),
       filmPieces: normalizeFilmPieces(raw.filmPieces),
       notes: str(raw.notes),
       // Arquivos anteriores a esta versão não têm "settings": mantêm frequência e minutos.
       settings: {
         entryMode: ENTRY_MODES.includes(raw.settings && raw.settings.entryMode) ? raw.settings.entryMode : "frequencia",
         timeUnit: TIME_UNITS[raw.settings && raw.settings.timeUnit] ? raw.settings.timeUnit : "min",
+        multiProduct: !!(raw.settings && raw.settings.multiProduct === true),
+        product: raw.settings && typeof raw.settings.product === "string" ? raw.settings.product : "",
       },
       shiftParams: {
         shiftTimeMin: num(params.shiftTimeMin, null),
@@ -713,6 +777,7 @@
             waste: WASTES[e.waste] ? e.waste : "",
             kaizen: str(e.kaizen),
             newVideo: e.newVideo === true,
+            product: str(e.product),
           })
         ),
     };
@@ -750,12 +815,27 @@
         observedTimeMin: round(r.totals.sumSubtracted, 4),
         rowsWithErrors: r.errorCount,
         filmCount: r.filmCount,
-        films: r.films.list.map((f) => ({
+        films: r.filmList.map((f) => ({
           film: f.film,
+          startMin: round(f.start, 4),
           observedTimeMin: round(f.observed, 4),
-          pieces: f.pieces,
-          observedPerPieceMin: round(f.observedPerPiece, 4),
+          segments: f.segments.map((sg) => {
+            const it = r.products.reduce((acc, p) => acc || p.films.list.find((x) => x.key === sg.key), null);
+            return { product: sg.productName, observedTimeMin: round(sg.observed, 4), pieces: it ? it.pieces : null };
+          }),
         })),
+        products: r.multiProduct
+          ? r.products.map((p) => ({
+              product: p.name,
+              cycleNormalTimeMin: round(p.kpis.sumNormal, 4),
+              standardTimeMin: round(p.kpis.standardTime, 4),
+              capacityPcsDay: p.kpis.capacity,
+              status: p.kpis.status,
+              acyclicTime: p.summary.acyclic,
+              elements: p.summary.elements.length,
+            }))
+          : undefined,
+        product: r.multiProduct ? r.product.name : undefined,
         acyclicTime: r.summary.acyclic,
         summary: r.summary.elements.map((g) => ({
           seq: g.seq,
@@ -811,6 +891,8 @@
     const nt = (minutes) => (minutes == null ? "" : formatTime(minutes, unit).replace(/\./g, ""));
     const n4 = (v) => (v == null ? "" : formatNumber(v, 4).replace(/\./g, ""));
     const qtyMode = r.mode === "quantidade";
+    const multi = r.multiProduct;
+    const P = (v) => (multi ? [v] : []); // coluna Produto só com vários produtos
 
     const lines = [];
     lines.push(["Cliente", q(study.clientName)].join(";"));
@@ -823,6 +905,7 @@
       [
         "Nº",
         "Filmagem",
+        ...P("Produto"),
         "Elemento",
         "Tipo",
         qtyMode ? "Quantidade" : "Frequência (texto)",
@@ -844,6 +927,7 @@
         [
           row.seq,
           row.film,
+          ...P(q(row.product || "(sem produto)")),
           q(el.description),
           row.type === "A" ? "Acíclico" : "Cíclico",
           // Fórmula ="1/50" impede que o Excel converta a fração em data (ex.: 1/5 → 01/mai).
@@ -865,12 +949,13 @@
     lines.push("");
     lines.push("RESUMO POR ELEMENTO (Listagem de Elementos)");
     lines.push(
-      ["Nº", "Elemento", "Tipo", "Ocorrências", qtyMode ? "Qtd total" : "", `Tempo total (${u})`, `Tempo no ciclo (${u})`, "% do ciclo", "Valor", "Desperdício", "Ação"].join(";")
+      ["Nº", ...P("Produto"), "Elemento", "Tipo", "Ocorrências", qtyMode ? "Qtd total" : "", `Tempo total (${u})`, `Tempo no ciclo (${u})`, "% do ciclo", "Valor", "Desperdício", "Ação"].join(";")
     );
-    r.summary.elements.forEach((g) => {
+    (multi ? r.products : [r.product]).forEach((pr) => pr.summary.elements.forEach((g) => {
       lines.push(
         [
           g.seq,
+          ...P(q(pr.name)),
           q(g.name),
           g.type === "A" ? "Acíclico" : "Cíclico",
           g.occurrences,
@@ -883,10 +968,11 @@
           q(g.action),
         ].join(";")
       );
-    });
+    }));
 
     lines.push("");
     const k = r.kpis;
+    if (multi) lines.push(["Produto (indicadores abaixo)", q(r.product.name)].join(";"));
     lines.push(["Filmagens", r.filmCount].join(";"));
     lines.push([`Tempo observado (${u})`, nt(r.totals.sumSubtracted)].join(";"));
     lines.push([`Tempo normal do ciclo (${u})`, nt(k.sumNormal)].join(";"));
@@ -896,6 +982,15 @@
     lines.push([`Takt time (${u}/pç)`, nt(k.taktTime)].join(";"));
     lines.push(["Capacidade (pçs/dia)", k.capacity == null ? "" : k.capacity].join(";"));
     lines.push(["Status", q(STATUS_LABELS[k.status])].join(";"));
+    if (multi) {
+      lines.push("");
+      lines.push(["Produto", `Tempo normal do ciclo (${u})`, `Tempo padrão (${u}/pç)`, "Capacidade (pçs/dia)", "Status"].join(";"));
+      r.products.forEach((pr) =>
+        lines.push(
+          [q(pr.name), nt(pr.kpis.sumNormal), nt(pr.kpis.standardTime), pr.kpis.capacity == null ? "" : pr.kpis.capacity, q(STATUS_LABELS[pr.kpis.status])].join(";")
+        )
+      );
+    }
     return "\uFEFF" + lines.join("\r\n");
   }
 

@@ -234,7 +234,7 @@ test("pç/HH e payback: gravados no arquivo; MFV da versão anterior abre com a 
   d.productivity[0].date = "2026-10-01";
   d.paybackInvestment = "1500";
   const back = M.normalizeMfv(JSON.parse(M.serializeMfv(d))).doc;
-  assert.equal(back.schemaVersion, 2);
+  assert.equal(back.schemaVersion, M.SCHEMA_VERSION);
   assert.equal(back.productivity.length, 4);
   assert.equal(back.productivity[0].date, "2026-10-01");
   assert.equal(back.productivity[2].period, "acomp");

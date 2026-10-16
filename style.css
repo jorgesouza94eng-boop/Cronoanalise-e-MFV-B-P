@@ -588,6 +588,7 @@ button:focus-visible,
 /* Larguras das colunas (cabem em notebook 1366 px) */
 col.col-num    { width: 44px; }
 col.col-elem   { width: auto; }
+col.col-product { width: 120px; }
 col.col-type   { width: 56px; }
 col.col-freq   { width: 70px; }
 col.col-tfinal { width: 96px; }
@@ -753,7 +754,55 @@ select.input-type.is-acyclic {
 .productivity-table select.input-cell { width: 100%; }
 .productivity-table tr.period-acomp td:first-child { box-shadow: inset 3px 0 0 var(--primary-500); }
 
-/* Peças produzidas por filmagem (cronoanálise) */
+/* Caixa de seleção na barra de ferramentas */
+.inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Filtros da grade e do resumo (só exibição; os cálculos usam todas as linhas) */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-light);
+  background-color: var(--bg-subtle);
+}
+.filter-bar input[type="search"] {
+  flex: 1 1 200px;
+  min-width: 0;
+  max-width: 320px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 13px;
+}
+.filter-bar select {
+  height: 32px;
+  max-width: 190px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  font: inherit;
+  font-size: 12px;
+}
+.filter-bar .is-active { border-color: var(--primary-600); box-shadow: 0 0 0 1px var(--primary-600); }
+.filter-status { font-size: 12px; font-weight: 700; color: var(--primary-700); }
+.filter-bar.is-filtering { background-color: var(--bg-highlight); }
+.summary-table tr.row-filtered-out,
+.chrono-table tr[hidden] { display: none; }
+
+/* Filmagens do estudo (início e peças por filmagem) */
 .films-panel {
   display: flex;
   flex-direction: column;
@@ -776,7 +825,17 @@ select.input-type.is-acyclic {
   background-color: var(--bg-surface);
   font-size: 12px;
 }
+.film-box .input-cell {
+  height: 30px;
+  min-height: 30px;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+}
 .film-box .film-pieces { width: 72px; text-align: right; }
+.film-box .film-start { width: 70px; text-align: center; }
+.film-box .film-label { color: var(--text-muted); font-weight: 600; }
+.film-box .film-seg { display: inline-flex; align-items: center; gap: 4px; }
 .film-out { color: var(--text-muted); white-space: nowrap; }
 .mfv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .mfv-table th {

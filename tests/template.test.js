@@ -111,6 +111,29 @@ test("GERAL: preenche elemento, início, fim, quantidade e tipo; nova filmagem c
   assert.ok(!g.includes("Elemento antigo"), "nenhum dado do cliente anterior");
 });
 
+test("GERAL: início da filmagem digitado vai para o Tempo (Início) da linha (REV 1.3)", async () => {
+  const st = study();
+  st.filmStarts = { [st.elements[3].id]: "00:05" };
+  const tpl = await T.loadTemplate(buildTemplate(), { inflate });
+  const out = T.fillTemplate(tpl, st);
+  const e = T.readZip(out.bytes).find((x) => x.name === "xl/worksheets/sheet1.xml");
+  const g = new TextDecoder().decode(e.method === 0 ? e.compressed : inflate(e.compressed));
+  assert.match(g, /<c r="D13"><v>0\.0000578703/, "F2 começa em 00:05 (5 s ÷ 86.400)");
+});
+
+test("vários produtos: o modelo recebe só o produto escolhido, com aviso e nome de arquivo próprio", async () => {
+  const st = study();
+  st.elements.forEach((e, i) => (e.product = i < 2 ? "Chapa" : "Tubo"));
+  const tpl = await T.loadTemplate(buildTemplate(), { inflate });
+  let out = T.fillTemplate(tpl, st);
+  assert.equal(out.lines, 2, "Chapa: 2 lançamentos");
+  assert.ok(out.warnings.some((w) => /2 produtos/.test(w) && /Chapa/.test(w)));
+  assert.match(T.exportFileName(st, "modelo.xlsm"), /^Crono_Metal_Alfa_Corte_Chapa_\d{4}-\d{2}-\d{2}\.xlsm$/);
+  st.settings.product = C.elementKey("Tubo");
+  out = T.fillTemplate(await T.loadTemplate(buildTemplate(), { inflate }), st);
+  assert.equal(out.lines, 2, "Tubo: 2 lançamentos (a linha sem tempo não entra)");
+});
+
 test("GERAL: fórmulas preservadas, sem valor guardado (o Excel recalcula)", async () => {
   const { text } = await filled();
   const g = await text("xl/worksheets/sheet1.xml");

@@ -141,6 +141,45 @@
       markChanged();
     },
 
+    /** Início da análise numa filmagem (a 1ª usa a Leitura inicial). Vazio = 00:00. */
+    onFilmStartCommit(key, raw) {
+      if (!state.study) return { ok: false, error: "Nenhum estudo aberto" };
+      if (key === Calc.FIRST_FILM_KEY) return handlers.onVideoStartCommit(raw);
+      const p = Calc.parseTimeInput(raw);
+      if (p.error) return { ok: false, error: p.error };
+      const starts = state.study.filmStarts || (state.study.filmStarts = {});
+      const value = p.minutes == null ? "" : p.formatted;
+      if ((starts[key] || "") !== value) {
+        if (value) starts[key] = value;
+        else delete starts[key];
+        markChanged();
+      }
+      return { ok: true, formatted: value };
+    },
+
+    /** Liga/desliga a coluna Produto. Desligar com produtos preenchidos pede confirmação. */
+    onMultiProductToggle(on) {
+      if (!state.study) return false;
+      const settings = state.study.settings || (state.study.settings = {});
+      if (!on && state.study.elements.some((e) => String(e.product || "").trim())) {
+        if (!root.confirm("Remover o produto de todas as linhas? O estudo volta a ter um único resumo.")) return false;
+        state.study.elements.forEach((e) => (e.product = ""));
+        settings.product = "";
+      }
+      settings.multiProduct = !!on;
+      markChanged({ rerender: true });
+      return true;
+    },
+
+    /** Produto exibido no resumo, na compilação e nos indicadores. */
+    onProductSelect(key) {
+      if (!state.study) return;
+      const settings = state.study.settings || (state.study.settings = {});
+      if (settings.product === key) return;
+      settings.product = key;
+      markChanged();
+    },
+
     onParamChange(key, raw) {
       if (!state.study) return false;
       const value = Calc.parseNumber(raw);
@@ -208,7 +247,7 @@
       if (p.error) return { ok: false, error: p.error };
       const row = state.computed.rows.find((r) => r.id === id);
       const rowError = row && row.errors.find((m) => /leitura anterior/.test(m));
-      return { ok: true, formatted: p.formatted, rowError: rowError || null };
+      return { ok: true, formatted: p.formatted, rowError: rowError || null, newVideo: !!(row && row.newVideo), film: row ? row.film : 1 };
     },
 
     /** Marca/desmarca a linha como início de uma nova filmagem (leitura volta a 00:00). */
@@ -239,7 +278,8 @@
       const last = els[els.length - 1];
       // Novo elemento herda o ritmo da linha anterior (o ritmo do operador tende a se manter).
       const inheritedPace = last && !Calc.parsePace(last.pace).error ? last.pace : "100";
-      els.push(Calc.createElement({ pace: inheritedPace }));
+      // ...e o produto (o vídeo costuma seguir no mesmo produto).
+      els.push(Calc.createElement({ pace: inheritedPace, product: last ? last.product || "" : "" }));
       markChanged({ rerender: true });
       return els.length - 1;
     },

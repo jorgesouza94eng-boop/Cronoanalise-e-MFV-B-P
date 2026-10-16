@@ -99,6 +99,35 @@ O campo **Constatações e soluções** é salvo no estudo e vai para o Excel.
 
 ![Compilação](docs/tela-compilacao.png)
 
+### Vários produtos no mesmo estudo (REV 1.3)
+
+Pela literatura (OIT, Barnes), o tempo padrão é **por produto**. Para analisar vários produtos no mesmo vídeo:
+
+1. Marque **Vários produtos** na barra da grade. Aparece a coluna **Produto**.
+2. Digite o produto na 1ª linha de cada trecho. A linha nova repete o produto da anterior.
+3. No **Resumo por elemento**, escolha o produto. Resumo, compilação, gráficos e indicadores (ciclo, tempo padrão, capacidade, gargalo) passam a ser **daquele produto**.
+
+| Onde | Como fica com vários produtos |
+|---|---|
+| Resumo e indicadores | Um produto por vez (seletor no resumo) |
+| Peças por filmagem | Uma por produto na filmagem que tem mais de um |
+| MFV | O seletor de estudos mostra uma opção por produto ("Posto • Produto"), cada uma com o seu TC |
+| Modelo B+P | Sai **só o produto escolhido** (`Crono_<Cliente>_<Posto>_<Produto>_<data>`). Exporte uma vez para cada produto |
+| Excel simples e CSV | Coluna Produto, a listagem de todos os produtos e uma tabela de indicadores por produto |
+
+- A demanda dos parâmetros vale para o produto exibido. Para comparar com o takt de cada produto, ajuste a demanda.
+- Desmarcar **Vários produtos** apaga os produtos das linhas (com confirmação).
+
+### Filtros da grade e do resumo (REV 1.3)
+
+A barra de filtros fica acima da grade: **nome do elemento**, **produto**, **tipo C/A**, **valor**, **desperdício**, **filmagem** e **só linhas com erro**. Os filtros podem ser combinados.
+
+- **Só escondem linhas da tela.** TS, TN, ciclo e tempo padrão continuam calculados com todas as linhas.
+- O resumo também é filtrado, e o aviso mostra o subtotal visível (ex.: filtro *Não agrega* → "Filtro ativo: 12 de 149 linha(s) • resumo: 3 elemento(s), 18,5 s (23,0% do ciclo)").
+- **Com filtro ativo, não é possível incluir linhas** (botão, `Enter` na última linha e `Ctrl+Enter`), porque a linha nova entraria fora da sequência do vídeo. Editar descrição, classificação e Kaizen continua liberado. `↑`/`↓` pulam as linhas escondidas.
+- O filtro não é gravado: ao abrir um estudo, a grade aparece completa.
+- O **Excel simples** sai com o **filtro automático** do Excel nos cabeçalhos da GERAL e da Listagem.
+
 ### Exportar Excel
 
 O botão **Exportar Excel** tem dois modos:
@@ -111,13 +140,13 @@ O botão **Exportar Excel** tem dois modos:
 **Como funciona o modelo:**
 - **Carregar uma vez.** O app reconhece a REV2 pelos cabeçalhos da linha 8 e guarda o modelo no navegador e na pasta **`_Modelos`** do OneDrive. O outro notebook encontra o modelo sozinho ao conectar a pasta.
 - **Células preenchidas:**
-  - GERAL (linhas 10–300): Elemento, Início, Fim (00:00 nas novas filmagens), Quantidade, Tipo e a lista de elementos;
+  - GERAL (linhas 10–300): Elemento, Início, Fim (a 1ª linha da filmagem começa no início da filmagem), Quantidade, Tipo e a lista de elementos;
   - Listagem (linhas 9–134): Elemento, Tempo (s), Qt., Valor e Desperdício, com os textos exatos da planilha;
   - Compilação: constatações em B55;
   - Análise: identificação em C16.
 - **Limpeza:** dados e observações deixados no modelo por estudos anteriores são apagados nas áreas preenchidas.
 - **Limites vigiados:** 291 lançamentos e 126 elementos. Há um aviso quando passa de 40 elementos, porque a aba Análise da planilha soma só T25:T64.
-- **Arquivo gerado:** `Crono_<Cliente>_<Posto>_<data>.xlsm`.
+- **Arquivo gerado:** `Crono_<Cliente>_<Posto>_<data>.xlsm` (com vários produtos: `Crono_<Cliente>_<Posto>_<Produto>_<data>.xlsm`).
 
 O fluxo foi conferido com a planilha real da Laje Forte (149 lançamentos, 9 filmagens). Depois do recálculo, as fórmulas da própria planilha chegaram a **7.681 s** (Análise!G3) e os gráficos de pizza se atualizaram.
 
@@ -131,7 +160,20 @@ Cada vídeo novo começa em 00:00, como as células amarelas de "Tempo (Início)
 2. **`Alt+N`** na linha. É necessário quando o 1º tempo do novo vídeo é **maior** que o último do vídeo anterior, porque nesse caso o app não tem como perceber a troca sozinho.
 3. **Toque no número da linha**, no celular.
 
-A linha marcada ganha uma faixa amarela e a etiqueta **F2**, **F3**, e assim por diante. O rodapé mostra o total de filmagens. A *Leitura inicial* vale só para a 1ª filmagem.
+A linha marcada ganha uma faixa amarela e a etiqueta **F2**, **F3**, e assim por diante. O rodapé mostra o total de filmagens.
+
+#### Início da análise em cada filmagem (REV 1.3)
+
+No bloco **Filmagens do estudo** (acima do resumo), cada filmagem tem o campo **Início**: o instante do vídeo em que a análise começa. Serve para analisar um trecho no meio de qualquer vídeo, sem cortar o arquivo.
+
+| Filmagem | Início |
+|---|---|
+| F1 | É a **Leitura inicial** da barra da grade (os dois campos ficam sincronizados) |
+| F2, F3… | Digite o instante (`530` = 05:30). Vazio = 00:00 |
+
+- A 1ª linha da filmagem = tempo final − início. As demais linhas seguem a leitura contínua.
+- Tempo final menor que o início da filmagem deixa a linha em vermelho.
+- No modelo B+P, o início vai para a coluna *Tempo (Início)* da 1ª linha da filmagem.
 
 ![Várias filmagens](docs/tela-filmagens.png)
 
@@ -139,7 +181,7 @@ A linha marcada ganha uma faixa amarela e a etiqueta **F2**, **F3**, e assim por
 
 Na planilha REV2, o elemento **tipo A** entra no ciclo como **Σtempo**, isto é, o tempo total observado em todas as filmagens. Esse valor não pode ser comparado com o takt, que é por peça.
 
-No modo *Quantidade*, o bloco **Peças produzidas por filmagem** (acima do resumo) tem um campo para cada filmagem (F1, F2…):
+No modo *Quantidade*, o bloco **Filmagens do estudo** (acima do resumo) tem um campo de peças para cada filmagem (F1, F2…). Com vários produtos, a filmagem que tem mais de um produto ganha um campo de peças por produto:
 
 | Situação | Tipo A no ciclo |
 |---|---|
@@ -149,7 +191,7 @@ No modo *Quantidade*, o bloco **Peças produzidas por filmagem** (acima do resum
 
 - Cada filmagem mostra o tempo observado e o **tempo observado ÷ peças**. O bloco mostra também o **ciclo real observado** (tudo o que foi filmado ÷ total de peças, no ritmo filmado), que serve para conferir o tempo normal do ciclo.
 - O tempo padrão e o TC levado ao MFV passam a ser por unidade.
-- O preenchimento do **modelo B+P** em Excel continua usando as fórmulas da própria planilha (tipo A = Σtempo). O **Excel simples**, o CSV e o JSON levam o tempo por unidade.
+- No **modelo B+P**, a aba Listagem recebe o tempo do app (por unidade), mas o ciclo da aba Análise (G3) é calculado pelas fórmulas da planilha a partir da GERAL e continua com o tempo total do tipo A. O app avisa isso ao exportar. O **Excel simples**, o CSV e o JSON levam o tempo por unidade.
 
 - **Frequência:** `1` = uma vez por peça; `1/50` ou `0,02` = uma vez a cada 50 peças. Com frequência menor que 1, o elemento é marcado como **A** (acíclico).
 - **Ritmo:** de 50% a 150%. A nova linha herda o ritmo da linha anterior.
@@ -250,7 +292,7 @@ O botão **✨ IA** na barra da grade abre o assistente. Ele precisa de **intern
 
 | Indicador | Fórmula |
 |---|---|
-| Tempo subtraído (TS) | Tempo final da linha − última leitura válida (a primeira linha usa a leitura inicial; a linha de **nova filmagem** usa 00:00) |
+| Tempo subtraído (TS) | Tempo final da linha − última leitura válida (a 1ª linha de cada filmagem usa o **início da filmagem**: Leitura inicial na F1, campo Início nas demais, vazio = 00:00) |
 | Tempo normal da linha (TN) | TS × (Ritmo / 100) [× Frequência, no modo frequência] |
 | Tempo do elemento (resumo) | Quantidade: C = ΣTN ÷ ΣQtd · A = ΣTN (ou ΣTN ÷ Σpeças das filmagens) — Frequência: média das ocorrências |
 | Tempo normal do ciclo | Σ tempos dos elementos do resumo |
@@ -354,8 +396,8 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 111 testes: cálculo, compilação, Excel, modelos B+P, MFV, pç/HH, payback e IA (Node 18+, sem dependências)
-npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada e REV 1.2 — requer o servidor local
+npm test             # 119 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback e IA (Node 18+, sem dependências)
+npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 e REV 1.3 — requer o servidor local
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

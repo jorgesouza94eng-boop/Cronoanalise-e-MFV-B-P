@@ -4,9 +4,36 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.3** | 16/10/2026 | Início por filmagem, vários produtos no mesmo estudo e filtros |
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.3 — 16/10/2026 (filmagens, produtos e filtros)
+
+### Novidades
+- **Início da análise em cada filmagem:** o bloco *Filmagens do estudo* ganhou o campo **Início** para F1, F2, F3… A 1ª linha de cada filmagem passa a ser *tempo final − início*. Isso permite analisar um trecho no meio de qualquer vídeo, sem cortar o arquivo. O início da F1 é a Leitura inicial (campos sincronizados).
+- **Vários produtos no mesmo estudo:** a opção *Vários produtos* mostra a coluna **Produto** na grade, e a linha nova repete o produto da anterior.
+  - Resumo, compilação, gráficos e indicadores (ciclo, TP, capacidade, gargalo) ficam **separados por produto**, com um seletor no resumo.
+  - As peças por filmagem são informadas por produto, e o setup de um produto é rateado só pelas peças dele.
+  - No **MFV**, cada produto do estudo aparece como uma opção própria, com o seu TC.
+- **Filtros na grade e no resumo:** por nome do elemento, produto, tipo, valor, desperdício, filmagem e linhas com erro, com aviso de filtro ativo e subtotal do que está visível.
+  - O filtro só esconde linhas da tela: os cálculos usam sempre todas as linhas.
+  - Com filtro ativo, não é possível incluir linhas, para proteger a sequência da leitura contínua. `↑`/`↓` pulam as linhas escondidas.
+- **Excel simples:** filtro automático nos cabeçalhos da GERAL e da Listagem, coluna Produto e indicadores por produto. O CSV também ganhou a coluna Produto.
+- **Excel no modelo B+P:**
+  - o início de cada filmagem vai para a coluna *Tempo (Início)*;
+  - com vários produtos, sai só o produto escolhido, com o nome do produto no arquivo;
+  - novo aviso quando os acíclicos estão por unidade: a Listagem recebe o tempo do app, mas o ciclo da aba Análise (G3) continua com o tempo total do tipo A, porque é calculado pelas fórmulas da planilha.
+
+### Compatibilidade
+- Formato dos arquivos versão 3 (estudo e MFV). Os estudos e MFVs anteriores abrem com os **mesmos resultados**: sem produtos e com as filmagens começando em 00:00, como antes.
+- Depois de salvo pela REV 1.3, o arquivo não abre numa versão anterior em cache. Basta recarregar a página nos aparelhos.
+
+### Testes
+- 119 testes de unidade (8 novos) e o novo teste de navegador `tests/e2e.rev13.js` (28 verificações). Os testes das revisões anteriores continuam passando.
 
 ---
 

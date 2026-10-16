@@ -90,3 +90,32 @@ test("Excel B+P: arquivo .xlsx gerado com partes obrigatórias e texto escapado"
   assert.ok(text.includes("Cliente &amp; Cia &lt;teste&gt;"), "caracteres especiais escapados");
   assert.ok(!text.includes("Cliente & Cia <teste>"), "sem XML quebrado");
 });
+
+test("Excel simples: filtro automático nos cabeçalhos da GERAL e da Listagem (REV 1.3)", () => {
+  const s = C.createStudy({ clientName: "A", processName: "B" });
+  s.elements = [C.createElement({ description: "x", videoTime: "10" }), C.createElement({ description: "y", videoTime: "30" })];
+  const sheets = X.buildBPSheets(s);
+  assert.equal(sheets[0].autoFilter, "A6:O8");
+  assert.equal(sheets[1].autoFilter, "A7:L9");
+});
+
+test("Excel simples e CSV com vários produtos: coluna Produto e indicadores por produto", () => {
+  const s = C.createStudy({ clientName: "A", processName: "B" });
+  s.elements = [
+    C.createElement({ product: "P1", description: "x", videoTime: "10" }),
+    C.createElement({ product: "P2", description: "y", videoTime: "30" }),
+  ];
+  const sheets = X.buildBPSheets(s);
+  const geral = sheets[0].rows;
+  assert.equal(geral[5][1].v, "Produto");
+  assert.equal(geral[6][1].v, "P1");
+  assert.equal(sheets[0].autoFilter, "A6:P8");
+  const list = sheets[1].rows.filter((r) => r && r[1] && (r[1].v === "P1" || r[1].v === "P2"));
+  assert.equal(list.length, 2, "a listagem traz os dois produtos");
+  const analise = sheets[3].rows.map((r) => (r && r[0] ? r[0].v : ""));
+  assert.ok(analise.includes("Por produto"));
+  const csv = C.buildCSV(s);
+  assert.match(csv, /Nº;Filmagem;Produto;Elemento/);
+  assert.match(csv, /\n1;1;"P1";"x"/);
+  assert.match(csv, /Produto;Tempo normal do ciclo/);
+});

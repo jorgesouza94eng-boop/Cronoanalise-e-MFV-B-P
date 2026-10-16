@@ -20,7 +20,7 @@
   "use strict";
 
   const SCHEMA_ID = "lean-chrono-mfv";
-  const SCHEMA_VERSION = 2; // v2: produtividade (pç/HH) e payback
+  const SCHEMA_VERSION = 3; // v2: produtividade (pç/HH) e payback • v3: produto do estudo vinculado
   const FILE_PATTERN = /^MFV_.+\.json$/i;
   const DAYS = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
   const EPS = 1e-9;
@@ -102,6 +102,7 @@
         name: "",
         source: "manual",
         studyId: "",
+        studyProduct: "", // chave do produto quando o estudo tem vários produtos
         studyFileName: "",
         tcStudyMin: null,
         tcManualMin: null,
@@ -202,6 +203,7 @@
             name: str(s.name),
             source: s.source === "study" ? "study" : "manual",
             studyId: str(s.studyId),
+            studyProduct: str(s.studyProduct),
             studyFileName: str(s.studyFileName),
             tcStudyMin: Number.isFinite(s.tcStudyMin) ? s.tcStudyMin : null,
             tcManualMin: Number.isFinite(s.tcManualMin) ? s.tcManualMin : null,
