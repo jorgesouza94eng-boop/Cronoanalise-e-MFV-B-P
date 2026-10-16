@@ -17,7 +17,7 @@
   "use strict";
 
   const SCHEMA_ID = "lean-chrono-estudo";
-  const SCHEMA_VERSION = 3; // v2: peças por filmagem • v3: início por filmagem e produto por linha
+  const SCHEMA_VERSION = 4; // v2: peças por filmagem • v3: início por filmagem e produto • v4: demanda por produto
 
   /** Faixa aceita para o fator de ritmo (%). */
   const PACE_MIN = 50;
@@ -246,6 +246,7 @@
     const elements = (study && study.elements) || [];
     const multi = elements.some((e) => String(e.product || "").trim());
     const starts = (study && study.filmStarts) || {};
+    const demands = (study && study.productDemand) || {};
     const start = parseTimeInput(study && study.videoStart);
     let previous = start.minutes != null ? start.minutes : 0;
     let film = 1;
@@ -365,15 +366,22 @@
       );
       const filmInfo = filmPieces(study, segs, mode);
       const summary = summarize(elements, rows, mode, filmInfo, p.key);
+      // Demanda própria do produto (vazio = demanda geral dos parâmetros)
+      const own = multi ? toFiniteOrNull(demands[p.key]) : null;
+      const pParams = own != null ? Object.assign({}, params, { dailyDemandPcs: own }) : params;
       return Object.assign({}, p, {
         films: filmInfo,
         summary,
         compilation: compile(summary),
-        kpis: computeKpis(params, summary.cycleNormal),
+        demand: toFiniteOrNull(pParams.dailyDemandPcs),
+        demandRaw: multi && demands[p.key] != null ? String(demands[p.key]) : "",
+        demandOwn: own != null,
+        kpis: computeKpis(pParams, summary.cycleNormal),
       });
     });
     const wanted = study && study.settings && study.settings.product;
     const current = products.find((p) => p.key === wanted) || products[0];
+    const mix = multi ? computeMix(products, computeKpis(params, 0).netTime) : null;
 
     return {
       mode,
@@ -386,11 +394,47 @@
       compilation: current.compilation,
       totals: { sumSubtracted, sumNormal },
       kpis: current.kpis,
+      mix,
       errorCount,
       filmCount: film,
       filmList,
       films: current.films,
       startError: start.error,
+    };
+  }
+
+  /**
+   * Carga do posto com vários produtos (o posto divide o tempo entre eles):
+   *  - Carga do produto = TP × demanda diária (min/dia).
+   *  - Ocupação = Σ cargas ÷ tempo líquido disponível. Acima de 100% o posto não atende o mix.
+   *  - Takt misto = tempo líquido ÷ Σ demandas.
+   *  - TC ponderado pelo mix = Σ (TP × demanda) ÷ Σ demandas.
+   * Produto sem TP ou sem demanda fica fora dos totais e deixa o status "incompleto".
+   * status: "atende" | "sobrecarga" | "incompleto"
+   */
+  function computeMix(products, netTime) {
+    const items = products.map((p) => {
+      const tp = p.kpis.standardTime > EPS ? p.kpis.standardTime : null;
+      const demand = p.demand > 0 ? p.demand : null;
+      return { key: p.key, name: p.name, tp, demand, demandOwn: p.demandOwn, load: tp != null && demand != null ? tp * demand : null };
+    });
+    const ok = items.filter((i) => i.load != null);
+    const load = ok.reduce((a, i) => a + i.load, 0);
+    const demand = ok.reduce((a, i) => a + i.demand, 0);
+    const missing = items.length - ok.length;
+    const occupancyPct = netTime > 0 && ok.length ? (load / netTime) * 100 : null;
+    let status = "incompleto";
+    if (!missing && occupancyPct != null) status = occupancyPct > 100 + EPS ? "sobrecarga" : "atende";
+    return {
+      items,
+      netTime,
+      load: ok.length ? load : null,
+      demand: ok.length ? demand : null,
+      occupancyPct,
+      taktMix: netTime > 0 && demand > 0 ? netTime / demand : null,
+      weightedTP: demand > 0 ? load / demand : null,
+      missing,
+      status,
     };
   }
 
@@ -689,6 +733,7 @@
       videoStart: "",
       filmStarts: {},
       filmPieces: {},
+      productDemand: {},
       notes: "",
       // Novos estudos seguem a planilha REV2: lançamento por quantidade e tempos em segundos.
       settings: Object.assign({ entryMode: "quantidade", timeUnit: "s" }, o.settings || {}),
@@ -746,6 +791,7 @@
       processName: str(raw.processName),
       videoStart: str(raw.videoStart),
       filmStarts: normalizeFilmPieces(raw.filmStarts),
+      productDemand: normalizeFilmPieces(raw.productDemand),
       filmPieces: normalizeFilmPieces(raw.filmPieces),
       notes: str(raw.notes),
       // Arquivos anteriores a esta versão não têm "settings": mantêm frequência e minutos.
@@ -831,11 +877,23 @@
               standardTimeMin: round(p.kpis.standardTime, 4),
               capacityPcsDay: p.kpis.capacity,
               status: p.kpis.status,
+              demandPcsDay: p.demand,
               acyclicTime: p.summary.acyclic,
               elements: p.summary.elements.length,
             }))
           : undefined,
         product: r.multiProduct ? r.product.name : undefined,
+        mix: r.mix
+          ? {
+              netTimeMin: round(r.mix.netTime, 4),
+              loadMin: round(r.mix.load, 4),
+              occupancyPct: round(r.mix.occupancyPct, 2),
+              taktMixMin: round(r.mix.taktMix, 4),
+              weightedStandardTimeMin: round(r.mix.weightedTP, 4),
+              status: r.mix.status,
+              products: r.mix.items.map((i) => ({ product: i.name, demandPcsDay: i.demand, standardTimeMin: round(i.tp, 4), loadMin: round(i.load, 4) })),
+            }
+          : undefined,
         acyclicTime: r.summary.acyclic,
         summary: r.summary.elements.map((g) => ({
           seq: g.seq,
@@ -984,12 +1042,17 @@
     lines.push(["Status", q(STATUS_LABELS[k.status])].join(";"));
     if (multi) {
       lines.push("");
-      lines.push(["Produto", `Tempo normal do ciclo (${u})`, `Tempo padrão (${u}/pç)`, "Capacidade (pçs/dia)", "Status"].join(";"));
-      r.products.forEach((pr) =>
-        lines.push(
-          [q(pr.name), nt(pr.kpis.sumNormal), nt(pr.kpis.standardTime), pr.kpis.capacity == null ? "" : pr.kpis.capacity, q(STATUS_LABELS[pr.kpis.status])].join(";")
-        )
+      lines.push(["Produto", `Tempo normal do ciclo (${u})`, `Tempo padrão (${u}/pç)`, "Demanda (pçs/dia)", "Carga (min/dia)"].join(";"));
+      r.products.forEach((pr, i) =>
+        lines.push([q(pr.name), nt(pr.kpis.sumNormal), nt(pr.kpis.standardTime), n4(pr.demand), n4(r.mix.items[i].load)].join(";"))
       );
+      lines.push("");
+      lines.push("CARGA DO POSTO (MIX)");
+      lines.push(["Carga total (min/dia)", n4(r.mix.load)].join(";"));
+      lines.push(["Ocupação do posto (%)", r.mix.occupancyPct == null ? "" : formatNumber(r.mix.occupancyPct, 1)].join(";"));
+      lines.push([`Takt misto (${u}/pç)`, nt(r.mix.taktMix)].join(";"));
+      lines.push([`TC ponderado pelo mix (${u}/pç)`, nt(r.mix.weightedTP)].join(";"));
+      lines.push(["Status do mix", q({ atende: "Atende o mix", sobrecarga: "Sobrecarga", incompleto: "Incompleto" }[r.mix.status])].join(";"));
     }
     return "\uFEFF" + lines.join("\r\n");
   }
@@ -1051,6 +1114,7 @@
     parseNumber,
     computeStudy,
     computeKpis,
+    computeMix,
     formatNumber,
     generateId,
     slugify,

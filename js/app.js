@@ -171,6 +171,36 @@
       return true;
     },
 
+    /** Demanda diária própria de um produto (vazio = demanda geral). Retorna false se inválida. */
+    onProductDemandChange(key, raw) {
+      if (!state.study) return false;
+      const value = String(raw == null ? "" : raw).trim();
+      const n = Calc.parseNumber(value);
+      const valid = value === "" || (n != null && n > 0);
+      const map = state.study.productDemand || (state.study.productDemand = {});
+      const next = valid ? value : "";
+      if ((map[key] || "") !== next) {
+        if (next) map[key] = next;
+        else delete map[key];
+        markChanged();
+      }
+      return valid;
+    },
+
+    /** Grava o estudo e abre o MFV da mesma empresa com este estudo (e o produto do resumo). */
+    async onGoToMfv() {
+      if (!state.study) return;
+      if (!String(state.study.clientName || "").trim()) {
+        UI.toast("Informe a empresa do estudo antes de levar ao MFV.", "warn");
+        return;
+      }
+      await flushSave();
+      const c = state.computed;
+      const product = c && c.multiProduct ? c.product.key : "";
+      const q = `estudo=${encodeURIComponent(state.study.id)}` + (c && c.multiProduct ? `&produto=${encodeURIComponent(product)}` : "");
+      root.location.href = `mfv.html?${q}`;
+    },
+
     /** Produto exibido no resumo, na compilação e nos indicadores. */
     onProductSelect(key) {
       if (!state.study) return;

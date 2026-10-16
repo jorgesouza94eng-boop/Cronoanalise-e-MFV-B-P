@@ -52,7 +52,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - HTML/CSS/JS puro, **sem build e sem servidor**. Funciona por `file://`, por servidor local e pelo GitHub Pages.
 - Scripts clássicos no padrão UMD (`window.LeanX` no navegador e `module.exports` nos testes do Node). **Não usar módulos ES** (quebram no `file://`).
 - Armazenamento local-first: IndexedDB (`LeanChronoDB`) e pasta do OneDrive pela File System Access API, com debounce de 3 s e proteção contra conflito (revisão + cópia `_conflito_`).
-- Arquivos: `Crono_*.json` (estudo) e `MFV_*.json` (MFV), formato versão 3 (REV 1.3).
+- Arquivos: `Crono_*.json` (estudo) e `MFV_*.json` (MFV), estudo no formato versão 4 e MFV na versão 3 (REV 1.4).
 
 | Arquivo | Função |
 |---|---|
@@ -69,7 +69,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 ```bash
 npm test                                    # testes de unidade (node:test, sem dependências)
 npx http-server -c-1 -p 8765 -s .           # servidor local para os testes de navegador
-CHROMIUM_PATH=/caminho/chrome node tests/e2e.rev13.js http://localhost:8765/
+CHROMIUM_PATH=/caminho/chrome node tests/e2e.rev14.js http://localhost:8765/
 npm run test:e2e                            # todos os testes de navegador (Playwright)
 ```
 
@@ -79,4 +79,5 @@ npm run test:e2e                            # todos os testes de navegador (Play
 - Na planilha de cronoanálise REV2, o tipo A entra como **Σtempo** (tempo total observado), que não pode ser comparado com o takt. No app, com as peças de todas as filmagens, o tipo A vira **Σtempo ÷ Σpeças**.
 - O tempo padrão é **por produto**: dois produtos no mesmo estudo só dão resultado correto com a coluna Produto (REV 1.3) ou com um estudo por produto.
 - Filtros são só de exibição: nunca alteram a leitura contínua nem os cálculos.
+- Posto com vários produtos: o gargalo é avaliado pela **carga do mix** (Σ TP × demanda ÷ tempo líquido), não pelo takt de cada produto isolado.
 - Um MFV em que a demanda é igual à capacidade declarada fica **circular** (operadores ideais ≈ atuais e capacidade = demanda). Registre essa premissa nas observações.

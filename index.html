@@ -177,6 +177,7 @@
             <input type="checkbox" id="opt-multi-product"> Vários produtos
           </label>
           <button type="button" id="btn-add-row" class="btn-secondary" title="Nova linha (Ctrl+Enter)">+ Nova linha</button>
+          <button type="button" id="btn-to-mfv" class="btn-outline" title="Levar este estudo (ou o produto do resumo) como etapa do MFV da mesma empresa">→ MFV</button>
           <button type="button" id="btn-ai" class="btn-outline btn-ai" title="Assistente de IA (Gemini): classificação, Kaizen e constatações">✨ IA</button>
           <button type="button" id="btn-export-json" class="btn-outline" title="Baixar o estudo em .json (backup ou envio para outro dispositivo)">Exportar JSON</button>
           <button type="button" id="btn-export-xlsx" class="btn-outline" title="Com modelo carregado: preenche a sua planilha B+P (fórmulas, gráficos e macros preservados). Sem modelo: Excel simples.">Exportar Excel</button>
@@ -298,6 +299,37 @@
             </tr>
           </tfoot>
         </table>
+      </div>
+
+      <!-- Carga do posto com vários produtos (o posto divide o tempo entre eles) -->
+      <div class="mix-panel" id="mix-panel" hidden>
+        <div class="films-head">
+          <strong>Carga do posto (mix de produtos)</strong>
+          <span class="form-hint" id="mix-hint"></span>
+        </div>
+        <div class="table-container">
+          <table class="chrono-table mix-table">
+            <thead>
+              <tr>
+                <th scope="col">Produto</th>
+                <th scope="col" title="Vazio = demanda geral dos parâmetros">Demanda (pçs/dia)</th>
+                <th scope="col">TP (<span class="unit-label">min</span>/pç)</th>
+                <th scope="col" title="TP × demanda">Carga (min/dia)</th>
+                <th scope="col" title="Carga ÷ tempo líquido disponível">% do tempo</th>
+              </tr>
+            </thead>
+            <tbody id="mix-tbody"></tbody>
+            <tfoot>
+              <tr>
+                <td class="tfoot-label">Total</td>
+                <td class="cell-total mono" id="mix-demand">--</td>
+                <td class="cell-total mono" id="mix-weighted" title="TC ponderado pelo mix = Σ (TP × demanda) ÷ Σ demandas">--</td>
+                <td class="cell-total mono" id="mix-load">--</td>
+                <td class="cell-total mono" id="mix-occupancy">--</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
     </section>
 

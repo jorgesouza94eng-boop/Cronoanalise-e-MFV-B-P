@@ -115,8 +115,25 @@ Pela literatura (OIT, Barnes), o tempo padrão é **por produto**. Para analisar
 | Modelo B+P | Sai **só o produto escolhido** (`Crono_<Cliente>_<Posto>_<Produto>_<data>`). Exporte uma vez para cada produto |
 | Excel simples e CSV | Coluna Produto, a listagem de todos os produtos e uma tabela de indicadores por produto |
 
-- A demanda dos parâmetros vale para o produto exibido. Para comparar com o takt de cada produto, ajuste a demanda.
 - Desmarcar **Vários produtos** apaga os produtos das linhas (com confirmação).
+
+#### Carga do posto com vários produtos (REV 1.4)
+
+Num posto que faz vários produtos, o tempo é dividido entre eles. Por isso, o gargalo é avaliado pela **carga do mix** e não pelo takt de cada produto isolado. O quadro **Carga do posto (mix de produtos)** aparece abaixo do resumo:
+
+| Coluna / total | Fórmula |
+|---|---|
+| Demanda (pçs/dia) | Demanda **própria** de cada produto. Vazio = demanda geral dos parâmetros |
+| Carga (min/dia) | TP do produto × demanda |
+| % do tempo | Carga ÷ tempo líquido disponível |
+| Ocupação do posto | Σ cargas ÷ tempo líquido: 🟢 até 100% (atende o mix) · 🔴 acima de 100% (sobrecarga) |
+| Takt misto | Tempo líquido ÷ Σ demandas |
+| TC ponderado | Σ (TP × demanda) ÷ Σ demandas |
+
+- Jornada, paradas e tolerância continuam **uma vez por estudo** (são do posto).
+- Com vários produtos, o cartão **Status / gargalo** mostra o resultado do mix ("ATENDE O MIX" ou "SOBRECARGA"). O cartão do takt mostra o takt do produto exibido (com a demanda dele) e o takt misto.
+- Produto sem demanda ou sem tempo padrão deixa o quadro **incompleto** (⚠), com a ocupação parcial.
+- O **TC ponderado** também pode ir para o MFV como a etapa "Posto • Mix (TC ponderado)".
 
 ### Filtros da grade e do resumo (REV 1.3)
 
@@ -217,6 +234,15 @@ O link **MFV** no cabeçalho abre o Mapa de Fluxo de Valor, que reproduz a aba *
 Conferência com o MFV real da Laje Forte (aba EP): deram os mesmos 440 min/dia, a mesma demanda de 206,67 m²/dia, o takt de 0,035484 h, a capacidade de 206,67 m²/dia, a produtividade de 14,09 m²/h/op, 1,00 operador ideal e 8 dias de atravessamento.
 
 > Na planilha, a "Capacidade de Produção Diária da Linha" (K46) usa as horas sem descontar a disponibilidade da família, enquanto o setor Kaizen (N46) desconta. O app usa o **tempo disponível com a disponibilidade** nos dois casos. Com disponibilidade de 100%, os resultados são idênticos.
+
+### Ligação com a cronoanálise (REV 1.4)
+
+| Recurso | Como funciona |
+|---|---|
+| **Empresa puxada dos estudos** | No **Novo MFV**, o campo Empresa sugere as empresas dos estudos e dos MFVs. Se a grafia for diferente ("metal alfa"), o MFV é gravado com o nome já usado nos estudos ("Metal Alfa") |
+| **Estudos da empresa** | Ao informar a empresa, aparecem os estudos dela (com produto e Mix, quando houver) e o TC de cada um. Os marcados viram etapas, na ordem da lista, com o TC preenchido. Nº de operadores e uptime ficam para você |
+| **Botão "→ MFV"** (na cronoanálise) | Grava o estudo e abre o MFV da mesma empresa. Sem MFV: abre o Novo MFV com a empresa e o estudo já marcados. Com 1 MFV: abre e inclui o estudo como etapa (sem duplicar). Com mais de 1: mostra a lista para você escolher. Com vários produtos, leva o produto exibido no resumo |
+| **Aviso de TC atualizado** | Ao abrir o MFV, os TCs das etapas ligadas aos estudos são atualizados e uma faixa mostra o que mudou ("Corte 0,750 → 0,800 min"). **Desfazer** mantém os valores anteriores como TC editado (✎). As etapas editadas à mão nunca são atualizadas |
 
 **Nº total de operadores:** se a mesma equipe faz várias etapas (como na Laje Forte), informe o total da linha em *Demanda e disponibilidade*, como no K37 da planilha. Vazio = soma dos operadores das etapas.
 
@@ -396,8 +422,8 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 119 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback e IA (Node 18+, sem dependências)
-npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 e REV 1.3 — requer o servidor local
+npm test             # 122 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback e IA (Node 18+, sem dependências)
+npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2, 1.3 e 1.4 — requer o servidor local
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

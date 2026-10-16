@@ -119,3 +119,21 @@ test("Excel simples e CSV com vários produtos: coluna Produto e indicadores por
   assert.match(csv, /\n1;1;"P1";"x"/);
   assert.match(csv, /Produto;Tempo normal do ciclo/);
 });
+
+test("Excel simples e CSV: carga do posto (mix) com demanda por produto (REV 1.4)", () => {
+  const s = C.createStudy({ clientName: "A", processName: "B" });
+  s.shiftParams = { shiftTimeMin: 500, plannedStopsMin: 20, dailyDemandPcs: 100, tolerancePct: 0 };
+  s.elements = [
+    C.createElement({ product: "P1", description: "x", videoTime: "12" }),
+    C.createElement({ product: "P2", description: "y", videoTime: "42" }),
+  ];
+  s.productDemand = { [C.elementKey("P2")]: "300" };
+  const analise = X.buildBPSheets(s)[3].rows.map((r) => (r && r[0] ? r[0].v : ""));
+  assert.ok(analise.includes("Carga do posto (mix)"));
+  const occ = X.buildBPSheets(s)[3].rows.find((r) => r && r[0] && r[0].v === "Ocupação do posto");
+  // P1: 0,2 min × 100 = 20; P2: 0,5 min × 300 = 150 → 170 ÷ 480 = 35,4%
+  assert.equal(occ[1].v, 35.4);
+  const csv = C.buildCSV(s);
+  assert.match(csv, /CARGA DO POSTO \(MIX\)/);
+  assert.match(csv, /Ocupação do posto \(%\);35,4/);
+});

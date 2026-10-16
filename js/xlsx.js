@@ -367,13 +367,23 @@
     if (multi) {
       analise.splice(6, 0, [T("Produto (indicadores acima)"), T(r.product.name), T("")]);
       analise.push(null, [{ v: "Por produto", s: "subtitle" }]);
-      analise.push([H("Produto"), H("Tempo normal (s/pç)"), H("Tempo padrão (s/pç)"), H("Capacidade (pçs/dia)"), H("Status")]);
-      r.products.forEach((pr) =>
+      analise.push([H("Produto"), H("Tempo normal (s/pç)"), H("Tempo padrão (s/pç)"), H("Demanda (pçs/dia)"), H("Carga (min/dia)")]);
+      const mix = r.mix;
+      r.products.forEach((pr, i) =>
         analise.push([
           T(pr.name), N(sec(pr.kpis.sumNormal)), N(sec(pr.kpis.standardTime)),
-          pr.kpis.capacity == null ? T("") : N(pr.kpis.capacity, "int"), T(Calc.STATUS_LABELS[pr.kpis.status]),
+          pr.demand == null ? T("") : N(pr.demand), mix.items[i].load == null ? T("") : N(Math.round(mix.items[i].load * 100) / 100),
         ])
       );
+      analise.push(null, [{ v: "Carga do posto (mix)", s: "subtitle" }]);
+      [
+        ["Tempo líquido disponível", mix.netTime, "min/dia"],
+        ["Carga total", mix.load, "min/dia"],
+        ["Ocupação do posto", mix.occupancyPct == null ? "" : Math.round(mix.occupancyPct * 10) / 10, "%"],
+        ["Takt misto (tempo líquido ÷ Σ demandas)", sec(mix.taktMix), "s/pç"],
+        ["TC ponderado pelo mix", sec(mix.weightedTP), "s/pç"],
+        ["Status", { atende: "Atende o mix", sobrecarga: "Sobrecarga (acima de 100%)", incompleto: "Incompleto (falta demanda ou tempo)" }[mix.status], ""],
+      ].forEach(([a, b, c]) => analise.push([T(a), typeof b === "number" ? N(b) : T(b == null ? "" : b), T(c)]));
     }
     const lastCol = (n) => colName(n - 1);
 

@@ -24,6 +24,7 @@
 
   const Tpl = root.LeanXlsxTemplate;
   const TEMPLATE_KEY = "template:mfv";
+  const MIX_KEY = "__mix__"; // opção "Mix (TC ponderado)" de um estudo com vários produtos
   const TEMPLATE_DIR = "_Modelos";
 
   const state = {
@@ -37,7 +38,9 @@
     lastError: null,
     lastDiskSaveAt: null,
     changeSeq: 0,
-    studies: [], // estudos disponíveis para vincular: { id, fileName, clientName, processName, tcMin }
+    studies: [], // estudos disponíveis para vincular: { key, id, product, productName, fileName, clientName, processName, tcMin }
+    pendingStudyKey: null, // estudo trazido pelo botão "→ MFV" da cronoanálise, ainda sem MFV escolhido
+    tcChanges: [], // últimas atualizações de TC (para o "Desfazer")
   };
   let localTimer = null;
   let diskTimer = null;
@@ -308,7 +311,11 @@
         processName: study.processName,
         updatedAt: study.updatedAt,
         tcMin: tc(r.kpis),
-        products: r.multiProduct ? r.products.map((p) => ({ key: p.key, name: p.name, tcMin: tc(p.kpis) })) : [],
+        products: r.multiProduct
+          ? r.products
+              .map((p) => ({ key: p.key, name: p.name, tcMin: tc(p.kpis) }))
+              .concat(r.mix && r.mix.status !== "incompleto" ? [{ key: MIX_KEY, name: "Mix (TC ponderado)", tcMin: r.mix.weightedTP }] : [])
+          : [],
       });
     };
     (await Store.listLocal()).forEach((r) => r && r.study && add(r.study));
@@ -352,16 +359,21 @@
   function refreshLinkedSteps(announce) {
     if (!state.doc) return 0;
     let changed = 0;
+    const visible = []; // mudanças que alteram o TC usado (etapa não editada à mão)
     state.doc.steps.forEach((s) => {
       if (!s.studyId) return;
       const st = findStudy(s);
       if (!st) return;
       if (st.tcMin !== s.tcStudyMin || st.fileName !== s.studyFileName) {
+        if (s.source === "study" && Number.isFinite(s.tcStudyMin) && st.tcMin !== s.tcStudyMin) {
+          visible.push({ id: s.id, name: s.name || st.processName, from: s.tcStudyMin, to: st.tcMin });
+        }
         s.tcStudyMin = st.tcMin;
         s.studyFileName = st.fileName;
         changed += 1;
       }
     });
+    showTcBanner(visible);
     if (changed) {
       state.doc.updatedAt = new Date().toISOString();
       state.dirty = true;
@@ -371,6 +383,171 @@
     }
     if (announce) toast(changed ? `${changed} TC(s) atualizado(s) a partir dos estudos.` : "TCs já estão atualizados.", "ok");
     return changed;
+  }
+
+  /** Faixa "N TC(s) atualizados a partir dos estudos", com Desfazer. */
+  function showTcBanner(changes) {
+    state.tcChanges = changes;
+    const banner = $("tc-banner");
+    if (!changes.length) {
+      banner.hidden = true;
+      return;
+    }
+    const u = Calc.TIME_UNITS[unitOf()].label;
+    const v = (m) => (Number.isFinite(m) ? ft(m) : "—");
+    $("tc-banner-text").textContent =
+      `ℹ ${changes.length} TC(s) atualizado(s) a partir dos estudos: ` + changes.map((c) => `${c.name} ${v(c.from)} → ${v(c.to)} ${u}`).join(" · ");
+    banner.hidden = false;
+  }
+
+  /** Desfazer: mantém os TCs anteriores como valor editado (não voltam a ser atualizados). */
+  function undoTcChanges() {
+    if (!state.doc || !state.tcChanges.length) return;
+    state.tcChanges.forEach((c) => {
+      const step = state.doc.steps.find((x) => x.id === c.id);
+      if (step && Number.isFinite(c.from)) {
+        step.source = "manual";
+        step.tcManualMin = c.from;
+      }
+    });
+    toast(`${state.tcChanges.length} TC(s) mantido(s) como antes (marcados como editados; use ↺ usar estudo para voltar).`, "ok", 6000);
+    showTcBanner([]);
+    markChanged({ render: true });
+  }
+
+  /* ==========================================================================
+     MFVs SALVOS E LIGAÇÃO COM A CRONOANÁLISE
+     ========================================================================== */
+
+  /** MFVs do navegador e da pasta (o mais recente de cada id). */
+  async function listDocs() {
+    const items = new Map();
+    (await Store.listLocal(STORE)).forEach((r) => r && r.study && items.set(r.id, { doc: r.study, inFolder: false }));
+    let source = "Navegador deste dispositivo";
+    if (await Store.folderReady()) {
+      source = `Pasta: ${Store.getDirHandle().name}`;
+      try {
+        const { studies } = await Store.listFolderStudies({ pattern: M.FILE_PATTERN, normalize: M.normalizeMfv });
+        studies.forEach((d) => {
+          const it = items.get(d.id);
+          if (!it || String(d.updatedAt) > String(it.doc.updatedAt)) items.set(d.id, { doc: d, inFolder: true });
+          else it.inFolder = true;
+        });
+      } catch (err) {
+        toast(`Erro ao ler a pasta: ${err.message || err}`, "error");
+      }
+    }
+    const list = Array.from(items.values()).sort((a, b) => String(b.doc.updatedAt).localeCompare(String(a.doc.updatedAt)));
+    return { list, source };
+  }
+
+  /** Nome de empresa já usado nos estudos/MFVs com a mesma grafia (ignora maiúsculas e espaços). */
+  function knownClients(docs) {
+    const map = new Map();
+    state.studies.forEach((s) => s.clientName && !map.has(Calc.elementKey(s.clientName)) && map.set(Calc.elementKey(s.clientName), s.clientName.trim()));
+    (docs || []).forEach(({ doc }) => doc.clientName && !map.has(Calc.elementKey(doc.clientName)) && map.set(Calc.elementKey(doc.clientName), doc.clientName.trim()));
+    return map;
+  }
+
+  function stepFromStudy(st) {
+    return M.createStep({
+      name: st.productName ? `${st.processName || "Etapa"} • ${st.productName}` : st.processName || "Etapa",
+      source: "study",
+      studyId: st.id,
+      studyProduct: st.product,
+      studyFileName: st.fileName,
+      tcStudyMin: st.tcMin,
+    });
+  }
+
+  /** Lista de estudos da empresa digitada no "Novo MFV" (marcados viram etapas). */
+  function renderNewDocStudies() {
+    const key = Calc.elementKey($("new-client").value);
+    const list = key
+      ? state.studies
+          .filter((s) => Calc.elementKey(s.clientName) === key)
+          .sort((a, b) => String(a.processName).localeCompare(String(b.processName), "pt-BR") || (a.product === MIX_KEY) - (b.product === MIX_KEY))
+      : [];
+    const ul = $("new-doc-study-list");
+    const prev = new Set(Array.from(ul.querySelectorAll("input:checked")).map((i) => i.value));
+    if (state.pendingStudyKey) prev.add(state.pendingStudyKey);
+    const u = Calc.TIME_UNITS[unitOf()].label;
+    ul.replaceChildren(
+      ...list.map((s) => {
+        const cb = el("input", { type: "checkbox", value: s.key, checked: prev.has(s.key) });
+        const label = el("label", {}, [
+          cb,
+          el("span", { textContent: `${s.processName || "Sem posto"}${s.productName ? ` • ${s.productName}` : ""}` }),
+          el("span", { className: "study-check-tc", textContent: s.tcMin ? `TC ${ft(s.tcMin)} ${u}` : "sem tempo padrão" }),
+        ]);
+        return el("li", {}, [label]);
+      })
+    );
+    $("new-doc-studies").hidden = !list.length;
+    $("new-doc-hint").textContent = !key
+      ? "Escolha a empresa: os estudos de cronoanálise dela aparecem aqui para virar etapas, com o TC já preenchido."
+      : list.length
+        ? `${list.length} estudo(s) desta empresa. Nº de operadores e uptime ficam para você preencher.`
+        : "Nenhum estudo de cronoanálise com esta empresa. As etapas podem ser incluídas depois.";
+  }
+
+  /** Inclui no MFV aberto o estudo trazido pelo botão "→ MFV" (se ainda não for etapa). */
+  function addPendingStudy() {
+    const key = state.pendingStudyKey;
+    state.pendingStudyKey = null;
+    if (!key || !state.doc) return;
+    const st = state.studies.find((x) => x.key === key);
+    if (!st) return toast("Estudo não encontrado para incluir no MFV.", "warn");
+    const exists = state.doc.steps.find((s) => s.studyId === st.id && (s.studyProduct || "") === st.product);
+    if (exists) {
+      toast(`"${exists.name}" já é etapa deste MFV.`, "ok");
+      return;
+    }
+    state.doc.steps.push(stepFromStudy(st));
+    markChanged({ render: true });
+    toast(`Etapa adicionada: ${st.processName}${st.productName ? ` • ${st.productName}` : ""} (TC ${st.tcMin ? ft(st.tcMin) + " " + Calc.TIME_UNITS[unitOf()].label : "sem tempo padrão"}). Preencha nº de operadores e uptime.`, "ok", 7000);
+  }
+
+  /** Abertura pelo botão "→ MFV" da cronoanálise: mfv.html?estudo=<id>&produto=<chave>. */
+  async function openFromCrono() {
+    let params;
+    try {
+      params = new root.URLSearchParams(root.location.search);
+    } catch (e) {
+      return false;
+    }
+    const id = params.get("estudo");
+    if (!id) return false;
+    try {
+      root.history.replaceState(null, "", root.location.pathname); // recarregar não repete a inclusão
+    } catch (e) {
+      /* file:// em alguns navegadores: ignora */
+    }
+    const product = params.get("produto") || "";
+    const st = state.studies.find((x) => x.id === id && x.product === product) || state.studies.find((x) => x.id === id);
+    if (!st) {
+      toast("Estudo não encontrado. Salve o estudo e tente de novo.", "warn");
+      return false;
+    }
+    state.pendingStudyKey = st.key;
+    const { list } = await listDocs();
+    const same = list.filter(({ doc }) => Calc.elementKey(doc.clientName) === Calc.elementKey(st.clientName));
+    if (same.length === 1) {
+      if (await openDoc(same[0].doc.id, same[0].doc.fileName)) {
+        addPendingStudy();
+        return true;
+      }
+    }
+    await showDocs();
+    $("new-client").value = st.clientName || "";
+    renderNewDocStudies();
+    if (same.length > 1) {
+      toast(`${st.clientName} tem ${same.length} MFVs: abra o desejado na lista (o estudo será incluído) ou crie um novo.`, "warn", 8000);
+    } else {
+      $("new-family").focus();
+      toast(`${st.clientName} ainda não tem MFV: informe a família e crie. O estudo já está marcado.`, "ok", 7000);
+    }
+    return true;
   }
 
   /* ==========================================================================
@@ -804,16 +981,7 @@
     $("btn-add-study-step").addEventListener("click", () => {
       const st = state.studies.find((x) => x.key === $("study-picker").value);
       if (!st) return toast("Escolha um estudo na lista.", "warn");
-      state.doc.steps.push(
-        M.createStep({
-          name: st.productName ? `${st.processName || "Etapa"} • ${st.productName}` : st.processName || "Etapa",
-          source: "study",
-          studyId: st.id,
-          studyProduct: st.product,
-          studyFileName: st.fileName,
-          tcStudyMin: st.tcMin,
-        })
-      );
+      state.doc.steps.push(stepFromStudy(st));
       if (!state.doc.clientName && st.clientName) state.doc.clientName = st.clientName;
       markChanged({ render: true });
       toast(`Etapa adicionada: ${st.processName} (TC ${st.tcMin ? ft(st.tcMin) + " " + Calc.TIME_UNITS[unitOf()].label : "sem tempo padrão"}).`, "ok");
@@ -887,6 +1055,10 @@
     // Cabeçalho, conflito, exportação
     $("btn-connect-folder").addEventListener("click", connectFolder);
     $("btn-docs").addEventListener("click", () => showDocs());
+    $("new-client").addEventListener("input", renderNewDocStudies);
+    $("doc-dialog").addEventListener("close", () => (state.pendingStudyKey = null));
+    $("btn-tc-undo").addEventListener("click", undoTcChanges);
+    $("btn-tc-ok").addEventListener("click", () => showTcBanner([]));
     $("btn-export-xlsx-mfv").addEventListener("click", exportXlsx);
     $("btn-mfv-ai").addEventListener("click", mfvAiSummary);
     $("btn-mfv-ai-generate").addEventListener("click", mfvAiSummary);
@@ -939,17 +1111,24 @@
     });
     $("new-doc-form").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const client = $("new-client").value.trim();
+      const typed = $("new-client").value.trim();
       const family = $("new-family").value.trim();
-      if (!client || !family) return toast("Informe a empresa e a família.", "warn");
+      if (!typed || !family) return toast("Informe a empresa e a família.", "warn");
+      // Mesma empresa dos estudos com a mesma grafia ("metal alfa" → "Metal Alfa")
+      const client = knownClients().get(Calc.elementKey(typed)) || typed;
+      const chosen = Array.from($("new-doc-study-list").querySelectorAll("input:checked"))
+        .map((i) => state.studies.find((x) => x.key === i.value))
+        .filter(Boolean);
+      state.pendingStudyKey = null;
       await flushSave();
       const doc = M.createMfv({ clientName: client, family });
+      doc.steps = chosen.map(stepFromStudy);
       setCurrent({ study: doc, diskRevision: null, dirty: true });
       await persistLocal();
       await Store.setKV("lastMfvId", doc.id);
       dlg.close();
       if (state.folder === "granted") queueWrite();
-      toast(`MFV criado: ${doc.fileName}`, "ok");
+      toast(`MFV criado: ${doc.fileName}${chosen.length ? ` com ${chosen.length} etapa(s) dos estudos. Preencha nº de operadores e uptime.` : ""}`, "ok", 6000);
     });
     $("doc-list").addEventListener("click", async (e) => {
       const btn = e.target.closest("[data-action]");
@@ -957,7 +1136,10 @@
       const li = btn.closest("li");
       if (btn.dataset.action === "open") {
         await flushSave();
-        if (await openDoc(li.dataset.id, li.dataset.fileName)) dlg.close();
+        if (await openDoc(li.dataset.id, li.dataset.fileName)) {
+          addPendingStudy();
+          dlg.close();
+        }
       }
     });
     $("input-import-mfv").addEventListener("change", async (e) => {
@@ -987,24 +1169,11 @@
   }
 
   async function showDocs() {
-    const items = new Map();
-    (await Store.listLocal(STORE)).forEach((r) => r && r.study && items.set(r.id, { doc: r.study, inFolder: false }));
-    let source = "Navegador deste dispositivo";
-    if (await Store.folderReady()) {
-      source = `Pasta: ${Store.getDirHandle().name}`;
-      try {
-        const { studies } = await Store.listFolderStudies({ pattern: M.FILE_PATTERN, normalize: M.normalizeMfv });
-        studies.forEach((d) => {
-          const it = items.get(d.id);
-          if (!it || String(d.updatedAt) > String(it.doc.updatedAt)) items.set(d.id, { doc: d, inFolder: true });
-          else it.inFolder = true;
-        });
-      } catch (err) {
-        toast(`Erro ao ler a pasta: ${err.message || err}`, "error");
-      }
-    }
+    const { list, source } = await listDocs();
     $("doc-source").textContent = source;
-    const list = Array.from(items.values()).sort((a, b) => String(b.doc.updatedAt).localeCompare(String(a.doc.updatedAt)));
+    // Empresas dos estudos e MFVs: o nome digitado no "Novo MFV" sai igual ao dos estudos
+    $("client-list").replaceChildren(...Array.from(knownClients(list).values()).map((n) => el("option", { value: n })));
+    renderNewDocStudies();
     $("doc-list").replaceChildren(
       ...(list.length
         ? list.map(({ doc, inFolder }) => {
@@ -1186,6 +1355,11 @@
     setTemplateInfo(await getTemplate());
     syncTemplate();
     await loadStudies();
+    // Vindo do botão "→ MFV" da cronoanálise: abre/cria o MFV da empresa com o estudo
+    if (await openFromCrono()) {
+      refreshStatus();
+      return;
+    }
     let opened = false;
     const lastId = await Store.getKV("lastMfvId");
     if (lastId) opened = await openDoc(lastId);

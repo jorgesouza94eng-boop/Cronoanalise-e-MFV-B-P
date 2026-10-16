@@ -52,6 +52,15 @@
     </div>
   </div>
 
+  <!-- TCs atualizados a partir dos estudos de cronoanálise -->
+  <div id="tc-banner" class="info-banner" role="status" hidden>
+    <span id="tc-banner-text"></span>
+    <div class="conflict-actions">
+      <button type="button" id="btn-tc-undo" class="btn-outline btn-small" title="Mantém os TCs anteriores (as etapas passam a usar o valor como editado)">Desfazer</button>
+      <button type="button" id="btn-tc-ok" class="btn-secondary btn-small">OK</button>
+    </div>
+  </div>
+
   <main class="app-workspace">
 
     <!-- HORÁRIO, DEMANDA E TAKT -->
@@ -356,12 +365,17 @@
     <form id="new-doc-form" class="new-study-form" autocomplete="off">
       <div class="card-header-mini">Novo MFV (1 arquivo por cliente / família)</div>
       <div class="new-study-grid">
-        <div class="param-field"><label for="new-client">Empresa / Cliente</label><input type="text" id="new-client" required></div>
+        <div class="param-field"><label for="new-client">Empresa / Cliente</label><input type="text" id="new-client" list="client-list" required></div>
         <div class="param-field"><label for="new-family">Família / Produto</label><input type="text" id="new-family" required></div>
         <button type="submit" class="btn-primary">Criar MFV</button>
       </div>
-      <p class="form-hint">Depois de criar, adicione as etapas a partir dos estudos de cronoanálise do cliente.</p>
+      <div class="new-doc-studies" id="new-doc-studies" hidden>
+        <div class="card-header-mini">Estudos desta empresa — marque os que serão etapas (na ordem da lista)</div>
+        <ul class="study-check-list" id="new-doc-study-list"></ul>
+      </div>
+      <p class="form-hint" id="new-doc-hint">Escolha a empresa: os estudos de cronoanálise dela aparecem aqui para virar etapas, com o TC já preenchido.</p>
     </form>
+    <datalist id="client-list"></datalist>
     <div class="study-list-header">
       <div class="card-header-mini">MFVs salvos</div>
       <span id="doc-source" class="study-source"></span>

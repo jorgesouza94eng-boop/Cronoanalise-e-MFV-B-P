@@ -4,10 +4,32 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.4** | 16/10/2026 | Carga do posto com vários produtos e ligação Cronoanálise → MFV |
 | **REV 1.3** | 16/10/2026 | Início por filmagem, vários produtos no mesmo estudo e filtros |
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.4 — 16/10/2026 (carga do mix e ligação com o MFV)
+
+### Novidades
+- **Demanda por produto:** com vários produtos, cada produto tem a sua demanda diária (vazio = demanda geral). Jornada, paradas e tolerância continuam uma vez por estudo, porque são do posto.
+- **Carga do posto (mix):** quadro com TP × demanda de cada produto, ocupação do posto (Σ cargas ÷ tempo líquido), takt misto e TC ponderado pelo mix.
+  - O status do posto passa a ser avaliado pelo mix: 🟢 até 100% (atende o mix) · 🔴 acima de 100% (sobrecarga).
+  - O quadro também sai no Excel simples e no CSV.
+- **Cronoanálise → MFV:**
+  - **Novo MFV com a empresa dos estudos:** o campo sugere as empresas já usadas e grava o MFV com a mesma grafia dos estudos.
+  - **Estudos da empresa no Novo MFV:** os estudos marcados viram etapas com o TC preenchido, inclusive a opção "Mix (TC ponderado)".
+  - **Botão "→ MFV"** na cronoanálise: abre o MFV da empresa e inclui o estudo (ou o produto exibido) como etapa, sem duplicar. Se a empresa não tiver MFV, abre o Novo MFV já preenchido. Funciona também abrindo o app direto do computador.
+  - **Aviso de TC atualizado:** a atualização automática dos TCs ao abrir o MFV, que antes era silenciosa, passa a mostrar o que mudou, com a opção **Desfazer** (mantém o valor anterior como TC editado).
+
+### Compatibilidade
+- Estudos no formato versão 4 (demanda por produto). Os arquivos anteriores abrem com os mesmos resultados. O formato do MFV não mudou.
+
+### Testes
+- 122 testes de unidade (3 novos) e o novo teste de navegador `tests/e2e.rev14.js` (21 verificações). O botão "→ MFV" também foi conferido abrindo o app direto do arquivo (file://).
 
 ---
 

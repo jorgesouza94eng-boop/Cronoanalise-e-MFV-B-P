@@ -81,6 +81,14 @@
       summaryNote: $("summary-note"),
       summaryHint: $("summary-hint"),
       filmsPanel: $("films-panel"),
+      btnToMfv: $("btn-to-mfv"),
+      mixPanel: $("mix-panel"),
+      mixTbody: $("mix-tbody"),
+      mixHint: $("mix-hint"),
+      mixDemand: $("mix-demand"),
+      mixWeighted: $("mix-weighted"),
+      mixLoad: $("mix-load"),
+      mixOccupancy: $("mix-occupancy"),
       multiProduct: $("opt-multi-product"),
       thProduct: $("th-product"),
       colProduct: $("col-product"),
@@ -159,6 +167,18 @@
       if (!ok) els.multiProduct.checked = !els.multiProduct.checked;
     });
     els.summaryProduct.addEventListener("change", () => h.onProductSelect(els.summaryProduct.value));
+
+    // Carga do posto: demanda de cada produto
+    els.mixTbody.addEventListener("input", (e) => {
+      const key = e.target.dataset && e.target.dataset.mixDemand;
+      if (key != null) {
+        const ok = h.onProductDemandChange(key, e.target.value);
+        e.target.classList.toggle("input-invalid", !ok);
+      }
+    });
+
+    // Cronoanálise → MFV
+    els.btnToMfv.addEventListener("click", () => h.onGoToMfv());
 
     // Filtros
     const onFilter = () => {
@@ -608,9 +628,70 @@
     renderProducts(computed);
     renderFilms(computed);
     renderSummary(computed);
+    renderMix(computed);
     renderCompilation(computed);
     renderKpis(computed);
     applyFilters(false);
+  }
+
+  /** Quadro "Carga do posto (mix)": só com vários produtos. Campos recriados só se os produtos mudam. */
+  function renderMix(computed) {
+    const mix = computed.mix;
+    els.mixPanel.hidden = !mix;
+    if (!mix) return;
+    const unit = computed.unit;
+    const ft = (m) => (m == null ? "--" : Calc.formatTime(m, unit));
+    const sig = mix.items.map((i) => i.key).join("|");
+    if (els.mixTbody.dataset.sig !== sig) {
+      els.mixTbody.dataset.sig = sig;
+      els.mixTbody.replaceChildren(
+        ...mix.items.map((i) => {
+          const tr = document.createElement("tr");
+          tr.dataset.key = i.key;
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "input-cell mono mix-demand";
+          input.inputMode = "decimal";
+          input.autocomplete = "off";
+          input.dataset.mixDemand = i.key;
+          input.setAttribute("aria-label", `Demanda diária de ${i.name}`);
+          const cells = ["cell-text", "", "cell-readonly mono", "cell-readonly mono", "cell-readonly mono"].map((c) => {
+            const td = document.createElement("td");
+            if (c) td.className = c;
+            return td;
+          });
+          cells[0].textContent = i.name;
+          cells[1].append(input);
+          tr.append(...cells);
+          return tr;
+        })
+      );
+    }
+    const general = lastComputed && lastComputed.products.find((p) => !p.demandOwn);
+    Array.from(els.mixTbody.rows).forEach((tr, n) => {
+      const i = mix.items[n];
+      const p = computed.products[n];
+      if (!i || !p) return;
+      const input = tr.querySelector("input");
+      if (document.activeElement !== input && input.value !== p.demandRaw) input.value = p.demandRaw;
+      input.placeholder = p.demandOwn ? "" : general && general.demand != null ? `geral: ${fmt(general.demand, 0)}` : "informe";
+      tr.cells[2].textContent = ft(i.tp);
+      tr.cells[3].textContent = i.load == null ? "--" : fmt(i.load, 1);
+      tr.cells[4].textContent = i.load == null || !(mix.netTime > 0) ? "--" : `${fmt((i.load / mix.netTime) * 100, 1)}%`;
+      tr.title = i.load == null ? (i.tp == null ? "Produto sem tempo padrão" : "Informe a demanda") : "";
+    });
+    els.mixDemand.textContent = mix.demand == null ? "--" : fmt(mix.demand, mix.demand % 1 ? 2 : 0);
+    els.mixWeighted.textContent = mix.weightedTP == null ? "--" : `${ft(mix.weightedTP)} (ponderado)`;
+    els.mixLoad.textContent = mix.load == null ? "--" : fmt(mix.load, 1);
+    els.mixOccupancy.textContent = mix.occupancyPct == null ? "--" : `${mix.status === "sobrecarga" ? "🔴" : mix.status === "atende" ? "🟢" : "⚠"} ${fmt(mix.occupancyPct, 1)}%`;
+    els.mixOccupancy.classList.toggle("is-over", mix.status === "sobrecarga");
+    els.mixOccupancy.classList.toggle("is-ok", mix.status === "atende");
+    const u = Calc.TIME_UNITS[unit].label;
+    const base = `Tempo líquido: ${fmt(mix.netTime, 1)} min/dia` + (mix.taktMix != null ? ` • Takt misto = ${ft(mix.taktMix)} ${u}/pç (tempo líquido ÷ Σ demandas)` : "");
+    els.mixHint.textContent =
+      mix.status === "incompleto"
+        ? `${base} • ⚠ ${mix.missing} produto(s) sem demanda ou sem tempo padrão: ocupação parcial.`
+        : `${base} • ${mix.status === "sobrecarga" ? "O posto NÃO atende o mix (ocupação acima de 100%)." : "O posto atende o mix."}`;
   }
 
   /** Lista de produtos: autocompletar, seletor do resumo e filtro. */
@@ -978,6 +1059,16 @@
 
     els.kpiCard.classList.remove("is-bottleneck", "is-balanced", "is-invalid");
     const errNote = computed.errorCount ? ` • ⚠ ${computed.errorCount} linha(s) com erro` : "";
+    // Vários produtos: o gargalo do posto é avaliado pela carga do mix (o tempo é dividido)
+    const mix = computed.mix;
+    if (mix && mix.status !== "incompleto") {
+      const over = mix.status === "sobrecarga";
+      els.kpiCard.classList.add(over ? "is-bottleneck" : "is-balanced");
+      els.kpiStatus.textContent = over ? "SOBRECARGA" : "ATENDE O MIX";
+      els.kpiDetail.textContent = `Ocupação do posto: ${fmt(mix.occupancyPct, 1)}% (${computed.products.length} produtos)` + errNote;
+      if (k.taktTime != null) els.kpiTaktSec.textContent = `Takt de ${computed.product.name}${computed.product.demandOwn ? "" : " (demanda geral)"} • misto: ${Calc.formatTime(mix.taktMix, unit, kd)} ${u}`;
+      return;
+    }
     switch (k.status) {
       case "parametros-invalidos":
         els.kpiCard.classList.add("is-invalid");

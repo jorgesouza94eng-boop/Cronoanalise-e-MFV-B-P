@@ -296,6 +296,27 @@ button:focus-visible,
   flex-wrap: wrap;
 }
 
+.info-banner {
+  background-color: var(--status-info-bg);
+  border-bottom: 1px solid #c7d2fe;
+  color: var(--status-info-text);
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.info-banner[hidden] { display: none; }
+
+/* Novo MFV: estudos da empresa para virar etapas */
+.new-doc-studies[hidden] { display: none; }
+.study-check-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+.study-check-list label { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 4px 6px; border-radius: var(--radius-sm); cursor: pointer; }
+.study-check-list label:hover { background-color: var(--bg-subtle); }
+.study-check-list .study-check-tc { margin-left: auto; color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; }
+
 .conflict-actions {
   display: flex;
   gap: 8px;
@@ -801,6 +822,21 @@ select.input-type.is-acyclic {
 .filter-bar.is-filtering { background-color: var(--bg-highlight); }
 .summary-table tr.row-filtered-out,
 .chrono-table tr[hidden] { display: none; }
+
+/* Carga do posto (mix de produtos) */
+.mix-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--border-light);
+}
+.mix-panel[hidden] { display: none; }
+.mix-panel .table-container { max-height: none; min-height: 0; flex: none; }
+.mix-table .mix-demand { width: 110px; text-align: right; border: 1px solid var(--slate-300); border-radius: var(--radius-sm); height: 30px; min-height: 30px; }
+.mix-table td.is-over { color: var(--status-danger-text); font-weight: 700; }
+.mix-table td.is-ok { color: var(--status-ok-text); font-weight: 700; }
+.mix-table .text-muted { font-weight: 400; }
 
 /* Filmagens do estudo (início e peças por filmagem) */
 .films-panel {

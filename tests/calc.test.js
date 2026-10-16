@@ -800,3 +800,47 @@ test("produtos e início: gravados, normalizados e resumidos no JSON", () => {
   assert.deepEqual(old.filmStarts, {});
   assert.equal(old.elements[0].product, "");
 });
+
+/* ==========================================================================
+   REV 1.4: DEMANDA POR PRODUTO E CARGA DO POSTO (MIX)
+   ========================================================================== */
+
+test("demanda por produto: takt do produto usa a demanda própria; vazio = demanda geral", () => {
+  const s = twoProducts();
+  s.shiftParams = { shiftTimeMin: 500, plannedStopsMin: 20, dailyDemandPcs: 240, tolerancePct: 0 };
+  let r = C.computeStudy(s);
+  close(r.products[0].kpis.taktTime, 480 / 240, "sem demanda própria: geral");
+  assert.equal(r.products[0].demandOwn, false);
+  s.productDemand = { [r.products[1].key]: "600" };
+  r = C.computeStudy(s);
+  close(r.products[1].kpis.taktTime, 480 / 600, "B: demanda própria");
+  close(r.products[0].kpis.taktTime, 480 / 240, "A continua com a geral");
+  assert.equal(r.products[1].demandOwn, true);
+});
+
+test("carga do posto: Σ TP × demanda, ocupação, takt misto e TC ponderado", () => {
+  const s = twoProducts();
+  s.shiftParams = { shiftTimeMin: 500, plannedStopsMin: 20, dailyDemandPcs: 0, tolerancePct: 0 };
+  let r = C.computeStudy(s);
+  const [a, b] = r.products;
+  assert.equal(r.mix.status, "incompleto", "sem demanda");
+  s.productDemand = { [a.key]: "600", [b.key]: "300" };
+  r = C.computeStudy(s);
+  const tpA = 12 / 60;
+  const tpB = 50 / 60;
+  const load = tpA * 600 + tpB * 300; // 120 + 250 = 370 min
+  close(r.mix.load, load);
+  close(r.mix.occupancyPct, (load / 480) * 100);
+  close(r.mix.taktMix, 480 / 900);
+  close(r.mix.weightedTP, load / 900);
+  assert.equal(r.mix.status, "atende");
+  s.productDemand[b.key] = "500"; // 120 + 416,7 = 536,7 min > 480
+  assert.equal(C.computeStudy(s).mix.status, "sobrecarga");
+  // Gravado no arquivo e normalizado
+  const json = JSON.parse(C.serializeStudy(s));
+  assert.equal(json.results.mix.status, "sobrecarga");
+  assert.deepEqual(C.normalizeStudy(json).study.productDemand, { [a.key]: "600", [b.key]: "500" });
+  // Estudo de produto único não tem quadro de mix
+  s.elements.forEach((e) => (e.product = ""));
+  assert.equal(C.computeStudy(s).mix, null);
+});
