@@ -123,6 +123,26 @@ A linha marcada ganha uma faixa amarela e a etiqueta **F2**, **F3**, e assim por
 
 ---
 
+## 2.1 MFV — Estado presente (`mfv.html`)
+
+O link **MFV** no cabeçalho abre o Mapa de Fluxo de Valor, que reproduz a aba **EP** da planilha "MFV Simplificado". Há **um arquivo por cliente e família** (`MFV_<cliente>_<família>_<data>_<id>.json`), salvo na mesma pasta do OneDrive e com a mesma proteção contra conflito dos estudos.
+
+| Bloco | O que faz |
+|---|---|
+| **Horário de trabalho** | Entrada, saída, pausas e refeição por dia da semana. Mostra o efetivo por dia e a média por dia trabalhado |
+| **Demanda e disponibilidade** | Demanda mensal ÷ dias úteis = demanda diária. Disponibilidade da família (%), unidade do produto (pç, m², kg) e unidade de tempo (s, min, h) |
+| **Takt** | Tempo disponível por dia ÷ demanda diária |
+| **GBO** | Cada etapa vem de um **estudo de cronoanálise**: o TC é o tempo padrão do estudo. O TC é **editável** (vira "✎ editado", com a opção **↺ usar estudo**). Também é possível criar etapas manuais. Cada etapa tem nº de operadores, uptime (%) e % do takt. **Atualizar TCs** relê os estudos |
+| **Gráfico GBO** | Barras por etapa com a linha do takt. Barras acima do takt ficam em vermelho e o processo Kaizen fica tracejado |
+| **Resultados** | Gargalo (maior TC), operadores atuais × ideais (ΣTC ÷ takt), capacidade da linha (tempo disponível ÷ maior TC), produtividade (/dia/op e /h/op) e o processo Kaizen marcado |
+| **Atravessamento** | Estoques ÷ demanda diária = dias. A soma dá o lead time |
+
+Conferência com o MFV real da Laje Forte (aba EP): deram os mesmos 440 min/dia, a mesma demanda de 206,67 m²/dia, o takt de 0,035484 h, a capacidade de 206,67 m²/dia, a produtividade de 14,09 m²/h/op, 1,00 operador ideal e 8 dias de atravessamento.
+
+> Na planilha, a "Capacidade de Produção Diária da Linha" (K46) usa as horas sem descontar a disponibilidade da família, enquanto o setor Kaizen (N46) desconta. O app usa o **tempo disponível com a disponibilidade** nos dois casos. Com disponibilidade de 100%, os resultados são idênticos.
+
+![MFV](docs/tela-mfv.png)
+
 ## 3. Regras de cálculo
 
 | Indicador | Fórmula |
@@ -213,6 +233,9 @@ js/xlsx.js            Exportação Excel no layout B+P (gerador .xlsx próprio, 
 js/storage.js         IndexedDB, pasta do OneDrive, exportar/importar
 js/ui.js              Renderização e navegação por teclado
 js/app.js             Orquestração: estado, autosave, conflitos, gerenciador de estudos
+mfv.html              Página do MFV (estado presente)
+js/mfv-calc.js        Motor de cálculo do MFV (aba EP: horário, takt, GBO, capacidade, atravessamento)
+js/mfv-app.js         Tela e salvamento do MFV (mesma pasta e proteção contra conflito)
 sw.js                 Service worker (offline)
 manifest.webmanifest  Instalação como app (PWA)
 tests/                Testes automatizados
@@ -225,7 +248,7 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 66 testes: cálculo, compilação e Excel (Node 18+, sem dependências)
+npm test             # 74 testes: cálculo, compilação, Excel e MFV (Node 18+, sem dependências)
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:
@@ -245,7 +268,8 @@ As instruções estão no cabeçalho do arquivo.
 
 ## 8. Limitações conhecidas (MVP)
 
-- O cálculo estatístico do número de ciclos necessários e o módulo MFV ficam para as próximas etapas.
+- O cálculo estatístico do número de ciclos necessários e o MFV **estado futuro** (aba EF) ficam para as próximas etapas.
+- O MFV ainda não tem exportação Excel nem o desenho do fluxograma.
 - No celular a grade usa rolagem horizontal; o modo "cartão" fica para a fase 2.
 - Estudos alterados no navegador sem pasta conectada só são gravados na pasta quando forem abertos novamente com a pasta conectada (o gerenciador marca "Alterações não gravadas na pasta").
 - A gravação na pasta usa a File System Access API, disponível no Chrome e no Edge para computador.

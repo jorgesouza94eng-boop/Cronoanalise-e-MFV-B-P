@@ -714,6 +714,121 @@ select.input-type.is-acyclic {
   background: var(--bg-surface);
 }
 
+/* Navegação entre módulos (Cronoanálise | MFV) */
+.app-nav { display: flex; gap: 4px; margin-top: 2px; }
+.app-nav a {
+  font-size: 11px;
+  color: var(--text-on-dark-muted);
+  text-decoration: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.app-nav a:hover { color: #fff; border-color: var(--slate-700); }
+.app-nav a[aria-current="page"] { color: #fff; background: var(--primary-600); }
+
+/* ===== Página do MFV ===== */
+.mfv-top { grid-template-columns: minmax(420px, 1fr) 1.3fr; }
+.mfv-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.kpi-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.mfv-bottom { grid-template-columns: 1fr 1fr; }
+.mfv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mfv-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border-light);
+}
+.mfv-table td { border-bottom: 1px solid var(--border-light); height: 34px; padding: 0; }
+.mfv-table td.cell-readonly { padding: 0 8px; }
+.mfv-table .tfoot-label { padding: 6px 8px; font-weight: 700; }
+.mfv-table tr.row-error td { background: var(--status-danger-bg); }
+.cell-day { font-weight: 700; padding: 0 8px !important; width: 52px; color: var(--text-secondary); }
+.cell-center { text-align: center; }
+.mfv-steps-table { min-width: 980px; }
+.mfv-steps-table tr.row-over-takt td[data-out="takt"] { color: var(--status-danger-text); font-weight: 700; }
+.chrono-table td.origin-cell { padding: 0 8px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.origin-study { color: var(--primary-700); }
+.origin-cell .btn-link { margin-left: 6px; }
+.schedule-table input.input-cell { text-align: center; }
+.text-muted { color: var(--text-muted); }
+.btn-link { background: none; border: none; color: var(--primary-600); font-size: 11px; cursor: pointer; white-space: nowrap; padding: 0; }
+.btn-icon { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; width: 26px; height: 30px; }
+.btn-icon:hover { background: var(--slate-200); color: var(--text-main); }
+.step-actions { white-space: nowrap; }
+.step-actions .btn-icon-del { width: 26px; min-height: 30px; }
+.btn-small { margin-top: 8px; padding: 5px 10px; }
+.study-picker { max-width: 320px; }
+.notes-card textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.notes-actions { margin-top: 8px; display: flex; justify-content: flex-end; }
+.param-field select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 13px;
+  background: var(--bg-surface);
+}
+
+/* Gráfico de balanceamento (GBO) */
+.gbo-chart-wrap { padding: 0 16px 16px; }
+.gbo-chart { display: flex; flex-direction: column; gap: 6px; }
+.gbo-plot {
+  position: relative;
+  height: 220px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--slate-300);
+}
+.gbo-col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; min-width: 0; }
+.gbo-bar { width: min(56px, 80%); background: #2563eb; border-radius: 4px 4px 0 0; }
+.gbo-bar.is-over { background: #dc2626; }
+.gbo-bar.is-kaizen { outline: 2px dashed #0f172a; outline-offset: 2px; }
+.gbo-value { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); margin-bottom: 3px; }
+.gbo-takt {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 2px dashed #d97706;
+  z-index: 1;
+  pointer-events: none;
+}
+.gbo-takt span {
+  position: absolute;
+  right: 0;
+  top: -18px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #b45309;
+  background: var(--bg-surface);
+  padding: 0 4px;
+}
+.gbo-labels { display: flex; gap: 10px; padding: 0 4px; }
+.gbo-labels span {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  text-align: center;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Compilação e soluções */
 .compilation-grid {
   display: grid;
@@ -1067,6 +1182,7 @@ select.input-type.is-acyclic {
   .kpi-grid { grid-template-columns: repeat(3, 1fr); }
   .params-grid { grid-template-columns: 1fr 1fr; }
   .compilation-grid { grid-template-columns: 1fr; }
+  .mfv-top, .mfv-bottom { grid-template-columns: 1fr; }
 }
 
 /* Celular (modo campo) */

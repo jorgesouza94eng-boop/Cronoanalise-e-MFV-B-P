@@ -18,8 +18,9 @@
   const Calc = root.LeanCalc;
 
   const DB_NAME = "LeanChronoDB";
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   const STORE_STUDIES = "studies"; // { id, study, diskRevision, dirty, exportedAt }
+  const STORE_MFV = "mfv"; // mesmo formato de registro, para os documentos de MFV
   const STORE_KV = "kv"; // chave → valor (handle da pasta, último estudo aberto…)
   const LS_PREFIX = "leanChrono:";
 
@@ -55,6 +56,9 @@
         const db = request.result;
         if (!db.objectStoreNames.contains(STORE_STUDIES)) {
           db.createObjectStore(STORE_STUDIES, { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains(STORE_MFV)) {
+          db.createObjectStore(STORE_MFV, { keyPath: "id" });
         }
         if (!db.objectStoreNames.contains(STORE_KV)) db.createObjectStore(STORE_KV);
       };
@@ -137,13 +141,18 @@
 
   /* ---- Estudos no cache local ------------------------------------------- */
 
-  async function listLocal() {
-    if (backend === "idb") return (await idbRun(STORE_STUDIES, "readonly", (s) => s.getAll())) || [];
+  /** Prefixo das chaves no localStorage/memória: "study:" (estudos) ou "mfv:". */
+  const keyPrefix = (store) => (store === STORE_MFV ? "mfv:" : "study:");
+
+  async function listLocal(store) {
+    const st = store || STORE_STUDIES;
+    if (backend === "idb") return (await idbRun(st, "readonly", (s) => s.getAll())) || [];
+    const prefix = keyPrefix(st);
     if (backend === "localStorage") {
       const out = [];
       for (let i = 0; i < root.localStorage.length; i++) {
         const k = root.localStorage.key(i);
-        if (k && k.startsWith(LS_PREFIX + "study:")) {
+        if (k && k.startsWith(LS_PREFIX + prefix)) {
           try {
             out.push(JSON.parse(root.localStorage.getItem(k)));
           } catch (e) {
@@ -154,37 +163,40 @@
       return out;
     }
     return Array.from(memoryStore.entries())
-      .filter(([k]) => k.startsWith("study:"))
+      .filter(([k]) => k.startsWith(prefix))
       .map(([, v]) => v);
   }
 
-  async function getLocal(id) {
+  async function getLocal(id, store) {
     if (!id) return null;
-    if (backend === "idb") return (await idbRun(STORE_STUDIES, "readonly", (s) => s.get(id))) || null;
+    const st = store || STORE_STUDIES;
+    if (backend === "idb") return (await idbRun(st, "readonly", (s) => s.get(id))) || null;
     if (backend === "localStorage") {
-      const raw = root.localStorage.getItem(LS_PREFIX + "study:" + id);
+      const raw = root.localStorage.getItem(LS_PREFIX + keyPrefix(st) + id);
       return raw ? JSON.parse(raw) : null;
     }
-    return memoryStore.get("study:" + id) || null;
+    return memoryStore.get(keyPrefix(st) + id) || null;
   }
 
-  async function putLocal(record) {
+  async function putLocal(record, store) {
+    const st = store || STORE_STUDIES;
     const clean = JSON.parse(JSON.stringify(record)); // remove referências da interface
-    if (backend === "idb") return idbRun(STORE_STUDIES, "readwrite", (s) => s.put(clean));
+    if (backend === "idb") return idbRun(st, "readwrite", (s) => s.put(clean));
     if (backend === "localStorage") {
-      root.localStorage.setItem(LS_PREFIX + "study:" + clean.id, JSON.stringify(clean));
+      root.localStorage.setItem(LS_PREFIX + keyPrefix(st) + clean.id, JSON.stringify(clean));
       return;
     }
-    memoryStore.set("study:" + clean.id, clean);
+    memoryStore.set(keyPrefix(st) + clean.id, clean);
   }
 
-  async function deleteLocal(id) {
-    if (backend === "idb") return idbRun(STORE_STUDIES, "readwrite", (s) => s.delete(id));
+  async function deleteLocal(id, store) {
+    const st = store || STORE_STUDIES;
+    if (backend === "idb") return idbRun(st, "readwrite", (s) => s.delete(id));
     if (backend === "localStorage") {
-      root.localStorage.removeItem(LS_PREFIX + "study:" + id);
+      root.localStorage.removeItem(LS_PREFIX + keyPrefix(st) + id);
       return;
     }
-    memoryStore.delete("study:" + id);
+    memoryStore.delete(keyPrefix(st) + id);
   }
 
   /* ==========================================================================
@@ -253,7 +265,7 @@
   }
 
   /** Lê e valida um arquivo de estudo da pasta. Retorna null se não existir ou estiver vazio. */
-  async function readStudyFile(fileName) {
+  async function readStudyFile(fileName, normalize) {
     let fileHandle;
     try {
       fileHandle = await dirHandle.getFileHandle(fileName);
@@ -270,20 +282,22 @@
     } catch (err) {
       return { invalid: true, error: "JSON corrompido ou incompleto" };
     }
-    const result = Calc.normalizeStudy(parsed);
+    const result = (normalize || Calc.normalizeStudy)(parsed);
     if (!result.ok) return { invalid: true, error: result.error };
     return result.study;
   }
 
   /** Lista os estudos da pasta (ignora cópias de conflito e arquivos inválidos). */
-  async function listFolderStudies() {
+  async function listFolderStudies(options) {
+    const opts = options || {};
+    const pattern = opts.pattern || FILE_PATTERN;
     const studies = [];
     const skipped = [];
     for await (const entry of dirHandle.values()) {
-      if (entry.kind !== "file" || !FILE_PATTERN.test(entry.name)) continue;
+      if (entry.kind !== "file" || !pattern.test(entry.name)) continue;
       if (entry.name.includes(CONFLICT_MARK)) continue;
       try {
-        const study = await readStudyFile(entry.name);
+        const study = await readStudyFile(entry.name, opts.normalize);
         if (!study) continue;
         if (study.invalid) skipped.push({ fileName: entry.name, error: study.error });
         // O nome real do arquivo prevalece (caso tenha sido renomeado no Explorer).
@@ -331,7 +345,8 @@
     if (!dirHandle) return { status: "no-folder" };
     if ((await queryPermission()) !== "granted") return { status: "no-permission" };
 
-    const disk = await readStudyFile(study.fileName);
+    const disk = await readStudyFile(study.fileName, opts.normalize);
+    const serialize = opts.serialize || Calc.serializeStudy;
     const diskStudy = disk && !disk.invalid ? disk : null;
     const diskExists = !!disk;
 
@@ -344,14 +359,14 @@
       let conflictFile = null;
       if (!opts.skipConflictCopy) {
         conflictFile = conflictFileName(study.fileName);
-        await writeTextFile(conflictFile, Calc.serializeStudy(study));
+        await writeTextFile(conflictFile, serialize(study));
       }
       return { status: "conflict", diskStudy, diskInvalid: diskExists && !diskStudy, conflictFile };
     }
 
     const nextRevision = (diskStudy ? diskStudy.revision : expectedRevision || 0) + 1;
     const toWrite = Object.assign({}, study, { revision: nextRevision });
-    await writeTextFile(study.fileName, Calc.serializeStudy(toWrite));
+    await writeTextFile(study.fileName, serialize(toWrite));
     return { status: "ok", revision: nextRevision };
   }
 
@@ -374,18 +389,19 @@
   }
 
   /** Lê um arquivo escolhido pelo usuário e valida como estudo. */
-  async function readImportFile(file) {
+  async function readImportFile(file, normalize) {
     let parsed;
     try {
       parsed = JSON.parse(await file.text());
     } catch (err) {
       return { ok: false, error: "O arquivo não contém JSON válido" };
     }
-    return Calc.normalizeStudy(parsed);
+    return (normalize || Calc.normalizeStudy)(parsed);
   }
 
   root.LeanStorage = {
     fsSupported,
+    STORE_MFV,
     init,
     getBackend: () => backend,
     getKV,

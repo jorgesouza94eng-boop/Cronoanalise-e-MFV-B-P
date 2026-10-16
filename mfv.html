@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="Mapa de Fluxo de Valor (estado presente) a partir dos estudos de cronoanálise — funciona 100% offline.">
+  <title>MFV | Lean Chrono &amp; MFV</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-mfv">
+
+  <header class="app-header">
+    <div class="brand-area">
+      <div class="brand-badge">LEAN</div>
+      <div class="brand-titles">
+        <h1>MFV — Estado presente</h1>
+        <nav class="app-nav" aria-label="Módulos">
+          <a href="index.html">Cronoanálise</a><a href="mfv.html" aria-current="page">MFV</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="client-context">
+      <div class="input-inline">
+        <label for="mfv-client">Empresa / Cliente</label>
+        <input type="text" id="mfv-client" data-doc="clientName" placeholder="Nome da indústria..." autocomplete="off">
+      </div>
+      <div class="input-inline">
+        <label for="mfv-family">Família / Produto</label>
+        <input type="text" id="mfv-family" data-doc="family" placeholder="Ex.: Lajes treliçadas TR8/TR12" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="storage-controls">
+      <span id="sync-status" class="status-pill status-offline" role="status" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span><span class="status-text">Iniciando...</span>
+      </span>
+      <button id="btn-docs" class="btn-header" type="button" title="Abrir, criar ou importar MFVs">MFVs</button>
+      <button id="btn-connect-folder" class="btn-primary" type="button" hidden>
+        <span class="btn-label">Conectar pasta (OneDrive)</span>
+      </button>
+    </div>
+  </header>
+
+  <div id="conflict-banner" class="conflict-banner" role="alert" hidden>
+    <div class="conflict-text"><strong>Conflito de versões.</strong> <span id="conflict-detail"></span></div>
+    <div class="conflict-actions">
+      <button type="button" id="btn-conflict-disk" class="btn-outline">Usar versão da pasta</button>
+      <button type="button" id="btn-conflict-local" class="btn-danger">Manter minha versão (sobrescrever)</button>
+    </div>
+  </div>
+
+  <main class="app-workspace">
+
+    <!-- HORÁRIO, DEMANDA E TAKT -->
+    <section class="dashboard-section mfv-top" aria-label="Horário de trabalho, demanda e takt">
+      <div class="shift-params-card">
+        <div class="card-header-mini">Horário de trabalho — estado presente</div>
+        <table class="mfv-table schedule-table">
+          <thead>
+            <tr><th>Dia</th><th>Entrada</th><th>Saída</th><th title="Pausas (café, ginástica...)">Pausas</th><th>Refeição</th><th>Efetivo</th></tr>
+          </thead>
+          <tbody id="schedule-tbody"></tbody>
+          <tfoot>
+            <tr><td colspan="5" class="tfoot-label">Média por dia trabalhado:</td><td class="mono" id="avg-day">--</td></tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="mfv-side">
+        <div class="shift-params-card">
+          <div class="card-header-mini">Demanda e disponibilidade</div>
+          <div class="params-grid">
+            <div class="param-field">
+              <label for="demand-monthly">Demanda mensal</label>
+              <input type="text" id="demand-monthly" data-doc="demandMonthly" inputmode="decimal" autocomplete="off">
+            </div>
+            <div class="param-field">
+              <label for="product-unit">Unidade do produto</label>
+              <input type="text" id="product-unit" data-doc="productUnit" placeholder="pç, m², kg..." autocomplete="off">
+            </div>
+            <div class="param-field">
+              <label for="work-days">Dias úteis no mês</label>
+              <input type="text" id="work-days" data-doc="workDaysMonth" inputmode="decimal" autocomplete="off">
+            </div>
+            <div class="param-field">
+              <label for="availability" title="Parcela do tempo disponível dedicada à família (planilha: 'Disponibilidade de Tempo Família')">Disponibilidade família (%)</label>
+              <input type="text" id="availability" data-doc="availabilityPct" inputmode="decimal" autocomplete="off">
+            </div>
+            <div class="param-field">
+              <label for="mfv-time-unit">Unidade de tempo (TC e takt)</label>
+              <select id="mfv-time-unit" data-doc="timeUnit">
+                <option value="s">Segundos</option><option value="min">Minutos</option><option value="h">Horas</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="kpi-grid kpi-grid-3">
+          <div class="kpi-card">
+            <span class="kpi-title">Tempo disponível</span>
+            <div class="kpi-value-group"><strong id="kpi-avail">--</strong><span class="kpi-unit">min/dia</span></div>
+            <span class="kpi-caption" id="kpi-avail-cap">--</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-title">Demanda diária</span>
+            <div class="kpi-value-group"><strong id="kpi-demand">--</strong><span class="kpi-unit" id="kpi-demand-unit">pç/dia</span></div>
+            <span class="kpi-caption">Mensal ÷ dias úteis</span>
+          </div>
+          <div class="kpi-card highlight-takt">
+            <span class="kpi-title">Takt time</span>
+            <div class="kpi-value-group"><strong id="kpi-takt">--</strong><span class="kpi-unit" id="kpi-takt-unit">min/pç</span></div>
+            <span class="kpi-caption" id="kpi-takt-cap">Tempo disponível ÷ demanda</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- GBO -->
+    <section class="timesheet-section summary-section" aria-label="Balanceamento de operações (GBO)">
+      <div class="section-toolbar">
+        <div class="toolbar-left">
+          <h2>Balanceamento de operações (GBO)</h2>
+          <span class="keyboard-hint">TC puxado do estudo de cronoanálise (tempo padrão) e editável • marque o processo Kaizen</span>
+        </div>
+        <div class="toolbar-actions">
+          <div class="inline-field">
+            <label for="study-picker">Estudo</label>
+            <select id="study-picker" class="study-picker"></select>
+          </div>
+          <button type="button" id="btn-add-study-step" class="btn-secondary">+ Etapa do estudo</button>
+          <button type="button" id="btn-add-manual-step" class="btn-outline">+ Etapa manual</button>
+          <button type="button" id="btn-refresh-studies" class="btn-outline" title="Reler os estudos vinculados e atualizar os TCs">Atualizar TCs</button>
+        </div>
+      </div>
+      <div class="table-container summary-container">
+        <table class="chrono-table mfv-steps-table">
+          <colgroup>
+            <col style="width:64px"><col style="width:44px"><col><col style="width:220px"><col style="width:110px">
+            <col style="width:80px"><col style="width:90px"><col style="width:90px"><col style="width:90px"><col style="width:100px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th title="Processo Kaizen (um por MFV)">Kaizen</th>
+              <th>Nº</th>
+              <th>Etapa</th>
+              <th>Origem do TC</th>
+              <th>TC (<span class="unit-label">min</span>)</th>
+              <th>Nº ops</th>
+              <th title="Disponibilidade / uptime da etapa (vazio = 100%)">Uptime (%)</th>
+              <th>Ops efet.</th>
+              <th>% do takt</th>
+              <th><span class="sr-only">Ações</span></th>
+            </tr>
+          </thead>
+          <tbody id="steps-tbody"></tbody>
+          <tfoot>
+            <tr>
+              <td colspan="4" class="tfoot-label">Tempo de ciclo total / operadores:</td>
+              <td class="cell-total mono highlight-col" id="tc-total">--</td>
+              <td></td><td></td>
+              <td class="cell-total mono" id="ops-total">--</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="gbo-chart-wrap">
+        <div class="chart-card">
+          <h3>Gráfico de balanceamento (GBO)</h3>
+          <p class="chart-sub">TC por etapa × takt (linha tracejada). Barras acima do takt = gargalo.</p>
+          <div id="gbo-chart" class="gbo-chart" role="img" aria-label="Gráfico de balanceamento das etapas em relação ao takt"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESULTADOS -->
+    <section class="kpi-grid" aria-label="Resultados do estado presente">
+      <div class="kpi-card">
+        <span class="kpi-title">Gargalo (maior TC)</span>
+        <div class="kpi-value-group"><strong id="kpi-bottleneck-tc">--</strong><span class="kpi-unit" id="kpi-bottleneck-unit"></span></div>
+        <span class="kpi-caption" id="kpi-bottleneck-name">--</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Operadores</span>
+        <div class="kpi-value-group"><strong id="kpi-ops">--</strong><span class="kpi-unit">atuais</span></div>
+        <span class="kpi-caption" id="kpi-ops-ideal">Ideal (ΣTC ÷ takt): --</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Capacidade da linha</span>
+        <div class="kpi-value-group"><strong id="kpi-cap">--</strong><span class="kpi-unit" id="kpi-cap-unit">pç/dia</span></div>
+        <span class="kpi-caption" id="kpi-cap-hour">--</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Produtividade</span>
+        <div class="kpi-value-group"><strong id="kpi-prod">--</strong><span class="kpi-unit" id="kpi-prod-unit">pç/h/op</span></div>
+        <span class="kpi-caption" id="kpi-prod-day">--</span>
+      </div>
+      <div class="kpi-card status-card" id="kpi-status-card">
+        <span class="kpi-title">Processo Kaizen</span>
+        <div class="kpi-value-group"><strong id="kpi-kaizen">--</strong></div>
+        <span class="kpi-caption" id="kpi-kaizen-detail">Marque uma etapa como Kaizen</span>
+      </div>
+    </section>
+
+    <!-- ATRAVESSAMENTO -->
+    <section class="dashboard-section mfv-bottom" aria-label="Atravessamento e premissas">
+      <div class="shift-params-card">
+        <div class="card-header-mini">Atravessamento (lead time) — estoques</div>
+        <table class="mfv-table inventory-table">
+          <thead><tr><th>Estoque</th><th>Quantidade (<span class="product-unit-label">pç</span>)</th><th>Dias</th><th></th></tr></thead>
+          <tbody id="inventory-tbody"></tbody>
+          <tfoot>
+            <tr><td class="tfoot-label">Tempo de atravessamento:</td><td></td><td class="mono cell-total" id="lead-time">--</td><td></td></tr>
+          </tfoot>
+        </table>
+        <button type="button" id="btn-add-inventory" class="btn-outline btn-small">+ Estoque</button>
+        <p class="form-hint" id="lead-hint">Dias = quantidade em estoque ÷ demanda diária.</p>
+      </div>
+      <div class="shift-params-card notes-card">
+        <div class="card-header-mini">Premissas e observações</div>
+        <textarea id="mfv-notes" data-doc="notes" rows="9"
+                  placeholder="Ex.: unidade 'peça' = m² de laje; demanda = capacidade declarada; pendências de estoques..."></textarea>
+        <div class="notes-actions">
+          <button type="button" id="btn-export-mfv" class="btn-outline">Exportar JSON</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- GERENCIADOR DE MFVs -->
+  <dialog id="doc-dialog" class="study-dialog" aria-labelledby="doc-dialog-title">
+    <div class="dialog-header">
+      <h2 id="doc-dialog-title">Mapas de Fluxo de Valor</h2>
+      <button type="button" class="btn-icon-close" id="btn-close-dialog" aria-label="Fechar">&times;</button>
+    </div>
+    <form id="new-doc-form" class="new-study-form" autocomplete="off">
+      <div class="card-header-mini">Novo MFV (1 arquivo por cliente / família)</div>
+      <div class="new-study-grid">
+        <div class="param-field"><label for="new-client">Empresa / Cliente</label><input type="text" id="new-client" required></div>
+        <div class="param-field"><label for="new-family">Família / Produto</label><input type="text" id="new-family" required></div>
+        <button type="submit" class="btn-primary">Criar MFV</button>
+      </div>
+      <p class="form-hint">Depois de criar, adicione as etapas a partir dos estudos de cronoanálise do cliente.</p>
+    </form>
+    <div class="study-list-header">
+      <div class="card-header-mini">MFVs salvos</div>
+      <span id="doc-source" class="study-source"></span>
+    </div>
+    <ul id="doc-list" class="study-list" aria-label="MFVs salvos"></ul>
+    <div class="dialog-footer">
+      <label class="btn-outline file-button">Importar JSON
+        <input type="file" id="input-import-mfv" accept=".json,application/json" hidden>
+      </label>
+    </div>
+  </dialog>
+
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+
+  <!-- Scripts clássicos (sem módulos ES) para funcionar também via file:// -->
+  <script src="js/calc.js"></script>
+  <script src="js/mfv-calc.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/mfv-app.js"></script>
+</body>
+</html>
