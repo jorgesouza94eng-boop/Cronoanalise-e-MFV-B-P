@@ -938,7 +938,8 @@
   // Exposto para diagnóstico e testes automatizados.
   /**
    * Aplica sugestões aprovadas da IA. Só preenche campos ainda vazios do estudo.
-   * classify: [{ name, value, waste }] | kaizen: [{ name, text }] | notes: { text, mode: "replace"|"append" }
+   * classify: [{ name, value, waste }] | kaizen: [{ name, text }] | rename: [{ to, from: [] }] |
+   * notes: { text, mode: "replace"|"append" }
    */
   function applyAi(s) {
     if (!state.study) return 0;
@@ -962,6 +963,16 @@
         rows[0].kaizen = k.text;
         changed += 1;
       }
+    });
+    // Padronização de nomes: renomeia as linhas das variantes para o nome padrão
+    (s.rename || []).forEach((g) => {
+      const keys = new Set(g.from.map((n) => Calc.elementKey(n)));
+      els.forEach((el) => {
+        if (keys.has(Calc.elementKey(el.description))) {
+          el.description = g.to;
+          changed += 1;
+        }
+      });
     });
     if (s.notes && s.notes.text) {
       state.study.notes = s.notes.mode === "append" && state.study.notes ? `${state.study.notes}\n\n${s.notes.text}` : s.notes.text;

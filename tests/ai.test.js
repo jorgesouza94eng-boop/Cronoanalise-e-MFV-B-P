@@ -121,3 +121,39 @@ test("API: generateContent com JSON e tratamento de erros", async () => {
   await assert.rejects(A.generate({ apiKey: "K", model: "m" }, "x", {}, blocked), /bloqueado/);
   await assert.rejects(A.generate({ apiKey: "", model: "m" }, "x", {}, ok), /Cadastre a chave/);
 });
+
+test("padronizar nomes: envia todos os elementos e só aceita grupos com nomes existentes", () => {
+  const s = study();
+  s.elements.push(C.createElement({ description: "Transp. material", videoTime: "1:40" }));
+  s.elements.push(C.createElement({ description: "transporte de materiais", videoTime: "1:50" }));
+  const p = A.buildNamesPrompt(s, C.computeStudy(s), true);
+  assert.ok(p.count >= 2 && p.text.includes('"grupos"') && !/Laje Forte/i.test(p.text));
+  const reply = JSON.stringify({ grupos: [
+    { padrao: "Transporte de material", variantes: ["Transp. material", "transporte de materiais", "Inventado"] },
+    { padrao: "Nome que não existe", variantes: ["Anotar OP"] },
+    { padrao: "Anotar OP", variantes: [] },
+  ] });
+  assert.deepEqual(A.parseNames(reply, p.names, s, true), [
+    { to: "Transporte de material", from: ["Transp. material", "transporte de materiais"] },
+  ]);
+});
+
+test("pergunta livre: inclui dados do estudo e a pergunta anonimizada", () => {
+  const s = study();
+  const p = A.buildQuestionPrompt(s, C.computeStudy(s), "O que fazer primeiro na Laje Forte?", true);
+  assert.equal(p.count, 1);
+  assert.ok(p.text.includes("Pergunta: O que fazer primeiro na [CLIENTE]?"));
+  assert.ok(p.text.includes('"por_valor"') === false && p.text.includes("Compilação por valor"));
+  assert.equal(A.buildQuestionPrompt(s, C.computeStudy(s), "  ", true).count, 0);
+});
+
+test("resumo executivo do MFV: números do EP, gargalo e cliente anonimizado", () => {
+  const M = require("../js/mfv-calc.js");
+  const d = M.createMfv({ clientName: "Laje Forte", family: "Lajes" });
+  d.demandMonthly = "8800";
+  d.steps = [M.createStep({ name: "Corte", tcManualMin: 0.75, operators: "2" }), M.createStep({ name: "Solda", tcManualMin: 1.5, operators: "1", kaizen: true })];
+  const p = A.buildMfvSummaryPrompt(d, M.computeMfv(d), true);
+  assert.equal(p.count, 2);
+  assert.ok(p.text.includes('"takt_min":1.3') && p.text.includes('"gargalo":{"etapa":"Solda"'));
+  assert.ok(!/Laje Forte/.test(p.text) && p.text.includes('"cliente":"[CLIENTE]"'));
+});

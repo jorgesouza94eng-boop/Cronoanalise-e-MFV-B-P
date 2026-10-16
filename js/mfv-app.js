@@ -732,6 +732,11 @@
     $("btn-connect-folder").addEventListener("click", connectFolder);
     $("btn-docs").addEventListener("click", () => showDocs());
     $("btn-export-xlsx-mfv").addEventListener("click", exportXlsx);
+    $("btn-mfv-ai").addEventListener("click", mfvAiSummary);
+    $("btn-mfv-ai-generate").addEventListener("click", mfvAiSummary);
+    $("btn-mfv-ai-close").addEventListener("click", () => $("mfv-ai-dialog").close());
+    $("btn-mfv-ai-append").addEventListener("click", () => applyMfvAi("append"));
+    $("btn-mfv-ai-replace").addEventListener("click", () => applyMfvAi("replace"));
     $("input-template-mfv").addEventListener("change", (e) => {
       const file = e.target.files && e.target.files[0];
       e.target.value = "";
@@ -960,6 +965,53 @@
       console.error("Falha ao preencher o modelo do MFV:", err);
       toast(`Não foi possível exportar: ${err.message || err}`, "error", 9000);
     }
+  }
+
+  /* ==========================================================================
+     RESUMO EXECUTIVO COM IA (mesma configuração do ✨ IA da cronoanálise)
+     ========================================================================== */
+
+  async function mfvAiSummary() {
+    const AI = root.LeanAI;
+    const dlg = $("mfv-ai-dialog");
+    const status = (t, err) => {
+      $("mfv-ai-status").textContent = t;
+      $("mfv-ai-status").classList.toggle("is-error", !!err);
+    };
+    if (!dlg.open) dlg.showModal();
+    let settings = null;
+    try {
+      settings = await Store.getKV(AI.SETTINGS_KEY);
+    } catch (e) {
+      /* sem armazenamento */
+    }
+    if (!settings || !settings.apiKey || !settings.model) {
+      return status("Configure a IA no botão ✨ IA da Cronoanálise (chave de API e modelo) e volte aqui.", true);
+    }
+    if (root.navigator.onLine === false) return status("A IA precisa de internet.", true);
+    const prompt = AI.buildMfvSummaryPrompt(state.doc, M.computeMfv(state.doc), settings.anonymize !== false);
+    if (!prompt.count) return status("Adicione as etapas do GBO antes de pedir o resumo.", true);
+    status("Consultando o Gemini...");
+    $("btn-mfv-ai-generate").disabled = true;
+    try {
+      const text = await AI.generate(settings, prompt.text, {});
+      $("mfv-ai-text").value = AI.restoreNames(text, { clientName: state.doc.clientName, processName: state.doc.family });
+      status("Revise e edite o texto antes de aplicar. Confira os números com o MFV.");
+    } catch (err) {
+      status(`Falha na IA: ${err.message || err}`, true);
+    } finally {
+      $("btn-mfv-ai-generate").disabled = false;
+    }
+  }
+
+  function applyMfvAi(mode) {
+    const text = $("mfv-ai-text").value.trim();
+    if (!text || !state.doc) return;
+    if (mode === "replace" && state.doc.notes && !root.confirm("Substituir as premissas e observações atuais pelo resumo?")) return;
+    state.doc.notes = mode === "append" && state.doc.notes ? `${state.doc.notes}\n\n${text}` : text;
+    markChanged({ render: true });
+    $("mfv-ai-dialog").close();
+    toast("Resumo executivo aplicado às premissas e observações.", "ok");
   }
 
   /* ==========================================================================

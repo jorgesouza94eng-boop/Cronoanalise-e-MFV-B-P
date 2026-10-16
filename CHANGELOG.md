@@ -14,10 +14,14 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 Recurso **opcional**, que funciona só com internet e com a chave de API do próprio consultor (Google AI Studio).
 
 ### Novidades
-- Botão **✨ IA** na barra da grade, com três usos:
+- Botão **✨ IA** na barra da grade da cronoanálise:
   1. **Classificar valor e desperdício** dos elementos ainda sem classificação;
   2. **Sugerir ações Kaizen (ECRS)** para os elementos que não agregam ou são incidentais;
-  3. **Redigir constatações e soluções** a partir dos números do estudo (rascunho editável).
+  3. **Redigir constatações e soluções** a partir dos números do estudo (rascunho editável);
+  4. **Padronizar nomes dos elementos** ("anotar a OP" → "Anotar OP"). O app só aceita nomes que existem no estudo, e o resumo passa a agrupar corretamente;
+  5. **Perguntas livres sobre o estudo** (ex.: "o que atacar primeiro?"), com resposta baseada só nos dados do estudo e opção de levar para as constatações.
+- MFV: **✨ Resumo executivo (IA)**, um rascunho para a diretoria do cliente com takt × gargalo, operadores atuais × ideais, estoques e próximos passos. Pode ser acrescentado às premissas e usa a mesma configuração da IA.
+- **Fora do escopo, por decisão do consultor:** análise de vídeo com IA.
 - **A IA só sugere:** cada sugestão aparece com caixa de seleção e só é aplicada com aprovação, e apenas em campos vazios. Os cálculos (TS, TN, TP, takt, GBO) continuam sem IA.
 - **Anonimização ligada por padrão:** o nome do cliente e do posto não são enviados. As respostas voltam com os nomes reais.
 - **Chave guardada só no navegador do aparelho:** não vai para o GitHub, para a pasta do OneDrive nem para os arquivos do estudo. Há a opção de apagar.
@@ -25,7 +29,7 @@ Recurso **opcional**, que funciona só com internet e com a chave de API do pró
 - Botões desabilitados sem internet.
 
 ### Testes
-- 9 testes de unidade da IA (98 no total) e teste de navegador com a API **simulada**: anonimização, aplicação seletiva, persistência e chave fora do arquivo do estudo.
+- 12 testes de unidade da IA (101 no total) e teste de navegador com a API **simulada** (25 verificações): anonimização, aplicação seletiva, renomeação, perguntas, resumo do MFV, persistência e chave fora do arquivo do estudo.
 - O uso com a chave real do consultor deve ser conferido no primeiro acesso, porque o ambiente de testes não tem acesso aos servidores do Google.
 
 ---

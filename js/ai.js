@@ -8,7 +8,9 @@
  * cálculos (TS, TN, TP, takt, GBO) continuam determinísticos, sem IA.
  *
  * Usos: (1) classificar valor agregado e desperdício dos elementos;
- *       (2) sugerir ações Kaizen (ECRS); (3) redigir constatações e soluções.
+ *       (2) sugerir ações Kaizen (ECRS); (3) redigir constatações e soluções;
+ *       (4) padronizar nomes de elementos; (5) perguntas livres sobre o estudo;
+ *       (6) resumo executivo do MFV.
  * Anonimização (padrão ligado): o nome do cliente e do posto não são enviados.
  *
  * Funções de montagem de pedido e leitura de resposta são puras (testadas no Node).
@@ -133,6 +135,75 @@
     return { text, count: top.length };
   }
 
+  /** (4) Padronização de nomes: agrupa variações do mesmo elemento ("Transp. material"). */
+  function buildNamesPrompt(study, computed, anonymize) {
+    const groups = computed.summary.elements.filter((g) => !g.key.startsWith("#"));
+    const items = groups.map((g) => ({ elemento: anonymize ? anonymizeText(g.name, study) : g.name, ocorrencias: g.occurrences }));
+    const text =
+      `${SYSTEM}\n\nNa lista de elementos de trabalho de uma cronoanálise abaixo, encontre nomes DIFERENTES que descrevem a MESMA ` +
+      `atividade (abreviações, erros de digitação, plural/singular, palavras a mais). Só agrupe quando tiver certeza de que é a ` +
+      `mesma atividade; atividades parecidas mas distintas (ex.: "Transporte de material" e "Transporte de peças acabadas") ` +
+      `devem ficar separadas. Para cada grupo, escolha como nome padrão o mais claro e completo da própria lista.\n\n` +
+      `Elementos: ${JSON.stringify(items)}\n\n` +
+      `Responda SOMENTE com JSON no formato {"grupos":[{"padrao":"...","variantes":["...","..."]}]} (variantes sem o padrão; ` +
+      `grupos vazios se não houver duplicidade), usando exatamente os textos recebidos.`;
+    return { text, count: items.length > 1 ? items.length : 0, names: groups.map((g) => g.name) };
+  }
+
+  /** (5) Pergunta livre do consultor sobre o estudo aberto. */
+  function buildQuestionPrompt(study, computed, question, anonymize) {
+    const q = anonymize ? anonymizeText(question, study) : String(question || "");
+    const c = computed.compilation;
+    const text =
+      `${SYSTEM}\n\nResponda à pergunta do consultor sobre o estudo de cronoanálise abaixo. Baseie-se SOMENTE nos dados ` +
+      `fornecidos; se faltar informação, diga o que falta. Seja direto (até 180 palavras), cite números e, quando fizer ` +
+      `sentido, indique a ferramenta Lean aplicável. Texto simples, sem markdown.\n\n` +
+      `Contexto: ${JSON.stringify(studyContext(study, computed, anonymize))}\n` +
+      `Elementos (resumo por elemento): ${JSON.stringify(elementRows(study, computed, anonymize))}\n` +
+      `Compilação por valor: ${JSON.stringify(c.byValue.map((v) => ({ valor: v.label, elementos: v.count, percentual: Number(v.pct.toFixed(1)) })))}\n` +
+      `Compilação por desperdício: ${JSON.stringify(c.byWaste.map((w) => ({ desperdicio: w.label, percentual: Number(w.pct.toFixed(1)) })))}\n\n` +
+      `Pergunta: ${q}`;
+    return { text, count: q.trim() ? 1 : 0 };
+  }
+
+  /** (6) Resumo executivo do MFV (estado presente) para o relatório ao cliente. */
+  function buildMfvSummaryPrompt(doc, r, anonymize) {
+    const study = { clientName: doc.clientName, processName: doc.family };
+    const min = (v, d) => (v == null || !Number.isFinite(v) ? null : Number(v.toFixed(d == null ? 3 : d)));
+    const data = {
+      cliente: anonymize ? "[CLIENTE]" : doc.clientName,
+      familia: doc.family,
+      unidade_produto: doc.productUnit || "pç",
+      tempo_disponivel_min_dia: min(r.availDayMin, 1),
+      demanda_diaria: min(r.demandDaily, 2),
+      takt_min: min(r.takt),
+      etapas: r.steps.map((s) => ({
+        etapa: anonymize ? anonymizeText(s.name, study) : s.name,
+        tc_min: min(s.tc),
+        operadores: min(s.opsEff, 2),
+        percentual_do_takt: min(s.taktPct, 1),
+        acima_do_takt: s.overTakt,
+        kaizen: s.kaizen,
+      })),
+      tc_total_min: min(r.tcTotal),
+      gargalo: r.bottleneck ? { etapa: anonymize ? anonymizeText(r.bottleneck.name, study) : r.bottleneck.name, tc_min: min(r.bottleneck.tc) } : null,
+      operadores_atuais: min(r.opsTotal, 2),
+      operadores_ideais: min(r.opsIdeal, 2),
+      capacidade_dia: min(r.line.capacityDay, 1),
+      produtividade_hora_operador: min(r.line.productivityHour, 2),
+      atravessamento_dias: min(r.leadTimeDays, 2),
+      estoques: r.inventories.map((i) => ({ estoque: i.name, dias: min(i.days, 2) })),
+    };
+    const text =
+      `${SYSTEM}\n\nRedija um RESUMO EXECUTIVO do Mapa de Fluxo de Valor (estado presente) para apresentar à diretoria do cliente. ` +
+      `Estrutura: (1) Situação atual em 2–3 frases (capacidade × demanda, takt × gargalo); (2) Principais pontos de atenção ` +
+      `(gargalo, balanceamento, operadores atuais × ideais, estoques/atravessamento); (3) Oportunidades e próximos passos para ` +
+      `o estado futuro, com a ferramenta Lean correspondente. Use os números fornecidos e não invente dados. Linguagem ` +
+      `executiva, até 230 palavras, texto simples com marcadores "•".\n\nDados do MFV: ${JSON.stringify(data)}` +
+      (doc.notes ? `\nPremissas do consultor: ${anonymize ? anonymizeText(doc.notes, study) : doc.notes}` : "");
+    return { text, count: r.steps.length };
+  }
+
   /* ==========================================================================
      LEITURA DAS RESPOSTAS (VALIDAÇÃO RIGOROSA)
      ========================================================================== */
@@ -178,6 +249,28 @@
         if (!action) return null;
         const ecrs = ["Eliminar", "Combinar", "Reorganizar", "Simplificar"].find((e) => new RegExp(`^${e}`, "i").test(String(it.ecrs || "")));
         return { name, text: `${ecrs ? ecrs + ": " : ""}${action}`.slice(0, 240) };
+      })
+      .filter(Boolean);
+  }
+
+  /**
+   * Lê os grupos de nomes. Só aceita nomes que existem no estudo; o padrão precisa ser um
+   * dos nomes do grupo. Retorna [{ to, from: [nomes a renomear] }].
+   */
+  function parseNames(text, originalNames, study, anonymize) {
+    const data = extractJson(text);
+    const byKey = new Map(originalNames.map((n) => [Calc.elementKey(anonymize ? anonymizeText(n, study) : n), n]));
+    const used = new Set();
+    return (Array.isArray(data.grupos) ? data.grupos : [])
+      .map((g) => {
+        const to = byKey.get(Calc.elementKey(g && g.padrao));
+        if (!to || used.has(to)) return null;
+        const from = (Array.isArray(g.variantes) ? g.variantes : [])
+          .map((v) => byKey.get(Calc.elementKey(v)))
+          .filter((n) => n && n !== to && !used.has(n));
+        if (!from.length) return null;
+        [to, ...from].forEach((n) => used.add(n));
+        return { to, from: Array.from(new Set(from)) };
       })
       .filter(Boolean);
   }
@@ -262,6 +355,10 @@
     buildClassifyPrompt,
     buildKaizenPrompt,
     buildNotesPrompt,
+    buildNamesPrompt,
+    buildQuestionPrompt,
+    buildMfvSummaryPrompt,
+    parseNames,
     parseClassify,
     parseKaizen,
     restoreNames,

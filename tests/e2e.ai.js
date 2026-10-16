@@ -3,7 +3,7 @@
  * (Playwright intercepta as chamadas: não usa rede nem chave real).
  * Uso: npm start (outro terminal) e depois  node tests/e2e.ai.js http://127.0.0.1:8080/
  */
-/* global LeanApp */ // existe apenas dentro da página testada
+/* global LeanApp, LeanMfvApp */ // existem apenas dentro das páginas testadas
 const { chromium } = require("playwright");
 
 const base = process.argv[2] || "http://127.0.0.1:8080/";
@@ -31,7 +31,13 @@ const check = (cond, msg) => { console.log((cond ? "  OK  " : "  FALHA ") + msg)
     const prompt = JSON.parse(req.postData()).contents[0].parts[0].text;
     sent.push(prompt);
     let text;
-    if (prompt.includes('"valor":"AG|NA|IN"')) {
+    if (prompt.includes('{"grupos"')) {
+      text = JSON.stringify({ grupos: [{ padrao: "Anotar OP", variantes: ["anotar a OP"] }] });
+    } else if (prompt.includes("Pergunta:")) {
+      text = "O elemento Anotar OP é o maior incidental do [CLIENTE]; padronize com quadro de OP.";
+    } else if (prompt.includes("RESUMO EXECUTIVO")) {
+      text = "• Situação: capacidade acima da demanda no [CLIENTE].\n• Gargalo: Montagem.";
+    } else if (prompt.includes('"valor":"AG|NA|IN"')) {
       text = JSON.stringify({ itens: [
         { elemento: "Procurando peças do [CLIENTE]", valor: "NA", desperdicio: "movimentacao", justificativa: "Busca não agrega" },
         { elemento: "Anotar OP", valor: "IN", desperdicio: "processamento", justificativa: "Controle necessário" },
@@ -50,7 +56,7 @@ const check = (cond, msg) => { console.log((cond ? "  OK  " : "  FALHA ") + msg)
   await p.fill("#new-client", "Metal Alfa"); await p.fill("#new-process", "Montagem");
   await p.click("#new-study-form button[type=submit]");
   await p.waitForFunction(() => LeanApp.state.study);
-  for (const [d, t] of [["Corte", "30"], ["Procurando peças do Metal Alfa", "50"], ["Anotar OP", "1:10"]]) {
+  for (const [d, t] of [["Corte", "30"], ["Procurando peças do Metal Alfa", "50"], ["Anotar OP", "1:10"], ["anotar a OP", "1:20"]]) {
     await p.keyboard.type(d); await p.keyboard.press("Enter"); await p.keyboard.type(t); await p.keyboard.press("Enter"); await p.keyboard.press("Enter");
   }
   await p.selectOption("#chrono-tbody tr:nth-child(1) [data-field=value]", "AG");
@@ -93,6 +99,22 @@ const check = (cond, msg) => { console.log((cond ? "  OK  " : "  FALHA ") + msg)
   await p.click("#btn-ai-apply");
   check((await p.inputValue("#study-notes")).startsWith("PRINCIPAIS CONSTATAÇÕES"), "constatações aplicadas ao estudo");
 
+  // 4) Padronizar nomes
+  await p.click("[data-ai=names]");
+  await p.waitForSelector("#ai-results:not([hidden])");
+  check((await p.textContent("#ai-list")).includes('Renomear: "anotar a OP"'), "sugere padronizar 'anotar a OP' → 'Anotar OP'");
+  await p.click("#btn-ai-apply");
+  check(await p.inputValue("#chrono-tbody tr:nth-child(4) [data-field=description]") === "Anotar OP", "variante renomeada para o nome padrão");
+  check(await p.$$eval("#summary-tbody tr", (r) => r.length) === 3, "resumo agrupa os nomes padronizados (3 elementos)");
+
+  // 5) Pergunta livre
+  await p.fill("#ai-question", "O que atacar primeiro no Metal Alfa?");
+  await p.click("[data-ai=ask]");
+  await p.waitForSelector("#ai-notes:not([hidden])");
+  check((await p.inputValue("#ai-notes")).includes("Metal Alfa"), "resposta exibida com o nome real");
+  check(sent[sent.length - 1].includes("Pergunta: O que atacar primeiro no [CLIENTE]?"), "pergunta enviada anonimizada");
+  check(await p.isHidden("#btn-ai-apply") && (await p.isVisible("#btn-ai-append")), "resposta: só 'acrescentar às constatações'");
+
   // Persistência da configuração e do estudo
   await p.click("#btn-ai-close");
   await p.evaluate(() => LeanApp.flushSave());
@@ -103,6 +125,24 @@ const check = (cond, msg) => { console.log((cond ? "  OK  " : "  FALHA ") + msg)
   check(await p.inputValue("#ai-key") === "CHAVE-TESTE", "chave lembrada neste navegador");
   const json = await p.evaluate(() => JSON.stringify(LeanApp.state.study));
   check(!json.includes("CHAVE-TESTE"), "chave NÃO gravada no arquivo do estudo");
+
+  // 6) Resumo executivo do MFV (usa a mesma configuração da IA)
+  await p.click("#btn-ai-close");
+  await p.click(".app-nav a[href='mfv.html']");
+  await p.waitForSelector("#doc-dialog[open]");
+  await p.fill("#new-client", "Metal Alfa"); await p.fill("#new-family", "Suportes");
+  await p.click("#new-doc-form button[type=submit]");
+  await p.waitForFunction(() => window.LeanMfvApp && LeanMfvApp.state.doc);
+  await p.fill("#demand-monthly", "8800");
+  await p.click("#btn-add-manual-step");
+  await p.fill("#steps-tbody tr:last-child [data-field=name]", "Montagem");
+  await p.fill("#steps-tbody tr:last-child [data-field=tc]", "1");
+  await p.click("#btn-mfv-ai");
+  await p.waitForFunction(() => document.getElementById("mfv-ai-text").value.length > 0, null, { timeout: 8000 });
+  check((await p.inputValue("#mfv-ai-text")).includes("Metal Alfa"), "MFV: resumo executivo gerado com o nome real");
+  check(sent[sent.length - 1].includes("RESUMO EXECUTIVO") && !sent[sent.length - 1].includes("Metal Alfa"), "MFV: pedido anonimizado");
+  await p.click("#btn-mfv-ai-append");
+  check((await p.inputValue("#mfv-notes")).startsWith("• Situação"), "MFV: resumo aplicado às premissas");
 
   check(errors.length === 0, "nenhum erro no console" + (errors.length ? ": " + errors.join(" | ") : ""));
   await browser.close();

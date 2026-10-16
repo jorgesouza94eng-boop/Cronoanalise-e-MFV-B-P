@@ -88,22 +88,32 @@
     const study = st.study;
     const computed = Calc.computeStudy(study);
     const anon = settings.anonymize !== false;
-    const build = { classify: AI.buildClassifyPrompt, kaizen: AI.buildKaizenPrompt, notes: AI.buildNotesPrompt }[kind];
+    const build = {
+      classify: AI.buildClassifyPrompt,
+      kaizen: AI.buildKaizenPrompt,
+      notes: AI.buildNotesPrompt,
+      names: AI.buildNamesPrompt,
+      ask: (st2, c2, a2) => AI.buildQuestionPrompt(st2, c2, $("ai-question").value, a2),
+    }[kind];
     const prompt = build(study, computed, anon);
     if (!prompt.count) {
       const msg = {
         classify: "Todos os elementos já estão classificados (ou ainda não há tempos lançados).",
         kaizen: 'Nenhum elemento classificado como "Não agrega" ou "Incidental".',
         notes: "Lance tempos na grade antes de pedir as constatações.",
+        names: "É preciso ter ao menos 2 elementos com tempo lançado.",
+        ask: "Escreva a pergunta antes de clicar em Perguntar.",
       }[kind];
       return setStatus(msg, true);
     }
     document.querySelectorAll("[data-ai]").forEach((b) => (b.disabled = true));
     setStatus(`Consultando o Gemini (${prompt.count} elemento(s))...`);
     try {
-      const text = await AI.generate(settings, prompt.text, { json: kind !== "notes" });
+      const text = await AI.generate(settings, prompt.text, { json: kind !== "notes" && kind !== "ask" });
       if (kind === "classify") showItems(kind, AI.parseClassify(text, prompt.names, study, anon));
       else if (kind === "kaizen") showItems(kind, AI.parseKaizen(text, prompt.names, study, anon));
+      else if (kind === "names") showItems(kind, AI.parseNames(text, prompt.names, study, anon));
+      else if (kind === "ask") showAnswer(AI.restoreNames(text, study));
       else showNotes(AI.restoreNames(text, study));
     } catch (err) {
       setStatus(`Falha na IA: ${err.message || err}`, true);
@@ -118,7 +128,12 @@
     $("ai-notes").hidden = true;
     $("btn-ai-append").hidden = true;
     $("btn-ai-apply").textContent = "Aplicar selecionadas";
-    $("ai-results-title").textContent = kind === "classify" ? "Classificação sugerida" : "Ações Kaizen sugeridas (ECRS)";
+    $("btn-ai-apply").hidden = false;
+    $("ai-results-title").textContent = {
+      classify: "Classificação sugerida",
+      kaizen: "Ações Kaizen sugeridas (ECRS)",
+      names: "Nomes a padronizar (as variantes serão renomeadas para o nome padrão)",
+    }[kind];
     $("ai-list").replaceChildren(
       ...items.map((it, i) => {
         const li = document.createElement("li");
@@ -131,18 +146,21 @@
         label.htmlFor = cb.id;
         const title = document.createElement("div");
         title.className = "ai-item-title";
-        title.textContent = it.name;
+        title.textContent = kind === "names" ? `→ ${it.to}` : it.name;
         const detail = document.createElement("div");
         detail.className = "ai-item-detail";
         detail.textContent =
           kind === "classify"
             ? `${Calc.VALUES[it.value].label}${it.waste ? ` • ${Calc.WASTES[it.waste]}` : ""}${it.why ? ` — ${it.why}` : ""}`
-            : it.text;
+            : kind === "names"
+              ? `Renomear: ${it.from.map((n) => `"${n}"`).join(", ")}`
+              : it.text;
         label.append(title, detail);
         li.append(cb, label);
         return li;
       })
     );
+    if (kind === "names" && !items.length) return setStatus("Nenhuma duplicidade de nomes encontrada. 👍");
     setStatus(items.length ? `${items.length} sugestão(ões). Desmarque o que não concordar e clique em "Aplicar".` : "A IA não devolveu sugestões utilizáveis.", !items.length);
   }
 
@@ -154,8 +172,22 @@
     $("ai-notes").hidden = false;
     $("ai-notes").value = text;
     $("btn-ai-apply").textContent = "Substituir constatações";
+    $("btn-ai-apply").hidden = false;
     $("btn-ai-append").hidden = false;
     setStatus("Revise e edite o texto antes de aplicar.");
+  }
+
+  /** Resposta a uma pergunta livre: só leitura, com opção de levar para as constatações. */
+  function showAnswer(text) {
+    pending = { kind: "notes", text };
+    $("ai-results").hidden = false;
+    $("ai-list").replaceChildren();
+    $("ai-results-title").textContent = "Resposta da IA (confira os números no estudo)";
+    $("ai-notes").hidden = false;
+    $("ai-notes").value = text;
+    $("btn-ai-apply").hidden = true;
+    $("btn-ai-append").hidden = false;
+    setStatus("Resposta recebida. Se quiser, acrescente-a às constatações do estudo.");
   }
 
   function apply(mode) {
@@ -168,7 +200,7 @@
       n = app().applyAi({ notes: { text, mode } });
     } else {
       const chosen = Array.from(document.querySelectorAll("#ai-list input:checked")).map((cb) => pending.items[Number(cb.dataset.index)]);
-      n = app().applyAi(pending.kind === "classify" ? { classify: chosen } : { kaizen: chosen });
+      n = app().applyAi({ [pending.kind === "names" ? "rename" : pending.kind]: chosen });
     }
     setStatus(n ? `Aplicado (${n} alteração(ões)). O estudo foi salvo normalmente.` : "Nada a aplicar (os campos já estavam preenchidos).");
     $("ai-results").hidden = true;

@@ -229,6 +229,7 @@
                   placeholder="Ex.: unidade 'peça' = m² de laje; demanda = capacidade declarada; pendências de estoques..."></textarea>
         <div class="notes-actions">
           <button type="button" id="btn-export-xlsx-mfv" class="btn-secondary" title="Preenche o seu modelo MFV Simplificado (fórmulas e gráficos preservados)">Exportar Excel (modelo B+P)</button>
+          <button type="button" id="btn-mfv-ai" class="btn-outline btn-ai" title="Rascunho de resumo executivo do MFV para o relatório (Gemini)">✨ Resumo executivo (IA)</button>
           <button type="button" id="btn-export-mfv" class="btn-outline">Exportar JSON</button>
         </div>
       </div>
@@ -274,6 +275,22 @@
     </div>
   </dialog>
 
+  <!-- RESUMO EXECUTIVO (IA) -->
+  <dialog id="mfv-ai-dialog" class="study-dialog ai-dialog" aria-labelledby="mfv-ai-title">
+    <div class="dialog-header">
+      <h2 id="mfv-ai-title">✨ Resumo executivo do MFV (Gemini)</h2>
+      <button type="button" class="btn-icon-close" id="btn-mfv-ai-close" aria-label="Fechar">&times;</button>
+    </div>
+    <p id="mfv-ai-status" class="form-hint ai-status" role="status" aria-live="polite"></p>
+    <textarea id="mfv-ai-text" class="ai-notes" rows="14" placeholder="O rascunho aparece aqui para você revisar e editar."></textarea>
+    <div class="dialog-footer">
+      <button type="button" id="btn-mfv-ai-generate" class="btn-secondary">Gerar novamente</button>
+      <button type="button" id="btn-mfv-ai-append" class="btn-primary">Acrescentar às premissas</button>
+      <button type="button" id="btn-mfv-ai-replace" class="btn-outline">Substituir premissas</button>
+      <span class="form-hint">Usa a configuração do ✨ IA da Cronoanálise. Anonimização conforme configurado lá.</span>
+    </div>
+  </dialog>
+
   <div id="toast-region" class="toast-region" aria-live="polite"></div>
 
   <!-- Scripts clássicos (sem módulos ES) para funcionar também via file:// -->
@@ -282,6 +299,7 @@
   <script src="js/xlsx-template.js"></script>
   <script src="js/mfv-calc.js"></script>
   <script src="js/storage.js"></script>
+  <script src="js/ai.js"></script>
   <script src="js/mfv-app.js"></script>
 </body>
 </html>

@@ -187,7 +187,10 @@ O botão **✨ IA** na barra da grade abre o assistente. Ele precisa de **intern
 2. Use os botões:
    - **Classificar valor e desperdício:** para os elementos ainda sem classificação;
    - **Sugerir ações Kaizen (ECRS):** para os elementos que não agregam ou são incidentais;
-   - **Redigir constatações e soluções:** um rascunho editável para a Compilação.
+   - **Redigir constatações e soluções:** um rascunho editável para a Compilação;
+   - **Padronizar nomes dos elementos:** junta variações do mesmo elemento ("anotar a OP" → "Anotar OP");
+   - **Pergunte sobre este estudo:** perguntas livres, respondidas só com os dados do estudo.
+   No **MFV**, o botão **✨ Resumo executivo (IA)** gera um texto para a diretoria do cliente, usando a mesma configuração.
 3. Revise as sugestões, desmarque o que não concordar e clique em **Aplicar**. Só os campos vazios são preenchidos.
 
 **Privacidade:**
@@ -304,7 +307,7 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 98 testes: cálculo, compilação, Excel, modelos B+P, MFV e IA (Node 18+, sem dependências)
+npm test             # 101 testes: cálculo, compilação, Excel, modelos B+P, MFV e IA (Node 18+, sem dependências)
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

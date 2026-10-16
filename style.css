@@ -1149,6 +1149,10 @@ select.input-type.is-acyclic {
 .ai-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 20px 0; }
 .ai-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 .ai-status { padding: 0 20px; min-height: 18px; }
+.ai-ask { padding: 12px 20px 0; display: flex; flex-direction: column; gap: 6px; }
+.ai-ask label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); }
+.ai-ask-row { display: flex; gap: 8px; align-items: stretch; }
+.ai-ask-row textarea { flex: 1; padding: 8px 10px; border: 1px solid var(--border-light); border-radius: var(--radius-sm); font: inherit; font-size: 13px; resize: vertical; }
 .ai-status.is-error { color: var(--status-danger-text); }
 .ai-list li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border-light); font-size: 13px; }
 .ai-list input { margin-top: 3px; }
