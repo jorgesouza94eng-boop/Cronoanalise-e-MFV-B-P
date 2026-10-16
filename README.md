@@ -1,5 +1,7 @@
 # Lean Chrono & MFV — Cronoanálise e apoio ao Mapa de Fluxo de Valor
 
+> **Versão estável: REV 1.0** — veja o [histórico de revisões](CHANGELOG.md).
+
 Aplicação web **local-first** e **100% sem servidor** para cronoanálise de vídeos de operação, voltada a consultorias de produtividade industrial (Programa **Brasil Mais Produtivo**).
 
 - **Digitação sem mouse:** o consultor assiste ao vídeo e digita só o instante de término de cada elemento (leitura contínua).
