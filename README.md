@@ -86,6 +86,26 @@ Classificações divergentes no mesmo elemento aparecem com ⚠. O **tempo norma
 
 ![Resumo por elemento](docs/tela-resumo.png)
 
+### Compilação e soluções (aba "Compilação e Soluções")
+
+Abaixo do resumo, três gráficos de barras, sempre com rótulo e valor em cada barra:
+- **Por atividade:** nº de elementos que Agregam, Não agregam e são Incidentais.
+- **Por tempo:** tempo no ciclo e % do total para cada valor.
+- **Por desperdício:** os desperdícios classificados, do maior para o menor (Pareto).
+
+O campo **Constatações e soluções** é salvo no estudo e vai para o Excel.
+
+![Compilação](docs/tela-compilacao.png)
+
+### Exportar Excel (padrão B+P)
+
+O botão **Exportar Excel (B+P)** gera um `.xlsx` com as abas **GERAL**, **Listagem de Elementos**, **Compilação e Soluções** e **Análise** (indicadores):
+- tempos em **segundos**, como na planilha REV2;
+- início e fim no formato `hh:mm:ss`;
+- funciona offline, sem biblioteca externa.
+
+A conferência foi feita no LibreOffice e com os dados reais da Laje Forte: deu 912 s e Qt. 2,125 em "Corte das Treliças", e 7.681 s de ciclo. O Excel exporta **valores**, sem fórmulas e sem gráficos nativos; os gráficos ficam no app.
+
 ### Várias filmagens no mesmo estudo
 
 Cada vídeo novo começa em 00:00, como as células amarelas de "Tempo (Início)" na planilha REV2. Para registrar isso no app, há três formas:
@@ -189,6 +209,7 @@ O bloco `results` é um **resumo para leitura externa** (Excel, Power BI). Ele �
 index.html            Estrutura da tela
 style.css             Estilos (desktop, tablet, celular e impressão)
 js/calc.js            Motor de cálculo e modelo de dados (funções puras, testadas)
+js/xlsx.js            Exportação Excel no layout B+P (gerador .xlsx próprio, sem dependências)
 js/storage.js         IndexedDB, pasta do OneDrive, exportar/importar
 js/ui.js              Renderização e navegação por teclado
 js/app.js             Orquestração: estado, autosave, conflitos, gerenciador de estudos
@@ -204,7 +225,7 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 58 testes do motor de cálculo (Node 18+, sem dependências)
+npm test             # 66 testes: cálculo, compilação e Excel (Node 18+, sem dependências)
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:
@@ -224,7 +245,7 @@ As instruções estão no cabeçalho do arquivo.
 
 ## 8. Limitações conhecidas (MVP)
 
-- O cálculo estatístico do número de ciclos necessários e os gráficos de valor agregado ficam para as próximas etapas.
+- O cálculo estatístico do número de ciclos necessários e o módulo MFV ficam para as próximas etapas.
 - No celular a grade usa rolagem horizontal; o modo "cartão" fica para a fase 2.
 - Estudos alterados no navegador sem pasta conectada só são gravados na pasta quando forem abertos novamente com a pasta conectada (o gerenciador marca "Alterações não gravadas na pasta").
 - A gravação na pasta usa a File System Access API, disponível no Chrome e no Edge para computador.

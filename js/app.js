@@ -206,6 +206,13 @@
       UI.toast(`CSV exportado: ${name}`, "ok");
     },
 
+    onExportXlsx() {
+      if (!state.study) return;
+      const name = state.study.fileName.replace(/\.json$/i, "_BP.xlsx");
+      Store.downloadText(name, root.LeanXlsx.buildBPWorkbook(state.study), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      UI.toast(`Excel exportado: ${name}`, "ok");
+    },
+
     onFlush() {
       flushSave().then(() => {
         if (state.folder === "granted" && !state.dirty && !state.conflict) UI.toast("Estudo gravado na pasta.", "ok");

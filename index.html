@@ -173,7 +173,8 @@
           </div>
           <button type="button" id="btn-add-row" class="btn-secondary" title="Nova linha (Ctrl+Enter)">+ Nova linha</button>
           <button type="button" id="btn-export-json" class="btn-outline" title="Baixar o estudo em .json (backup ou envio para outro dispositivo)">Exportar JSON</button>
-          <button type="button" id="btn-export-csv" class="btn-outline" title="Baixar a grade para o Excel">Exportar CSV</button>
+          <button type="button" id="btn-export-xlsx" class="btn-outline" title="Baixar no layout da planilha B+P (GERAL, Listagem, Compilação e Análise)">Exportar Excel (B+P)</button>
+          <button type="button" id="btn-export-csv" class="btn-outline" title="Baixar a grade em CSV">Exportar CSV</button>
         </div>
       </div>
 
@@ -252,6 +253,38 @@
             </tr>
           </tfoot>
         </table>
+      </div>
+    </section>
+
+    <!-- COMPILAÇÃO E SOLUÇÕES (equivale à aba de mesmo nome da planilha) -->
+    <section class="timesheet-section summary-section" aria-label="Compilação e soluções">
+      <div class="section-toolbar">
+        <div class="toolbar-left">
+          <h2>Compilação e soluções</h2>
+          <span class="keyboard-hint">Valor agregado e desperdícios do resumo por elemento (tempo no ciclo)</span>
+        </div>
+      </div>
+      <div class="compilation-grid">
+        <div class="chart-card">
+          <h3>Por atividade</h3>
+          <p class="chart-sub">Nº de elementos por valor</p>
+          <div class="bar-list" id="chart-value-count"></div>
+        </div>
+        <div class="chart-card">
+          <h3>Por tempo</h3>
+          <p class="chart-sub">Tempo no ciclo e % do total</p>
+          <div class="bar-list" id="chart-value-time"></div>
+        </div>
+        <div class="chart-card">
+          <h3>Por desperdício</h3>
+          <p class="chart-sub">Tempo no ciclo, do maior para o menor</p>
+          <div class="bar-list" id="chart-waste"></div>
+        </div>
+      </div>
+      <div class="notes-block">
+        <label for="study-notes">Constatações e soluções</label>
+        <textarea id="study-notes" rows="6"
+                  placeholder="Principais constatações (ex.: transporte e movimentação = 32% do tempo) e soluções propostas (layout, SMED, 5S, poka-yoke...)"></textarea>
       </div>
     </section>
   </main>
@@ -335,6 +368,7 @@
 
   <!-- Scripts clássicos (sem módulos ES) para funcionar também via file:// sem erro de CORS -->
   <script src="js/calc.js"></script>
+  <script src="js/xlsx.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/app.js"></script>

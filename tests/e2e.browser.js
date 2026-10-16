@@ -284,6 +284,27 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.selectOption("#time-unit", "h");
   check(await read("#summary-total") === "0,0097", "troca para horas: 0,0097 h");
 
+  // Compilação e soluções
+  await page.selectOption("#time-unit", "s");
+  const bars = await page.$$eval("#chart-value-time .bar-row", (r) => r.map((x) => x.textContent));
+  check(bars.some((t) => t.startsWith("Agrega") && t.includes("30,0 s")), "compilação por tempo: Agrega = 30,0 s → " + bars.join(" | "));
+  check(bars.some((t) => t.startsWith("Sem classificação")), "compilação mostra 'Sem classificação' (Transporte sem valor)");
+  check((await read("#chart-waste")).includes("Nenhum desperdício"), "sem desperdício classificado: aviso no gráfico");
+  await page.selectOption("#chrono-tbody tr:nth-child(2) [data-field=value]", "NA");
+  await page.selectOption("#chrono-tbody tr:nth-child(2) [data-field=waste]", "transporte");
+  check((await read("#chart-waste")).includes("Transporte"), "desperdício Transporte aparece no gráfico");
+  await page.fill("#study-notes", "Transporte = maior desperdício. Solução: layout.");
+  // Exportar Excel (B+P)
+  const [xl] = await Promise.all([page.waitForEvent("download"), page.click("#btn-export-xlsx")]);
+  check(xl.suggestedFilename().endsWith("_BP.xlsx"), "Exportar Excel baixa " + xl.suggestedFilename());
+  const xlPath = await xl.path();
+  const sig = require("fs").readFileSync(xlPath).subarray(0, 2).toString();
+  check(sig === "PK", "arquivo .xlsx válido (zip)");
+  await page.evaluate(() => LeanApp.flushSave());
+  await page.reload();
+  await page.waitForFunction(() => window.LeanApp && LeanApp.state.study);
+  check(await page.inputValue("#study-notes") === "Transporte = maior desperdício. Solução: layout.", "constatações preservadas após recarregar");
+
   check(errors.length === 0, "nenhum erro no console" + (errors.length ? ": " + errors.join(" | ") : ""));
   await browser.close();
   console.log(failures ? `${failures} FALHA(S)` : "TUDO OK");

@@ -318,6 +318,7 @@
       unit: timeUnit(study),
       rows,
       summary,
+      compilation: compile(summary),
       totals: { sumSubtracted, sumNormal },
       kpis,
       errorCount,
@@ -327,6 +328,31 @@
   }
 
   /** Agrupa as linhas válidas pelo nome do elemento (equivale à aba "Listagem de Elementos"). */
+  /**
+   * Compilação (aba "Compilação e Soluções"): por valor agregado e por desperdício,
+   * contando elementos do resumo e somando o tempo no ciclo.
+   */
+  function compile(summary) {
+    const total = summary.cycleNormal;
+    const pct = (t) => (total > EPS ? (t / total) * 100 : 0);
+    const byValue = ["AG", "NA", "IN", ""]
+      .map((key) => {
+        const list = summary.elements.filter((g) => g.value === key);
+        const time = list.reduce((a, g) => a + g.cycleTime, 0);
+        return { key, label: key ? VALUES[key].label : "Sem classificação", count: list.length, time, pct: pct(time) };
+      })
+      .filter((v) => v.key || v.count > 0);
+    const byWaste = Object.keys(WASTES)
+      .map((key) => {
+        const list = summary.elements.filter((g) => g.waste === key);
+        const time = list.reduce((a, g) => a + g.cycleTime, 0);
+        return { key, label: WASTES[key], count: list.length, time, pct: pct(time) };
+      })
+      .filter((w) => w.count > 0)
+      .sort((a, b) => b.time - a.time); // Pareto: maior desperdício primeiro
+    return { total, elementCount: summary.elements.length, byValue, byWaste };
+  }
+
   function summarize(elements, rows, mode) {
     const groups = new Map();
     rows.forEach((row, i) => {
@@ -541,6 +567,7 @@
       clientName: String(o.clientName || "").trim(),
       processName: String(o.processName || "").trim(),
       videoStart: "",
+      notes: "",
       // Novos estudos seguem a planilha REV2: lançamento por quantidade e tempos em segundos.
       settings: Object.assign({ entryMode: "quantidade", timeUnit: "s" }, o.settings || {}),
       shiftParams: Object.assign(defaultShiftParams(), o.shiftParams || {}),
@@ -596,6 +623,7 @@
       clientName: str(raw.clientName),
       processName: str(raw.processName),
       videoStart: str(raw.videoStart),
+      notes: str(raw.notes),
       // Arquivos anteriores a esta versão não têm "settings": mantêm frequência e minutos.
       settings: {
         entryMode: ENTRY_MODES.includes(raw.settings && raw.settings.entryMode) ? raw.settings.entryMode : "frequencia",
@@ -834,6 +862,7 @@
     WASTES,
     TIME_UNITS,
     ENTRY_MODES,
+    compile,
     timeUnit,
     entryMode,
     toUnit,

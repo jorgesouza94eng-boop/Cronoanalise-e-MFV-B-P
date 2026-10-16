@@ -76,6 +76,11 @@
       summaryNote: $("summary-note"),
       summaryHint: $("summary-hint"),
       names: $("element-names"),
+      chartValueCount: $("chart-value-count"),
+      chartValueTime: $("chart-value-time"),
+      chartWaste: $("chart-waste"),
+      notes: $("study-notes"),
+      btnExportXlsx: $("btn-export-xlsx"),
       dialog: $("study-dialog"),
       btnCloseDialog: $("btn-close-dialog"),
       newStudyForm: $("new-study-form"),
@@ -120,6 +125,8 @@
     els.btnAddRow.addEventListener("click", () => addRowAndFocus());
     els.btnExportJson.addEventListener("click", () => h.onExportJSON());
     els.btnExportCsv.addEventListener("click", () => h.onExportCSV());
+    els.btnExportXlsx.addEventListener("click", () => h.onExportXlsx());
+    els.notes.addEventListener("input", () => h.onMetaChange("notes", els.notes.value));
 
     // Grade (delegação de eventos: funciona para linhas criadas dinamicamente)
     els.tbody.addEventListener("input", onGridInput);
@@ -405,6 +412,7 @@
     els.videoStart.value = study.videoStart || "";
     els.videoStart.classList.remove("input-invalid");
     els.settings.forEach((sel) => (sel.value = Calc[sel.dataset.setting](study)));
+    els.notes.value = study.notes || "";
     renderRows(study, computed);
     document.title = `${study.processName || "Estudo"} — ${study.clientName || "Lean Chrono"} | Cronoanálise & MFV`;
   }
@@ -481,7 +489,77 @@
       : "";
 
     renderSummary(computed);
+    renderCompilation(computed);
     renderKpis(computed);
+  }
+
+  /* Cores semânticas do valor agregado (sempre acompanhadas do rótulo) e tom único para desperdícios. */
+  const VALUE_COLORS = { AG: "#16a34a", NA: "#dc2626", IN: "#d97706", "": "#94a3b8" };
+  const WASTE_COLOR = "#2563eb";
+
+  /** Barras horizontais com rótulo e valor (substituem as pizzas da planilha). */
+  function renderBars(container, items, opts) {
+    if (!items.length) {
+      const p = document.createElement("p");
+      p.className = "chart-empty";
+      p.textContent = opts.empty;
+      container.replaceChildren(p);
+      return;
+    }
+    const max = Math.max(...items.map(opts.value));
+    container.replaceChildren(
+      ...items.map((it) => {
+        const row = document.createElement("div");
+        row.className = "bar-row";
+        row.title = opts.tooltip(it);
+        const label = document.createElement("span");
+        label.className = "bar-label";
+        label.textContent = it.label;
+        const track = document.createElement("span");
+        track.className = "bar-track";
+        const fill = document.createElement("span");
+        fill.className = "bar-fill";
+        fill.style.width = `${max > 0 ? Math.max(1.5, (opts.value(it) / max) * 100) : 0}%`;
+        fill.style.background = opts.color(it);
+        track.appendChild(fill);
+        const value = document.createElement("span");
+        value.className = "bar-value";
+        value.textContent = opts.text(it);
+        row.append(label, track, value);
+        return row;
+      })
+    );
+  }
+
+  /** Compilação: por atividade, por tempo e por desperdício. */
+  function renderCompilation(computed) {
+    const c = computed.compilation;
+    const unit = computed.unit;
+    const u = Calc.TIME_UNITS[unit].label;
+    const ft = (m) => Calc.formatTime(m, unit);
+    const empty = "Lance os tempos e classifique o valor dos elementos para ver a compilação.";
+    const values = c.elementCount ? c.byValue : [];
+    renderBars(els.chartValueCount, values, {
+      value: (v) => v.count,
+      color: (v) => VALUE_COLORS[v.key],
+      text: (v) => `${v.count}`,
+      tooltip: (v) => `${v.label}: ${v.count} elemento(s) de ${c.elementCount}`,
+      empty,
+    });
+    renderBars(els.chartValueTime, values, {
+      value: (v) => v.time,
+      color: (v) => VALUE_COLORS[v.key],
+      text: (v) => `${ft(v.time)} ${u} • ${fmt(v.pct, 1)}%`,
+      tooltip: (v) => `${v.label}: ${ft(v.time)} ${u} (${fmt(v.pct, 1)}% do ciclo)`,
+      empty,
+    });
+    renderBars(els.chartWaste, c.byWaste, {
+      value: (w) => w.time,
+      color: () => WASTE_COLOR,
+      text: (w) => `${ft(w.time)} ${u} • ${fmt(w.pct, 1)}%`,
+      tooltip: (w) => `${w.label}: ${w.count} elemento(s), ${ft(w.time)} ${u} (${fmt(w.pct, 1)}% do ciclo)`,
+      empty: "Nenhum desperdício classificado. Use a coluna Desperdício da grade.",
+    });
   }
 
   /** Tabela "Resumo por elemento" (equivale à aba Listagem de Elementos). */

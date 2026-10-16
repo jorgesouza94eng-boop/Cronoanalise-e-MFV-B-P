@@ -714,6 +714,48 @@ select.input-type.is-acyclic {
   background: var(--bg-surface);
 }
 
+/* Compilação e soluções */
+.compilation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 16px;
+}
+.chart-card {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  min-width: 0;
+}
+.chart-card h3 { font-size: 13px; font-weight: 700; }
+.chart-sub { font-size: 11px; color: var(--text-muted); margin: 2px 0 10px; }
+.bar-list { display: flex; flex-direction: column; gap: 8px; }
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 38%) 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.bar-label { color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track { height: 12px; background: var(--bg-subtle); border-radius: 4px; overflow: hidden; }
+.bar-fill { display: block; height: 100%; border-radius: 0 4px 4px 0; }
+.bar-value { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+.chart-empty { font-size: 12px; color: var(--text-muted); }
+.notes-block { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 6px; }
+.notes-block label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); }
+.notes-block textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.notes-block textarea:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15); }
+
 /* Resumo por elemento */
 .summary-section { flex: none; }
 .summary-container { max-height: none; min-height: 0; }
@@ -1024,6 +1066,7 @@ select.input-type.is-acyclic {
   .client-context { order: 3; flex-basis: 100%; max-width: none; }
   .kpi-grid { grid-template-columns: repeat(3, 1fr); }
   .params-grid { grid-template-columns: 1fr 1fr; }
+  .compilation-grid { grid-template-columns: 1fr; }
 }
 
 /* Celular (modo campo) */
