@@ -145,15 +145,16 @@
           <span class="keyboard-hint">
             <kbd>Enter</kbd> Descrição → Tempo final → Ritmo → próxima linha
             &bull; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> nova linha
+            &bull; <kbd>Alt</kbd>+<kbd>N</kbd> nova filmagem
             &bull; <kbd>↑</kbd><kbd>↓</kbd> muda de linha
             &bull; <kbd>Ctrl</kbd>+<kbd>Del</kbd> exclui
           </span>
         </div>
         <div class="toolbar-actions">
           <div class="inline-field">
-            <label for="video-start" title="Instante do vídeo em que o primeiro elemento começa">Leitura inicial</label>
+            <label for="video-start" title="Instante do vídeo em que o primeiro elemento da 1ª filmagem começa">Leitura inicial</label>
             <input type="text" id="video-start" class="mono" inputmode="numeric" placeholder="00:00" autocomplete="off"
-                   title="Instante do vídeo em que o primeiro elemento começa (MMSS ou MM:SS)">
+                   title="Instante do vídeo em que o primeiro elemento da 1ª filmagem começa (MMSS ou MM:SS). As filmagens seguintes começam em 00:00.">
           </div>
           <button type="button" id="btn-add-row" class="btn-secondary" title="Nova linha (Ctrl+Enter)">+ Nova linha</button>
           <button type="button" id="btn-export-json" class="btn-outline" title="Baixar o estudo em .json (backup ou envio para outro dispositivo)">Exportar JSON</button>
@@ -170,7 +171,7 @@
           </colgroup>
           <thead>
             <tr>
-              <th scope="col" title="Número sequencial do elemento">Nº</th>
+              <th scope="col" title="Número do elemento. Toque no número (ou Alt+N) para marcar o início de uma nova filmagem">Nº</th>
               <th scope="col">Elemento de trabalho (operação)</th>
               <th scope="col" title="C = cíclico | A = acíclico (definido pela frequência)">Tipo</th>
               <th scope="col" title="1 = uma vez por peça | 1/50 = uma vez a cada 50 peças">Freq.</th>
@@ -185,7 +186,7 @@
           <tbody id="chrono-tbody"></tbody>
           <tfoot>
             <tr>
-              <td colspan="5" class="tfoot-label">Totais do ciclo (minutos centesimais):</td>
+              <td colspan="5" class="tfoot-label">Totais (minutos centesimais)<span id="total-films"></span>:</td>
               <td class="cell-total mono" id="total-tsub">0,000</td>
               <td></td>
               <td class="cell-total mono highlight-col" id="total-tnorm">0,000</td>
@@ -200,7 +201,9 @@
   <!-- MODELO DE LINHA DA GRADE -->
   <template id="row-template">
     <tr>
-      <td class="cell-num"></td>
+      <td class="cell-num"><button type="button" class="btn-seq" tabindex="-1"
+                 title="Marcar/desmarcar o início de uma nova filmagem (Alt+N)"><span class="seq-num"></span><span
+                 class="film-tag" hidden></span></button></td>
       <td><input type="text" class="input-cell input-elem" data-field="description" aria-label="Elemento de trabalho"
                  placeholder="Descreva a operação..." autocomplete="off" enterkeyhint="next"></td>
       <td class="cell-type"><span class="tag-type">C</span></td>

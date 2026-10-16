@@ -151,6 +151,8 @@
    * Regras:
    *  - Tempo Subtraído (TS) = Tempo Final da linha − última leitura válida
    *    (a primeira linha usa a leitura inicial do vídeo).
+   *  - Nova filmagem: a linha marcada com "newVideo" reinicia a leitura em 00:00
+   *    (equivale ao "Tempo (Início) = 00:00:00" da planilha REV2).
    *  - Tempo Normal (TN) = TS × (Ritmo / 100) × Frequência.
    *  - Tempo Padrão (TP) = ΣTN × (1 + Tolerância / 100)  [método multiplicativo OIT].
    *  - Tempo Líquido Disponível (TLD) = Jornada Bruta − Paradas Planejadas.
@@ -162,6 +164,7 @@
     const params = (study && study.shiftParams) || {};
     const start = parseTimeInput(study && study.videoStart);
     let previous = start.minutes != null ? start.minutes : 0;
+    let film = 1;
 
     let sumSubtracted = 0;
     let sumNormal = 0;
@@ -169,6 +172,12 @@
 
     const rows = ((study && study.elements) || []).map((el, index) => {
       const errors = [];
+      // A primeira linha já inicia a filmagem 1; a marcação só vale a partir da 2ª.
+      const newVideo = !!el.newVideo && index > 0;
+      if (newVideo) {
+        previous = 0;
+        film += 1;
+      }
       const time = parseTimeInput(el.videoTime);
       const freq = parseFrequency(el.frequency);
       const pace = parsePace(el.pace);
@@ -207,6 +216,8 @@
         id: el.id,
         seq: index + 1,
         type: freq.value != null && freq.value < 1 - EPS ? "A" : "C",
+        film,
+        newVideo,
         frequency: freq.value,
         timeMinutes: time.minutes,
         subtractedTime,
@@ -222,6 +233,7 @@
       totals: { sumSubtracted, sumNormal },
       kpis,
       errorCount,
+      filmCount: film,
       startError: start.error,
     };
   }
@@ -354,7 +366,7 @@
 
   function createElement(overrides) {
     return Object.assign(
-      { id: generateId(), description: "", frequency: "1", videoTime: "", pace: "100", kaizen: "" },
+      { id: generateId(), description: "", frequency: "1", videoTime: "", pace: "100", kaizen: "", newVideo: false },
       overrides || {}
     );
   }
@@ -444,6 +456,7 @@
             videoTime: str(e.videoTime),
             pace: e.pace == null || e.pace === "" ? "100" : str(e.pace),
             kaizen: str(e.kaizen),
+            newVideo: e.newVideo === true,
           })
         ),
     };
@@ -468,9 +481,11 @@
         capacityPcsDay: r.kpis.capacity,
         status: r.kpis.status,
         rowsWithErrors: r.errorCount,
+        filmCount: r.filmCount,
         elements: r.rows.map((row) => ({
           id: row.id,
           seq: row.seq,
+          film: row.film,
           type: row.type,
           subtractedTimeMin: round(row.subtractedTime, 4),
           normalTimeMin: round(row.normalTime, 4),
@@ -507,11 +522,12 @@
     const lines = [];
     lines.push(["Cliente", q(study.clientName)].join(";"));
     lines.push(["Posto / Operação", q(study.processName)].join(";"));
-    lines.push(["Leitura inicial do vídeo", q(study.videoStart || "00:00")].join(";"));
+    lines.push(["Leitura inicial (1ª filmagem)", q(study.videoStart || "00:00")].join(";"));
     lines.push("");
     lines.push(
       [
         "Nº",
+        "Filmagem",
         "Elemento",
         "Tipo",
         "Frequência (texto)",
@@ -529,6 +545,7 @@
       lines.push(
         [
           row.seq,
+          row.film,
           q(el.description),
           row.type === "A" ? "Acíclico" : "Cíclico",
           // Fórmula ="1/50" impede que o Excel converta a fração em data (ex.: 1/5 → 01/mai).
@@ -545,6 +562,7 @@
     });
     lines.push("");
     const k = r.kpis;
+    lines.push(["Filmagens", r.filmCount].join(";"));
     lines.push(["Total tempo subtraído (min)", n3(r.totals.sumSubtracted)].join(";"));
     lines.push(["Total tempo normal (min)", n3(k.sumNormal)].join(";"));
     lines.push(["Tolerância (%)", n4(toFiniteOrNull(study.shiftParams.tolerancePct))].join(";"));

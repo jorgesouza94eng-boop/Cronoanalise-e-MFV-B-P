@@ -170,6 +170,68 @@ test("leitura contínua: tempo menor que o anterior é erro e a linha seguinte u
   close(r.totals.sumSubtracted, 1.5, "linha com erro fica fora do total");
 });
 
+test("nova filmagem: a leitura reinicia em 00:00 (célula amarela da planilha REV2)", () => {
+  // Reproduz o trecho da planilha: ...00:17:13 → 00:17:57 | nova filmagem: 00:00 → 00:40 → 01:09
+  const r = C.computeStudy(
+    study([
+      { videoTime: "17:13", pace: "100" },
+      { videoTime: "17:57", pace: "100" },
+      { videoTime: "00:40", pace: "100", newVideo: true },
+      { videoTime: "01:09", pace: "100" },
+    ])
+  );
+  assert.equal(r.errorCount, 0);
+  close(r.rows[1].subtractedTime, 44 / 60);
+  close(r.rows[2].subtractedTime, 40 / 60, "1ª linha do novo vídeo conta a partir de 00:00");
+  close(r.rows[3].subtractedTime, 29 / 60);
+  assert.deepEqual(r.rows.map((x) => x.film), [1, 1, 2, 2]);
+  assert.equal(r.rows[2].newVideo, true);
+  assert.equal(r.filmCount, 2);
+});
+
+test("nova filmagem: sem a marcação, o tempo menor continua sendo erro", () => {
+  const r = C.computeStudy(study([{ videoTime: "17:57", pace: "100" }, { videoTime: "00:40", pace: "100" }]));
+  assert.equal(r.rows[1].valid, false);
+  assert.equal(r.filmCount, 1);
+});
+
+test("nova filmagem: vale mesmo quando o 1º tempo do novo vídeo é maior que o anterior", () => {
+  const r = C.computeStudy(
+    study([
+      { videoTime: "00:30", pace: "100" },
+      { videoTime: "02:39", pace: "100", newVideo: true }, // vídeo novo: 02:39 desde 00:00
+    ])
+  );
+  close(r.rows[1].subtractedTime, 2 + 39 / 60);
+});
+
+test("nova filmagem: marcação na 1ª linha é ignorada (ela já inicia a filmagem 1) e a leitura inicial vale só para a 1ª", () => {
+  const r = C.computeStudy(
+    study(
+      [
+        { videoTime: "01:30", pace: "100", newVideo: true },
+        { videoTime: "00:20", pace: "100", newVideo: true },
+      ],
+      { videoStart: "01:00" }
+    )
+  );
+  close(r.rows[0].subtractedTime, 0.5, "1ª linha usa a leitura inicial");
+  close(r.rows[1].subtractedTime, 20 / 60, "2ª filmagem começa em 00:00");
+  assert.equal(r.rows[0].newVideo, false);
+  assert.equal(r.filmCount, 2);
+});
+
+test("nova filmagem: 9 filmagens somam o tempo total observado", () => {
+  const els = [];
+  for (let f = 0; f < 9; f++) {
+    els.push({ videoTime: "01:00", pace: "100", newVideo: f > 0 });
+    els.push({ videoTime: "02:30", pace: "100" });
+  }
+  const r = C.computeStudy(study(els));
+  assert.equal(r.filmCount, 9);
+  close(r.totals.sumSubtracted, 9 * 2.5);
+});
+
 test("tempo normal: TN = TS × (ritmo/100) × frequência", () => {
   const r = C.computeStudy(
     study([
@@ -291,8 +353,27 @@ test("JSON: ida e volta preserva os dados de entrada", () => {
   assert.ok(r.ok);
   assert.equal(r.study.elements[0].description, 'Soldar "peça"');
   assert.equal(r.study.elements[0].frequency, "1/20");
+  assert.equal(r.study.elements[0].newVideo, false);
   assert.equal(r.study.videoStart, "00:10");
   assert.equal(r.study.results, undefined, "resultados calculados não são reimportados");
+});
+
+test("JSON: marcação de nova filmagem é preservada e o resumo informa as filmagens", () => {
+  const s = study([{ videoTime: "01:00" }, { videoTime: "00:30", newVideo: true }]);
+  const out = JSON.parse(C.serializeStudy(s));
+  assert.equal(out.results.filmCount, 2);
+  assert.equal(out.results.elements[1].film, 2);
+  const r = C.normalizeStudy(out);
+  assert.equal(r.study.elements[1].newVideo, true);
+  assert.equal(r.study.elements[0].newVideo, false);
+});
+
+test("CSV: coluna Filmagem e total de filmagens", () => {
+  const csv = C.buildCSV(study([{ videoTime: "01:00" }, { videoTime: "00:30", newVideo: true }]));
+  const lines = csv.split("\r\n");
+  assert.ok(lines.some((l) => l.startsWith("Nº;Filmagem;")));
+  assert.ok(lines.some((l) => l.startsWith("2;2;")));
+  assert.ok(lines.includes("Filmagens;2"));
 });
 
 test("JSON: resumo de resultados é gravado para leitura externa", () => {

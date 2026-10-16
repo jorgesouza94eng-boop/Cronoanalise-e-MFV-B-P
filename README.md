@@ -38,6 +38,7 @@ Aplicação web **local-first** e **100% sem servidor** para cronoanálise de v�
 | `Tab` / `Shift+Tab` | Percorre todos os campos, inclusive **Frequência** e **Kaizen** |
 | `↑` / `↓` | Mesma coluna, linha anterior/seguinte |
 | `Ctrl+Enter` | Nova linha no final da grade |
+| `Alt+N` | Marca ou desmarca a linha atual como **início de uma nova filmagem** (também funciona tocando no nº da linha) |
 | `Ctrl+Del` | Exclui a linha atual (pede confirmação se houver conteúdo) |
 | `Ctrl+S` | Grava imediatamente (sem esperar os 3 s) |
 
@@ -51,6 +52,18 @@ Aplicação web **local-first** e **100% sem servidor** para cronoanálise de v�
 | `199` | **Recusado**: segundos ≥ 60 (erro de digitação) | — |
 | Valor menor que a leitura anterior | **Recusado**: a linha fica em vermelho e o foco permanece no campo | — |
 
+### Várias filmagens no mesmo estudo
+
+Cada vídeo novo começa em 00:00, como as células amarelas de "Tempo (Início)" na planilha REV2. Para registrar isso no app, há três formas:
+
+1. **Automática:** digite o tempo do novo vídeo normalmente. Como ele é menor que a leitura anterior, o app pergunta *"Esta linha é o início de uma nova filmagem?"*. `Enter` confirma; `Esc` volta para corrigir o tempo.
+2. **`Alt+N`** na linha. É necessário quando o 1º tempo do novo vídeo é **maior** que o último do vídeo anterior, porque nesse caso o app não tem como perceber a troca sozinho.
+3. **Toque no número da linha**, no celular.
+
+A linha marcada ganha uma faixa amarela e a etiqueta **F2**, **F3**, e assim por diante. O rodapé mostra o total de filmagens. A *Leitura inicial* vale só para a 1ª filmagem.
+
+![Várias filmagens](docs/tela-filmagens.png)
+
 - **Frequência:** `1` = uma vez por peça; `1/50` ou `0,02` = uma vez a cada 50 peças. Com frequência menor que 1, o elemento é marcado como **A** (acíclico).
 - **Ritmo:** de 50% a 150%. A nova linha herda o ritmo da linha anterior.
 
@@ -60,7 +73,7 @@ Aplicação web **local-first** e **100% sem servidor** para cronoanálise de v�
 
 | Indicador | Fórmula |
 |---|---|
-| Tempo subtraído (TS) | Tempo final da linha − última leitura válida (a primeira linha usa a leitura inicial) |
+| Tempo subtraído (TS) | Tempo final da linha − última leitura válida (a primeira linha usa a leitura inicial; a linha de **nova filmagem** usa 00:00) |
 | Tempo normal (TN) | TS × (Ritmo / 100) × Frequência |
 | Tempo padrão (TP) | ΣTN × (1 + Tolerância / 100), método multiplicativo da OIT |
 | Tempo líquido disponível (TLD) | Jornada bruta − Paradas planejadas |
@@ -122,7 +135,7 @@ Ao importar no notebook um estudo editado no celular, a revisão do arquivo serv
   "videoStart": "00:00",
   "shiftParams": { "shiftTimeMin": 528, "plannedStopsMin": 48, "dailyDemandPcs": 240, "tolerancePct": 5 },
   "elements": [
-    { "id": "…", "description": "Soldar", "frequency": "1", "videoTime": "01:12", "pace": "110", "kaizen": "" }
+    { "id": "…", "description": "Soldar", "frequency": "1", "videoTime": "01:12", "pace": "110", "kaizen": "", "newVideo": false }
   ],
   "results": { "unit": "minutos centesimais", "taktTimeMin": 2, "standardTimeMin": 1.386, "capacityPcsDay": 346, "status": "balanceado", "…": "…" }
 }
@@ -153,7 +166,7 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 37 testes do motor de cálculo (Node 18+, sem dependências)
+npm test             # 44 testes do motor de cálculo (Node 18+, sem dependências)
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

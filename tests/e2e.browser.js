@@ -28,7 +28,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const errors = [];
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
-  page.on("dialog", (d) => d.accept());
+  let dialogMode = "accept";
+  const dialogs = [];
+  page.on("dialog", (d) => { dialogs.push(d.message()); return dialogMode === "dismiss" ? d.dismiss() : d.accept(); });
 
   console.log(`== ${base} ${mobile ? "(modo celular)" : ""}`);
   await page.goto(base);
@@ -83,8 +85,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.keyboard.type("199"); await page.keyboard.press("Enter");
   check(await page.evaluate(() => document.activeElement.dataset.field) === "videoTime", "'199' bloqueia o avanço (foco permanece)");
   check((await read("#toast-region")).includes("Segundos"), "aviso de erro exibido");
-  // Tempo menor que o anterior
+  // Tempo menor que o anterior: o app pergunta se é nova filmagem → Esc (não)
+  dialogMode = "dismiss";
   await page.keyboard.type("100"); await page.keyboard.press("Enter");
+  dialogMode = "accept";
+  check(dialogs.some((m) => /NOVA FILMAGEM/.test(m)), "tempo menor pergunta se é nova filmagem");
   check(await page.evaluate(() => document.activeElement.dataset.field) === "videoTime", "tempo menor que o anterior bloqueia o avanço");
   check(await page.evaluate(() => document.querySelector("#chrono-tbody tr:nth-child(4)").classList.contains("row-error")), "linha 4 sinalizada em vermelho");
   await page.keyboard.type("312"); await page.keyboard.press("Enter");
@@ -113,6 +118,35 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.waitForFunction(() => window.LeanApp && LeanApp.state.study);
   const tn = await read("#total-tnorm"); check(tn === "2,320", "após recarregar: dados preservados (ΣTN 0,2+1,1+0,02+1,0 = " + tn + ")");
   check(await page.inputValue("#client-name") === "Indústria Metalúrgica Alfa", "cliente preservado");
+
+  // Nova filmagem (célula amarela da planilha): tempo menor + Enter → confirma
+  await page.focus("#chrono-tbody tr:nth-child(5) [data-field=description]");
+  await page.keyboard.type("Início do vídeo 2"); await page.keyboard.press("Enter");
+  await page.keyboard.type("40"); await page.keyboard.press("Enter");
+  check(await page.evaluate(() => document.activeElement.dataset.field) === "pace", "nova filmagem confirmada com Enter: avança para o ritmo");
+  const row5 = "#chrono-tbody tr:nth-child(5)";
+  check(await page.evaluate((s) => document.querySelector(s).classList.contains("row-new-video"), row5), "linha 5 marcada como início de filmagem");
+  check((await read(row5 + " .film-tag")) === "F2", "etiqueta F2 na linha 5");
+  check((await read(row5 + " [data-out=tsub]")) === "0,667", "TS da 1ª linha do vídeo 2 = 00:40 − 00:00 = 0,667");
+  check((await read("#total-films")).includes("2 filmagens"), "rodapé informa 2 filmagens");
+  await page.keyboard.press("Enter");
+  // Alt+N desmarca e marca de novo
+  await page.focus(row5 + " [data-field=description]");
+  await page.keyboard.press("Alt+n");
+  check(await page.evaluate((s) => document.querySelector(s).classList.contains("row-error"), row5), "Alt+N desmarca: tempo volta a ser erro");
+  await page.keyboard.press("Alt+n");
+  check(await page.evaluate((s) => !document.querySelector(s).classList.contains("row-error") && document.querySelector(s).classList.contains("row-new-video"), row5), "Alt+N marca de novo");
+  // Toque no número da linha
+  await page.click(row5 + " .btn-seq");
+  check(await page.evaluate((s) => !document.querySelector(s).classList.contains("row-new-video"), row5), "toque no nº desmarca");
+  await page.click(row5 + " .btn-seq");
+  check(await page.evaluate((s) => document.querySelector(s).classList.contains("row-new-video"), row5), "toque no nº marca");
+  await page.click("#chrono-tbody tr:nth-child(1) .btn-seq");
+  check((await read("#toast-region")).includes("primeira linha"), "1ª linha não pode ser marcada (aviso)");
+  await page.evaluate(() => LeanApp.flushSave());
+  await page.reload();
+  await page.waitForFunction(() => window.LeanApp && LeanApp.state.study);
+  check(await page.evaluate((s) => document.querySelector(s).classList.contains("row-new-video"), row5), "marcação de filmagem preservada após recarregar");
 
   // Exportar JSON
   const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#btn-export-json")]);

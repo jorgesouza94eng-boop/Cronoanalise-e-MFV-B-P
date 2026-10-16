@@ -121,6 +121,22 @@
       return { ok: true, formatted: p.formatted, rowError: rowError || null };
     },
 
+    /** Marca/desmarca a linha como início de uma nova filmagem (leitura volta a 00:00). */
+    onSetNewVideo(id, value) {
+      const els = state.study.elements;
+      const idx = els.findIndex((e) => e.id === id);
+      if (idx < 0) return { ok: false, error: "Linha não encontrada" };
+      if (idx === 0) return { ok: false, error: "A primeira linha já inicia a filmagem 1." };
+      const el = els[idx];
+      const next = value === undefined ? !el.newVideo : !!value;
+      if (el.newVideo !== next) {
+        el.newVideo = next;
+        markChanged();
+      }
+      const row = state.computed.rows[idx];
+      return { ok: true, newVideo: next, film: row.film, filmCount: state.computed.filmCount };
+    },
+
     onPaceCommit(id, raw) {
       const el = findElement(id);
       if (!el) return { ok: false, error: "Linha não encontrada" };

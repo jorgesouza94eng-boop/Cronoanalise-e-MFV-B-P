@@ -62,6 +62,7 @@
       totalTsub: $("total-tsub"),
       totalTnorm: $("total-tnorm"),
       totalErrors: $("total-errors"),
+      totalFilms: $("total-films"),
       dialog: $("study-dialog"),
       btnCloseDialog: $("btn-close-dialog"),
       newStudyForm: $("new-study-form"),
@@ -169,6 +170,9 @@
     if (info.field === "videoTime") {
       const res = commitTime(info, e.target);
       if (!res.ok) toast(`Linha ${info.index + 1}: ${res.error}`, "error");
+      else if (res.rowError) {
+        toast(`Linha ${info.index + 1}: ${res.rowError}. Se for um novo vídeo, use Alt+N (ou toque no nº da linha).`, "error", 8000);
+      }
     }
     if (info.field === "pace") commitPace(info, e.target, true);
   }
@@ -192,6 +196,13 @@
     const info = rowInfo(e.target);
     if (!info || !info.field) return;
 
+    // Alt+N: marca/desmarca o início de uma nova filmagem nesta linha
+    if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyN") {
+      e.preventDefault();
+      toggleNewVideo(info);
+      return;
+    }
+
     // Ctrl+Del: exclui a linha atual
     if (e.key === "Delete" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
@@ -204,10 +215,17 @@
       e.preventDefault();
       if (info.field === "videoTime") {
         const res = commitTime(info, e.target);
-        if (!res.ok || res.rowError) {
-          toast(`Linha ${info.index + 1}: ${res.error || res.rowError}`, "error");
+        if (!res.ok) {
+          toast(`Linha ${info.index + 1}: ${res.error}`, "error");
           e.target.select();
           return;
+        }
+        if (res.rowError) {
+          if (!askNewVideo(info, res)) {
+            e.target.select();
+            return;
+          }
+          e.target.classList.remove("input-invalid");
         }
       }
       if (info.field === "pace") {
@@ -234,10 +252,57 @@
   }
 
   function onGridClick(e) {
+    const seq = e.target.closest(".btn-seq");
+    if (seq) {
+      const info = rowInfo(seq);
+      if (info) toggleNewVideo(info);
+      return;
+    }
     const btn = e.target.closest(".btn-icon-del");
     if (!btn) return;
     const info = rowInfo(btn);
     if (info) deleteRow(info);
+  }
+
+  /**
+   * Tempo menor que a leitura anterior: pergunta se a linha inicia uma nova filmagem.
+   * Enter confirma (OK) e Esc cancela, sem precisar do mouse. Retorna true se resolvido.
+   */
+  function askNewVideo(info, res) {
+    if (info.index === 0) {
+      toast(`Linha 1: ${res.rowError}. Ajuste a leitura inicial ou o tempo final.`, "error");
+      return false;
+    }
+    const ok = root.confirm(
+      `Linha ${info.index + 1}: o tempo ${res.formatted} é menor que a leitura anterior.\n\n` +
+        "Esta linha é o INÍCIO DE UMA NOVA FILMAGEM (vídeo começando em 00:00)?\n\n" +
+        "OK (Enter) = sim, nova filmagem\nCancelar (Esc) = não, corrigir o tempo"
+    );
+    if (!ok) {
+      toast(`Linha ${info.index + 1}: ${res.rowError}`, "error");
+      return false;
+    }
+    const r = h.onSetNewVideo(info.id, true);
+    if (!r.ok) {
+      toast(r.error, "error");
+      return false;
+    }
+    toast(`Linha ${info.index + 1}: início da filmagem ${r.film} (leitura reiniciada em 00:00).`, "ok");
+    return true;
+  }
+
+  function toggleNewVideo(info) {
+    const r = h.onSetNewVideo(info.id);
+    if (!r.ok) {
+      toast(r.error, "warn");
+      return;
+    }
+    toast(
+      r.newVideo
+        ? `Linha ${info.index + 1}: início da filmagem ${r.film} (leitura reiniciada em 00:00).`
+        : `Linha ${info.index + 1}: marcação de nova filmagem removida.`,
+      "ok"
+    );
   }
 
   function deleteRow(info) {
@@ -325,7 +390,15 @@
     computed.rows.forEach((row, i) => {
       const tr = rows[i];
       if (!tr) return;
-      tr.querySelector(".cell-num").textContent = String(row.seq).padStart(2, "0");
+      tr.querySelector(".seq-num").textContent = String(row.seq).padStart(2, "0");
+      const filmTag = tr.querySelector(".film-tag");
+      const showFilm = row.newVideo || (i === 0 && computed.filmCount > 1);
+      filmTag.hidden = !showFilm;
+      filmTag.textContent = showFilm ? `F${row.film}` : "";
+      tr.classList.toggle("row-new-video", row.newVideo);
+      tr.querySelector(".btn-seq").title = row.newVideo
+        ? `Início da filmagem ${row.film}. Clique (ou Alt+N) para desmarcar.`
+        : "Marcar o início de uma nova filmagem (Alt+N)";
       const tag = tr.querySelector(".tag-type");
       tag.textContent = row.type;
       tag.classList.toggle("is-acyclic", row.type === "A");
@@ -335,12 +408,17 @@
       tr.classList.toggle("row-error", !row.valid);
       tr.title = row.errors.join(" • ");
 
+      const timeInput = tr.querySelector('[data-field="videoTime"]');
+      if (document.activeElement !== timeInput) {
+        timeInput.classList.toggle("input-invalid", row.errors.some((m) => !/Frequência|ritmo/i.test(m)));
+      }
       const freqInput = tr.querySelector('[data-field="frequency"]');
       freqInput.classList.toggle("input-invalid", row.errors.some((m) => /Frequência/i.test(m)));
     });
 
     els.totalTsub.textContent = fmt(computed.totals.sumSubtracted, 3);
     els.totalTnorm.textContent = fmt(computed.totals.sumNormal, 3);
+    els.totalFilms.textContent = computed.filmCount > 1 ? ` · ${computed.filmCount} filmagens` : "";
     els.totalErrors.textContent = computed.errorCount
       ? `⚠ ${computed.errorCount} linha(s) com erro fora dos totais`
       : "";
