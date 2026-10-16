@@ -75,7 +75,7 @@ Abaixo da grade, o app agrupa as linhas pelo nome do elemento:
 
 | Modo | Tipo C | Tipo A |
 |---|---|---|
-| **Quantidade** (planilha) | Σtempo ÷ Σquantidade (média por unidade) | Σtempo |
+| **Quantidade** (planilha) | Σtempo ÷ Σquantidade (média por unidade) | Σtempo, ou **Σtempo ÷ Σpeças** com as peças de todas as filmagens |
 | **Frequência** | média das ocorrências | média das ocorrências (a frequência já rateia) |
 
 O resumo mostra:
@@ -135,6 +135,22 @@ A linha marcada ganha uma faixa amarela e a etiqueta **F2**, **F3**, e assim por
 
 ![Várias filmagens](docs/tela-filmagens.png)
 
+#### Peças produzidas por filmagem (acíclicos por unidade)
+
+Na planilha REV2, o elemento **tipo A** entra no ciclo como **Σtempo**, isto é, o tempo total observado em todas as filmagens. Esse valor não pode ser comparado com o takt, que é por peça.
+
+No modo *Quantidade*, o bloco **Peças produzidas por filmagem** (acima do resumo) tem um campo para cada filmagem (F1, F2…):
+
+| Situação | Tipo A no ciclo |
+|---|---|
+| Nenhuma filmagem com peças | Σtempo (igual à planilha) |
+| Peças em parte das filmagens | Σtempo, com aviso ⚠ "faltam peças" |
+| Peças em **todas** as filmagens | **Σtempo ÷ Σpeças** (tempo por unidade) |
+
+- Cada filmagem mostra o tempo observado e o **tempo observado ÷ peças**. O bloco mostra também o **ciclo real observado** (tudo o que foi filmado ÷ total de peças, no ritmo filmado), que serve para conferir o tempo normal do ciclo.
+- O tempo padrão e o TC levado ao MFV passam a ser por unidade.
+- O preenchimento do **modelo B+P** em Excel continua usando as fórmulas da própria planilha (tipo A = Σtempo). O **Excel simples**, o CSV e o JSON levam o tempo por unidade.
+
 - **Frequência:** `1` = uma vez por peça; `1/50` ou `0,02` = uma vez a cada 50 peças. Com frequência menor que 1, o elemento é marcado como **A** (acíclico).
 - **Ritmo:** de 50% a 150%. A nova linha herda o ritmo da linha anterior.
 
@@ -153,12 +169,43 @@ O link **MFV** no cabeçalho abre o Mapa de Fluxo de Valor, que reproduz a aba *
 | **Gráfico GBO** | Barras por etapa com a linha do takt. Barras acima do takt ficam em vermelho e o processo Kaizen fica tracejado |
 | **Resultados** | Gargalo (maior TC), operadores atuais × ideais (ΣTC ÷ takt), capacidade da linha (tempo disponível ÷ maior TC), produtividade (/dia/op e /h/op) e o processo Kaizen marcado |
 | **Atravessamento** | Estoques ÷ demanda diária = dias. A soma dá o lead time |
+| **Produtividade real (pç/HH)** | Um dia por linha: produção, nº de operadores e horas trabalhadas. Linha de base (T1) × acompanhamento (T3), com o ganho em % contra a meta |
+| **Payback** | Investimento ÷ ganho mensal, com as HH economizadas calculadas a partir do pç/HH |
 
 Conferência com o MFV real da Laje Forte (aba EP): deram os mesmos 440 min/dia, a mesma demanda de 206,67 m²/dia, o takt de 0,035484 h, a capacidade de 206,67 m²/dia, a produtividade de 14,09 m²/h/op, 1,00 operador ideal e 8 dias de atravessamento.
 
 > Na planilha, a "Capacidade de Produção Diária da Linha" (K46) usa as horas sem descontar a disponibilidade da família, enquanto o setor Kaizen (N46) desconta. O app usa o **tempo disponível com a disponibilidade** nos dois casos. Com disponibilidade de 100%, os resultados são idênticos.
 
 **Nº total de operadores:** se a mesma equipe faz várias etapas (como na Laje Forte), informe o total da linha em *Demanda e disponibilidade*, como no K37 da planilha. Vazio = soma dos operadores das etapas.
+
+### Produtividade real (pç/HH) e payback — comprovação da meta B+P
+
+A "produtividade" do bloco *Resultados* é **teórica** (capacidade do gargalo ÷ operadores). A meta do programa (+20%) é comprovada com a **produtividade real**, medida no chão de fábrica. Para isso, use o bloco no fim da página:
+
+| Indicador | Fórmula |
+|---|---|
+| HH do dia | Nº de operadores × horas trabalhadas por operador |
+| pç/HH do dia | Produção do dia ÷ HH |
+| pç/HH do período | **Σ produção ÷ Σ HH**: média ponderada pelas horas, não a média das médias diárias |
+| Ganho | (pç/HH acompanhamento ÷ pç/HH linha de base − 1) × 100 |
+| Meta em pç/HH | Linha de base × (1 + meta/100). A meta é editável e vem com 20% |
+
+- **+ Dia (linha de base)** no T1 e **+ Dia (acompanhamento)** no T3. O novo dia repete os operadores e as horas do dia anterior do mesmo período.
+- Semáforo: 🟢 meta atingida · 🟡 ganho abaixo da meta · 🔴 queda de produtividade.
+- **pç/HH projetado** (opcional): estimativa para o plano de ação, usada só enquanto não houver dias de acompanhamento. Os cartões indicam "projetado" com clareza.
+- Linhas incompletas ficam fora das médias e são marcadas em vermelho.
+
+**Payback:**
+
+| Indicador | Fórmula |
+|---|---|
+| HH economizadas/mês | Produção mensal × (1 ÷ pç/HH base − 1 ÷ pç/HH atual) |
+| Ganho mensal | HH economizadas × custo da HH + outros ganhos mensais |
+| Payback (meses) | Investimento ÷ ganho mensal |
+
+- **Produção mensal** vazia = demanda mensal do MFV.
+- **Outros ganhos mensais**: só valores comprovados (refugo, retrabalho, estoque, horas extras…).
+- Payback de até 12 meses fica verde; acima disso, amarelo; sem ganho positivo, "sem retorno".
 
 ### Exportar Excel do MFV (modelo B+P)
 
@@ -205,7 +252,7 @@ O botão **✨ IA** na barra da grade abre o assistente. Ele precisa de **intern
 |---|---|
 | Tempo subtraído (TS) | Tempo final da linha − última leitura válida (a primeira linha usa a leitura inicial; a linha de **nova filmagem** usa 00:00) |
 | Tempo normal da linha (TN) | TS × (Ritmo / 100) [× Frequência, no modo frequência] |
-| Tempo do elemento (resumo) | Quantidade: C = ΣTN ÷ ΣQtd · A = ΣTN — Frequência: média das ocorrências |
+| Tempo do elemento (resumo) | Quantidade: C = ΣTN ÷ ΣQtd · A = ΣTN (ou ΣTN ÷ Σpeças das filmagens) — Frequência: média das ocorrências |
 | Tempo normal do ciclo | Σ tempos dos elementos do resumo |
 | Tempo padrão (TP) | Tempo normal do ciclo × (1 + Tolerância / 100), método multiplicativo da OIT |
 | Tempo líquido disponível (TLD) | Jornada bruta − Paradas planejadas |
@@ -307,7 +354,8 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 101 testes: cálculo, compilação, Excel, modelos B+P, MFV e IA (Node 18+, sem dependências)
+npm test             # 111 testes: cálculo, compilação, Excel, modelos B+P, MFV, pç/HH, payback e IA (Node 18+, sem dependências)
+npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada e REV 1.2 — requer o servidor local
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

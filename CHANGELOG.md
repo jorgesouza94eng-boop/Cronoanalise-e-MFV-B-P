@@ -4,8 +4,29 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.2 — 16/10/2026 (comprovação da meta B+P)
+
+### Novidades
+- **Produtividade real (pç/HH)** no MFV: registro diário da produção, do nº de operadores e das horas trabalhadas. Linha de base (T1) × acompanhamento (T3), com a média do período = Σ produção ÷ Σ HH, o ganho em % e o semáforo contra a **meta de +20%** (editável). Há também o pç/HH projetado (opcional), como estimativa para o plano de ação.
+- **Payback** no MFV: HH economizadas/mês = produção mensal × (1/pç/HH base − 1/pç/HH atual). Ganho mensal = HH × custo da HH + outros ganhos informados. Payback = investimento ÷ ganho mensal.
+- **Peças produzidas por filmagem** na cronoanálise: com as peças de todas as filmagens, os elementos **tipo A** passam a entrar no ciclo como **Σtempo ÷ Σpeças** (tempo por unidade), em vez do tempo total observado. Isso corrige a comparação do TC com o takt. O painel mostra também o ciclo real observado de cada filmagem.
+- O **resumo executivo da IA** (MFV) passa a considerar o pç/HH real e o payback quando existirem, deixando claro quando o valor é projetado.
+
+### Compatibilidade
+- Os arquivos passam para a versão 2 do formato (estudo e MFV). Os arquivos da REV 1.0/1.1 abrem normalmente; sem peças por filmagem, os resultados não mudam.
+- O preenchimento do **modelo B+P** (Excel) continua com as fórmulas da planilha (tipo A = Σtempo). O Excel simples, o CSV e o JSON levam o tempo por unidade.
+
+### Correções
+- MFV no celular: a tabela de estoques não gera mais rolagem horizontal na página.
+
+### Testes
+- 111 testes de unidade (10 novos: filmagens, pç/HH e payback) e o novo teste de navegador `tests/e2e.rev12.js` (22 verificações, incluindo foco na digitação, persistência e celular).
 
 ---
 

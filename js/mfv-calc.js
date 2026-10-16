@@ -20,7 +20,7 @@
   "use strict";
 
   const SCHEMA_ID = "lean-chrono-mfv";
-  const SCHEMA_VERSION = 1;
+  const SCHEMA_VERSION = 2; // v2: produtividade (pç/HH) e payback
   const FILE_PATTERN = /^MFV_.+\.json$/i;
   const DAYS = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
   const EPS = 1e-9;
@@ -117,6 +117,14 @@
     return Object.assign({ id: Calc.generateId(), name: "", quantity: "" }, overrides || {});
   }
 
+  /**
+   * Registro diário de produtividade real. period: "base" (linha de base, T1) ou
+   * "acomp" (acompanhamento após as melhorias, T3).
+   */
+  function createProductivityRecord(overrides) {
+    return Object.assign({ id: Calc.generateId(), date: "", period: "base", pieces: "", operators: "", hours: "" }, overrides || {});
+  }
+
   function createMfv(opts) {
     const o = opts || {};
     const now = o.now || new Date().toISOString();
@@ -144,6 +152,13 @@
         createInventory({ name: "Produto acabado" }),
       ],
       notes: "",
+      productivity: [],
+      productivityTargetPct: "20",
+      productivityProjected: "", // pç/HH esperado (estimativa até haver acompanhamento)
+      paybackInvestment: "",
+      hhCost: "",
+      paybackMonthlyProd: "", // vazio = demanda mensal
+      paybackOtherGains: "",
     };
   }
 
@@ -199,6 +214,24 @@
         .filter((s) => s && typeof s === "object")
         .map((s) => createInventory({ id: typeof s.id === "string" && s.id ? s.id : Calc.generateId(), name: str(s.name), quantity: str(s.quantity) })),
       notes: str(raw.notes),
+      productivity: (Array.isArray(raw.productivity) ? raw.productivity : [])
+        .filter((p) => p && typeof p === "object")
+        .map((p) =>
+          createProductivityRecord({
+            id: typeof p.id === "string" && p.id ? p.id : Calc.generateId(),
+            date: str(p.date),
+            period: p.period === "acomp" ? "acomp" : "base",
+            pieces: str(p.pieces),
+            operators: str(p.operators),
+            hours: str(p.hours),
+          })
+        ),
+      productivityTargetPct: raw.productivityTargetPct == null ? "20" : str(raw.productivityTargetPct),
+      productivityProjected: str(raw.productivityProjected),
+      paybackInvestment: str(raw.paybackInvestment),
+      hhCost: str(raw.hhCost),
+      paybackMonthlyProd: str(raw.paybackMonthlyProd),
+      paybackOtherGains: str(raw.paybackOtherGains),
     };
     return { ok: true, doc, study: doc }; // "study": nome esperado pela camada de armazenamento
   }
@@ -300,6 +333,9 @@
     });
     const leadTimeDays = inventories.reduce((a, inv) => a + (inv.days || 0), 0);
 
+    const productivity = computeProductivity(doc);
+    const payback = computePayback(doc, productivity, demandMonthly);
+
     return {
       days,
       weekMin,
@@ -319,8 +355,131 @@
       kaizen,
       inventories,
       leadTimeDays,
+      productivity,
+      payback,
       issues,
       status: !takt || !bottleneck ? "incompleto" : bottleneck.tc > takt + EPS ? "gargalo" : "atende",
+    };
+  }
+
+  /* ==========================================================================
+     PRODUTIVIDADE REAL (pç/HH) E PAYBACK — comprovação da meta B+P
+     ========================================================================== */
+
+  /**
+   * Produtividade real medida no chão de fábrica (não é a capacidade teórica do GBO):
+   *  - HH do dia = Nº de operadores × Horas trabalhadas.
+   *  - pç/HH do dia = Produção ÷ HH.
+   *  - pç/HH do período = Σ produção ÷ Σ HH (média ponderada pelas horas, não média das médias).
+   *  - Ganho (%) = (pç/HH acompanhamento ÷ pç/HH linha de base − 1) × 100, comparado à meta (20%).
+   * Linhas incompletas não entram nas médias (sinalizadas como erro).
+   */
+  function computeProductivity(doc) {
+    const records = (doc.productivity || []).map((p) => {
+      const pieces = num(p.pieces);
+      const ops = num(p.operators);
+      const hours = num(p.hours);
+      const blank = pieces == null && ops == null && hours == null;
+      const errors = [];
+      if (!blank) {
+        if (pieces == null || pieces < 0) errors.push("Informe a produção do dia");
+        if (ops == null || ops <= 0) errors.push("Informe o nº de operadores");
+        if (hours == null || hours <= 0 || hours > 24) errors.push("Horas trabalhadas entre 0 e 24");
+      }
+      const valid = !blank && !errors.length;
+      const hh = valid ? ops * hours : null;
+      return { id: p.id, period: p.period === "acomp" ? "acomp" : "base", pieces, hh, pcHH: valid && hh > 0 ? pieces / hh : null, valid, blank, errors };
+    });
+    const group = (period) => {
+      const list = records.filter((x) => x.valid && x.period === period);
+      const pieces = list.reduce((a, x) => a + x.pieces, 0);
+      const hh = list.reduce((a, x) => a + x.hh, 0);
+      return { days: list.length, pieces, hh, pcHH: hh > 0 ? pieces / hh : null };
+    };
+    const base = group("base");
+    const acomp = group("acomp");
+    const projected = num(doc.productivityProjected);
+    const targetRaw = num(doc.productivityTargetPct);
+    const targetPct = targetRaw != null && targetRaw > 0 ? targetRaw : 20;
+    // Comparação: acompanhamento real; sem ele, o pç/HH projetado (só como estimativa).
+    let compare = null;
+    let source = null;
+    if (acomp.pcHH != null) {
+      compare = acomp.pcHH;
+      source = "real";
+    } else if (projected != null && projected > 0) {
+      compare = projected;
+      source = "projetado";
+    }
+    const gainPct = base.pcHH > 0 && compare != null ? (compare / base.pcHH - 1) * 100 : null;
+    let status = "incompleto";
+    if (gainPct != null) status = gainPct + EPS >= targetPct ? "meta" : gainPct >= 0 ? "abaixo" : "queda";
+    return {
+      records,
+      base,
+      acomp,
+      projected: projected > 0 ? projected : null,
+      compare,
+      source,
+      gainPct,
+      targetPct,
+      targetPcHH: base.pcHH != null ? base.pcHH * (1 + targetPct / 100) : null,
+      status,
+      errorCount: records.filter((x) => x.errors.length).length,
+    };
+  }
+
+  /**
+   * Payback simples (meses) = Investimento ÷ Ganho mensal.
+   *  - HH economizadas/mês = Produção mensal × (1/pç/HH base − 1/pç/HH comparado).
+   *  - Ganho com mão de obra = HH economizadas × Custo da HH.
+   *  - Ganho mensal = ganho com mão de obra + outros ganhos informados (refugo, estoque, horas extras...).
+   * Produção mensal: valor digitado ou, se vazio, a demanda mensal do MFV.
+   */
+  function computePayback(doc, prod, demandMonthly) {
+    const investment = num(doc.paybackInvestment);
+    const hhCost = num(doc.hhCost);
+    const typedProd = num(doc.paybackMonthlyProd);
+    const monthlyProd = typedProd > 0 ? typedProd : demandMonthly > 0 ? demandMonthly : null;
+    const other = num(doc.paybackOtherGains);
+    const issues = [];
+    if (investment != null && investment < 0) issues.push("Investimento não pode ser negativo");
+    if (hhCost != null && hhCost < 0) issues.push("Custo da HH não pode ser negativo");
+
+    const hhSavedMonth =
+      prod.base.pcHH > 0 && prod.compare > 0 && monthlyProd != null ? monthlyProd * (1 / prod.base.pcHH - 1 / prod.compare) : null;
+    const laborGain = hhSavedMonth != null && hhCost != null && hhCost >= 0 ? hhSavedMonth * hhCost : null;
+    const hasOther = other != null && other !== 0;
+    const monthlyGain = laborGain == null && !hasOther ? null : (laborGain || 0) + (hasOther ? other : 0);
+
+    let months = null;
+    let status = "incompleto";
+    if (investment == null) {
+      status = "incompleto";
+    } else if (issues.length) {
+      status = "invalido";
+    } else if (monthlyGain == null) {
+      status = "incompleto";
+    } else if (!(monthlyGain > EPS)) {
+      status = "sem-retorno";
+    } else {
+      months = investment / monthlyGain;
+      status = "ok";
+    }
+    return {
+      investment,
+      hhCost,
+      monthlyProd,
+      monthlyProdFromDemand: !(typedProd > 0) && monthlyProd != null,
+      otherGains: hasOther ? other : 0,
+      hhSavedMonth,
+      laborGain,
+      monthlyGain,
+      annualGain: monthlyGain != null ? monthlyGain * 12 : null,
+      months,
+      source: prod.source,
+      status,
+      issues,
     };
   }
 
@@ -356,6 +515,20 @@
           productivityHourOperator: round(r.line.productivityHour, 3),
           leadTimeDays: round(r.leadTimeDays, 2),
           status: r.status,
+          productivity: {
+            basePcHH: round(r.productivity.base.pcHH, 4),
+            followUpPcHH: round(r.productivity.acomp.pcHH, 4),
+            comparedWith: r.productivity.source,
+            gainPct: round(r.productivity.gainPct, 2),
+            targetPct: r.productivity.targetPct,
+            status: r.productivity.status,
+          },
+          payback: {
+            hhSavedMonth: round(r.payback.hhSavedMonth, 2),
+            monthlyGain: round(r.payback.monthlyGain, 2),
+            months: round(r.payback.months, 2),
+            status: r.payback.status,
+          },
         },
       }),
       null,
@@ -374,7 +547,10 @@
     createMfv,
     createStep,
     createInventory,
+    createProductivityRecord,
     normalizeMfv,
+    computeProductivity,
+    computePayback,
     computeMfv,
     serializeMfv,
   };

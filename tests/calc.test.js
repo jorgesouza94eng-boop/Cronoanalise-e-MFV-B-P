@@ -634,3 +634,79 @@ test("CSV: unidade escolhida e seção 'Resumo por elemento'", () => {
   assert.ok(lines.includes("RESUMO POR ELEMENTO (Listagem de Elementos)"));
   assert.ok(lines.some((l) => l.startsWith('1;"Corte";Cíclico;2;3,0000;60,0;20,0;100,0;"Agrega"')));
 });
+
+/* ==========================================================================
+   PEÇAS POR FILMAGEM (REV 1.2): acíclicos convertidos em tempo por unidade
+   ========================================================================== */
+
+function twoFilms() {
+  const s = C.createStudy({ clientName: "Cliente", processName: "Posto" });
+  s.settings.entryMode = "quantidade";
+  s.elements = [
+    C.createElement({ description: "Pegar peça", type: "C", quantity: "1", videoTime: "10" }),
+    C.createElement({ description: "Set-up", type: "A", videoTime: "40" }),
+    C.createElement({ description: "Pegar peça", type: "C", quantity: "1", videoTime: "10", newVideo: true }),
+    C.createElement({ description: "Limpar bancada", type: "A", videoTime: "30" }),
+  ];
+  return s;
+}
+const sec = (min) => min * 60;
+const byName = (r, name) => r.summary.elements.find((g) => g.name === name);
+
+test("filmagens: sem peças, o tipo A continua Σtempo (padrão da planilha)", () => {
+  const r = C.computeStudy(twoFilms());
+  assert.equal(r.films.list.length, 2);
+  assert.equal(r.films.list[0].key, C.FIRST_FILM_KEY);
+  close(sec(r.films.list[0].observed), 40, "F1 observada");
+  close(sec(r.films.list[1].observed), 30, "F2 observada");
+  assert.equal(r.summary.acyclic, "total");
+  close(sec(byName(r, "Set-up").cycleTime), 30);
+  close(sec(byName(r, "Pegar peça").cycleTime), 10);
+  close(sec(r.summary.cycleNormal), 60);
+});
+
+test("filmagens: com as peças de todas as filmagens, tipo A = Σtempo ÷ Σpeças", () => {
+  const s = twoFilms();
+  s.filmPieces = { [C.FIRST_FILM_KEY]: "5", [s.elements[2].id]: "5" };
+  const r = C.computeStudy(s);
+  assert.equal(r.summary.acyclic, "por-unidade");
+  assert.equal(r.films.piecesTotal, 10);
+  close(sec(byName(r, "Set-up").cycleTime), 3, "30 s ÷ 10 peças");
+  close(sec(byName(r, "Limpar bancada").cycleTime), 2, "20 s ÷ 10 peças");
+  assert.equal(byName(r, "Set-up").perUnit, true);
+  close(sec(byName(r, "Pegar peça").cycleTime), 10, "o cíclico não muda");
+  close(sec(r.summary.cycleNormal), 15);
+  close(sec(r.films.observedPerPiece), 7, "ciclo real observado = 70 s ÷ 10");
+  // O tempo padrão (e o TC levado ao MFV) passa a ser por unidade.
+  close(sec(r.kpis.standardTime), 15);
+});
+
+test("filmagens: peças incompletas ou inválidas mantêm o tipo A como Σtempo e avisam", () => {
+  const s = twoFilms();
+  s.filmPieces = { [C.FIRST_FILM_KEY]: "5" };
+  let r = C.computeStudy(s);
+  assert.equal(r.summary.acyclic, "incompleto");
+  close(sec(byName(r, "Set-up").cycleTime), 30);
+  s.filmPieces = { [C.FIRST_FILM_KEY]: "5", [s.elements[2].id]: "0" };
+  r = C.computeStudy(s);
+  assert.equal(r.summary.acyclic, "incompleto");
+  assert.ok(r.films.list[1].error);
+  // No modo frequência as peças são ignoradas (a frequência já rateia o acíclico).
+  s.settings.entryMode = "frequencia";
+  s.filmPieces = { [C.FIRST_FILM_KEY]: "5", [s.elements[2].id]: "5" };
+  assert.equal(C.computeStudy(s).summary.acyclic, "total");
+});
+
+test("filmagens: peças gravadas no arquivo, normalizadas e resumidas no JSON", () => {
+  const s = twoFilms();
+  s.filmPieces = { [C.FIRST_FILM_KEY]: " 5 ", [s.elements[2].id]: 5, lixo: { x: 1 }, vazio: "" };
+  const json = JSON.parse(C.serializeStudy(s));
+  assert.equal(json.schemaVersion, 2);
+  assert.equal(json.results.acyclicTime, "por-unidade");
+  assert.equal(json.results.films.length, 2);
+  const back = C.normalizeStudy(json).study;
+  assert.deepEqual(back.filmPieces, { [C.FIRST_FILM_KEY]: "5", [s.elements[2].id]: "5" });
+  // Arquivo da versão anterior (sem filmPieces) abre normalmente.
+  const old = C.normalizeStudy({ schema: C.SCHEMA_ID, schemaVersion: 1, id: "x", elements: [] }).study;
+  assert.deepEqual(old.filmPieces, {});
+});

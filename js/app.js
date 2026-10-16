@@ -131,6 +131,16 @@
       markChanged({ recompute: false });
     },
 
+    onFilmPiecesChange(key, raw) {
+      if (!state.study) return;
+      const value = String(raw == null ? "" : raw).trim();
+      const pieces = state.study.filmPieces || (state.study.filmPieces = {});
+      if ((pieces[key] || "") === value) return;
+      if (value) pieces[key] = value;
+      else delete pieces[key];
+      markChanged();
+    },
+
     onParamChange(key, raw) {
       if (!state.study) return false;
       const value = Calc.parseNumber(raw);

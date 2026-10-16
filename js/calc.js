@@ -17,7 +17,7 @@
   "use strict";
 
   const SCHEMA_ID = "lean-chrono-estudo";
-  const SCHEMA_VERSION = 1;
+  const SCHEMA_VERSION = 2; // v2: peças por filmagem (filmPieces)
 
   /** Faixa aceita para o fator de ritmo (%). */
   const PACE_MIN = 50;
@@ -178,6 +178,9 @@
   /** Modos de lançamento: "quantidade" (planilha REV2) ou "frequencia" (cronoanálise clássica). */
   const ENTRY_MODES = ["quantidade", "frequencia"];
 
+  /** Chave da 1ª filmagem em study.filmPieces (as demais usam o id da linha "nova filmagem"). */
+  const FIRST_FILM_KEY = "inicio";
+
   function timeUnit(study) {
     const u = study && study.settings && study.settings.timeUnit;
     return TIME_UNITS[u] ? u : "min";
@@ -229,7 +232,8 @@
    *
    * Resumo por elemento (aba Listagem de Elementos) — agrupa pelo nome:
    *  - Modo quantidade (planilha REV2): Tipo C → ΣTN ÷ ΣQtd (média por unidade);
-   *                                     Tipo A → ΣTN (soma dos tempos).
+   *                                     Tipo A → ΣTN (soma dos tempos) ou, com as peças
+   *                                     de todas as filmagens, ΣTN ÷ Σpeças (por unidade).
    *  - Modo frequência: média do TN das ocorrências (a frequência já rateia o acíclico).
    *  - Tempo normal do ciclo = Σ tempos dos elementos.
    *
@@ -242,6 +246,8 @@
     const start = parseTimeInput(study && study.videoStart);
     let previous = start.minutes != null ? start.minutes : 0;
     let film = 1;
+    // Filmagens: chave estável = "inicio" (1ª) ou id da linha que marca a nova filmagem.
+    const films = [{ film: 1, key: FIRST_FILM_KEY, startSeq: 1, observed: 0 }];
 
     let sumSubtracted = 0;
     let sumNormal = 0;
@@ -255,6 +261,7 @@
       if (newVideo) {
         previous = 0;
         film += 1;
+        films.push({ film, key: el.id, startSeq: index + 1, observed: 0 });
       }
       const time = parseTimeInput(el.videoTime);
       const freq = parseFrequency(el.frequency);
@@ -289,6 +296,7 @@
       if (valid) {
         sumSubtracted += subtractedTime;
         sumNormal += normalTime;
+        if (hasReading) films[film - 1].observed += subtractedTime;
       } else {
         errorCount += 1;
       }
@@ -311,7 +319,8 @@
       };
     });
 
-    const summary = summarize(elements, rows, mode);
+    const filmInfo = filmPieces(study, films, mode);
+    const summary = summarize(elements, rows, mode, filmInfo);
     const kpis = computeKpis(params, summary.cycleNormal);
     return {
       mode,
@@ -323,6 +332,7 @@
       kpis,
       errorCount,
       filmCount: film,
+      films: filmInfo,
       startError: start.error,
     };
   }
@@ -353,7 +363,53 @@
     return { total, elementCount: summary.elements.length, byValue, byWaste };
   }
 
-  function summarize(elements, rows, mode) {
+  /**
+   * Peças produzidas por filmagem (modo quantidade). Quando TODAS as filmagens têm peças,
+   * os elementos acíclicos (tipo A) viram tempo por unidade: ΣTN do elemento ÷ Σpeças
+   * produzidas no período observado. Sem isso, o tipo A fica como Σtempo (padrão da planilha),
+   * que é o tempo total observado e não pode ser comparado com o takt.
+   */
+  function filmPieces(study, films, mode) {
+    const raw = (study && study.filmPieces) || {};
+    let piecesTotal = 0;
+    let filled = 0;
+    let errors = 0;
+    const list = films.map((f) => {
+      const s = String(raw[f.key] == null ? "" : raw[f.key]).trim();
+      let pieces = null;
+      let error = null;
+      if (s) {
+        const v = parseNumber(s);
+        if (v == null || !(v > 0)) error = "Peças devem ser um número maior que zero";
+        else pieces = v;
+      }
+      if (error) errors += 1;
+      if (pieces != null) {
+        filled += 1;
+        piecesTotal += pieces;
+      }
+      return Object.assign({}, f, {
+        raw: s,
+        pieces,
+        error,
+        observedPerPiece: pieces != null && f.observed > EPS ? f.observed / pieces : null,
+      });
+    });
+    const observedTotal = list.reduce((a, f) => a + f.observed, 0);
+    let acyclic = "total"; // "total" | "por-unidade" | "incompleto"
+    if (mode === "quantidade" && filled > 0) acyclic = filled === list.length && !errors ? "por-unidade" : "incompleto";
+    return {
+      list,
+      filled,
+      piecesTotal: filled ? piecesTotal : null,
+      observedTotal,
+      observedPerPiece: acyclic === "por-unidade" && piecesTotal > EPS ? observedTotal / piecesTotal : null,
+      acyclic,
+    };
+  }
+
+  function summarize(elements, rows, mode, filmInfo) {
+    const perUnitA = !!(filmInfo && filmInfo.acyclic === "por-unidade");
     const groups = new Map();
     rows.forEach((row, i) => {
       if (!row.valid || !row.hasReading) return;
@@ -393,7 +449,11 @@
 
     const list = Array.from(groups.values());
     list.forEach((g) => {
-      if (mode === "quantidade") g.cycleTime = g.type === "A" ? g.sumNormal : g.sumNormal / g.sumQuantity;
+      g.perUnit = mode === "quantidade" && g.type === "A" && perUnitA;
+      if (mode === "quantidade") {
+        if (g.type !== "A") g.cycleTime = g.sumNormal / g.sumQuantity;
+        else g.cycleTime = g.perUnit ? g.sumNormal / filmInfo.piecesTotal : g.sumNormal;
+      }
       else g.cycleTime = g.sumNormal / g.occurrences;
       g.avgQuantity = g.sumQuantity / g.occurrences;
       g.action = VALUES[g.value] ? VALUES[g.value].action : "Classificar valor";
@@ -403,7 +463,7 @@
       g.seq = i + 1;
       g.sharePct = cycleNormal > EPS ? (g.cycleTime / cycleNormal) * 100 : 0;
     });
-    return { elements: list, cycleNormal, conflictCount: list.filter((g) => g.conflicts.length).length };
+    return { elements: list, cycleNormal, acyclic: filmInfo ? filmInfo.acyclic : "total", conflictCount: list.filter((g) => g.conflicts.length).length };
   }
 
   /**
@@ -567,6 +627,7 @@
       clientName: String(o.clientName || "").trim(),
       processName: String(o.processName || "").trim(),
       videoStart: "",
+      filmPieces: {},
       notes: "",
       // Novos estudos seguem a planilha REV2: lançamento por quantidade e tempos em segundos.
       settings: Object.assign({ entryMode: "quantidade", timeUnit: "s" }, o.settings || {}),
@@ -623,6 +684,7 @@
       clientName: str(raw.clientName),
       processName: str(raw.processName),
       videoStart: str(raw.videoStart),
+      filmPieces: normalizeFilmPieces(raw.filmPieces),
       notes: str(raw.notes),
       // Arquivos anteriores a esta versão não têm "settings": mantêm frequência e minutos.
       settings: {
@@ -658,6 +720,16 @@
     return { ok: true, study };
   }
 
+  function normalizeFilmPieces(raw) {
+    const out = {};
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+    Object.keys(raw).forEach((k) => {
+      const v = raw[k];
+      if ((typeof v === "string" || typeof v === "number") && String(v).trim()) out[k] = String(v).trim();
+    });
+    return out;
+  }
+
   /**
    * Gera o conteúdo do arquivo JSON: dados de entrada + resumo dos resultados
    * (o resumo serve para leitura externa — Excel/Power BI — e é ignorado ao carregar).
@@ -678,6 +750,13 @@
         observedTimeMin: round(r.totals.sumSubtracted, 4),
         rowsWithErrors: r.errorCount,
         filmCount: r.filmCount,
+        films: r.films.list.map((f) => ({
+          film: f.film,
+          observedTimeMin: round(f.observed, 4),
+          pieces: f.pieces,
+          observedPerPieceMin: round(f.observedPerPiece, 4),
+        })),
+        acyclicTime: r.summary.acyclic,
         summary: r.summary.elements.map((g) => ({
           seq: g.seq,
           element: g.name,
@@ -862,6 +941,7 @@
     WASTES,
     TIME_UNITS,
     ENTRY_MODES,
+    FIRST_FILM_KEY,
     compile,
     timeUnit,
     entryMode,

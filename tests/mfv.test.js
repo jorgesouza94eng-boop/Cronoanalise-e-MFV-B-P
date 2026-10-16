@@ -138,3 +138,108 @@ test("operadores: total digitado (equipe compartilhada) prevalece sobre a soma d
   assert.equal(r.opsTyped, true);
   close(r.line.productivityDay, r.line.capacityDay / 2);
 });
+
+/* ==========================================================================
+   PRODUTIVIDADE REAL (pç/HH) E PAYBACK (REV 1.2)
+   ========================================================================== */
+
+function withDays(doc) {
+  const R = M.createProductivityRecord;
+  doc.productivity = [
+    R({ period: "base", pieces: "100", operators: "2", hours: "8" }),
+    R({ period: "base", pieces: "120", operators: "2", hours: "8" }),
+    R({ period: "acomp", pieces: "150", operators: "2", hours: "8" }),
+    R({ period: "acomp", pieces: "140", operators: "2", hours: "8" }),
+  ];
+  return doc;
+}
+
+test("pç/HH: média do período = Σ produção ÷ Σ HH; ganho contra a meta de 20%", () => {
+  const d = withDays(M.createMfv({}));
+  const p = M.computeMfv(d).productivity;
+  close(p.records[0].pcHH, 6.25);
+  close(p.base.pcHH, 220 / 32);
+  close(p.acomp.pcHH, 290 / 32);
+  assert.equal(p.base.days, 2);
+  assert.equal(p.source, "real");
+  close(p.gainPct, (290 / 220 - 1) * 100);
+  assert.equal(p.targetPct, 20);
+  assert.equal(p.status, "meta");
+  close(p.targetPcHH, (220 / 32) * 1.2);
+});
+
+test("pç/HH: linha incompleta fica fora da média; linha em branco não é erro", () => {
+  const d = withDays(M.createMfv({}));
+  d.productivity.push(M.createProductivityRecord({ period: "base", pieces: "500", operators: "", hours: "8" }));
+  d.productivity.push(M.createProductivityRecord({ period: "base" }));
+  const p = M.computeMfv(d).productivity;
+  assert.equal(p.errorCount, 1);
+  assert.equal(p.base.days, 2);
+  close(p.base.pcHH, 220 / 32);
+});
+
+test("pç/HH: sem acompanhamento usa o projetado como estimativa; queda é sinalizada", () => {
+  const d = withDays(M.createMfv({}));
+  d.productivity = d.productivity.filter((x) => x.period === "base");
+  assert.equal(M.computeMfv(d).productivity.status, "incompleto");
+  d.productivityProjected = "8";
+  let p = M.computeMfv(d).productivity;
+  assert.equal(p.source, "projetado");
+  close(p.gainPct, (8 / (220 / 32) - 1) * 100);
+  assert.equal(p.status, "abaixo");
+  d.productivityProjected = "5";
+  p = M.computeMfv(d).productivity;
+  assert.equal(p.status, "queda");
+});
+
+test("payback: HH economizadas × custo da HH + outros ganhos; meses = investimento ÷ ganho", () => {
+  const d = withDays(M.createMfv({}));
+  d.paybackInvestment = "20000";
+  d.hhCost = "30";
+  d.paybackMonthlyProd = "5000";
+  d.paybackOtherGains = "500";
+  const pb = M.computeMfv(d).payback;
+  const saved = 5000 * (32 / 220 - 32 / 290);
+  close(pb.hhSavedMonth, saved);
+  close(pb.laborGain, saved * 30);
+  close(pb.monthlyGain, saved * 30 + 500);
+  close(pb.months, 20000 / (saved * 30 + 500));
+  close(pb.annualGain, (saved * 30 + 500) * 12);
+  assert.equal(pb.status, "ok");
+  const json = JSON.parse(M.serializeMfv(d));
+  assert.equal(json.results.payback.status, "ok");
+  assert.equal(json.results.productivity.status, "meta");
+});
+
+test("payback: produção mensal vem da demanda do MFV; sem investimento ou com queda não calcula", () => {
+  const d = withDays(M.createMfv({}));
+  d.demandMonthly = "4400";
+  d.hhCost = "30";
+  let pb = M.computeMfv(d).payback;
+  assert.equal(pb.monthlyProd, 4400);
+  assert.equal(pb.monthlyProdFromDemand, true);
+  assert.equal(pb.status, "incompleto", "sem investimento");
+  d.paybackInvestment = "1000";
+  d.productivity = d.productivity.map((x) => (x.period === "acomp" ? Object.assign(x, { pieces: "50" }) : x));
+  pb = M.computeMfv(d).payback;
+  assert.ok(pb.monthlyGain < 0);
+  assert.equal(pb.status, "sem-retorno");
+  assert.equal(pb.months, null);
+  d.paybackInvestment = "-5";
+  assert.equal(M.computeMfv(d).payback.status, "invalido");
+});
+
+test("pç/HH e payback: gravados no arquivo; MFV da versão anterior abre com a meta de 20%", () => {
+  const d = withDays(M.createMfv({}));
+  d.productivity[0].date = "2026-10-01";
+  d.paybackInvestment = "1500";
+  const back = M.normalizeMfv(JSON.parse(M.serializeMfv(d))).doc;
+  assert.equal(back.schemaVersion, 2);
+  assert.equal(back.productivity.length, 4);
+  assert.equal(back.productivity[0].date, "2026-10-01");
+  assert.equal(back.productivity[2].period, "acomp");
+  assert.equal(back.paybackInvestment, "1500");
+  const old = M.normalizeMfv({ schema: M.SCHEMA_ID, schemaVersion: 1, id: "x" }).doc;
+  assert.deepEqual(old.productivity, []);
+  assert.equal(old.productivityTargetPct, "20");
+});

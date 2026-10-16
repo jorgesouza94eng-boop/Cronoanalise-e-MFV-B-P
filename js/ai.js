@@ -194,10 +194,27 @@
       atravessamento_dias: min(r.leadTimeDays, 2),
       estoques: r.inventories.map((i) => ({ estoque: i.name, dias: min(i.days, 2) })),
     };
+    // Produtividade real (pç/HH) e payback: só entram quando medidos (nunca estimados pela IA).
+    const p = r.productivity;
+    if (p && p.base.pcHH != null) {
+      data.produtividade_real_pc_hh = {
+        linha_de_base: min(p.base.pcHH, 3),
+        dias_linha_de_base: p.base.days,
+        comparado: min(p.compare, 3),
+        origem_comparado: p.source, // "real" (acompanhamento) | "projetado" (estimativa do consultor)
+        ganho_percentual: min(p.gainPct, 1),
+        meta_percentual: p.targetPct,
+      };
+    }
+    const pb = r.payback;
+    if (pb && pb.status === "ok") {
+      data.payback = { meses: min(pb.months, 1), ganho_mensal_reais: min(pb.monthlyGain, 2), hh_economizadas_mes: min(pb.hhSavedMonth, 1) };
+    }
     const text =
       `${SYSTEM}\n\nRedija um RESUMO EXECUTIVO do Mapa de Fluxo de Valor (estado presente) para apresentar à diretoria do cliente. ` +
       `Estrutura: (1) Situação atual em 2–3 frases (capacidade × demanda, takt × gargalo); (2) Principais pontos de atenção ` +
-      `(gargalo, balanceamento, operadores atuais × ideais, estoques/atravessamento); (3) Oportunidades e próximos passos para ` +
+      `(gargalo, balanceamento, operadores atuais × ideais, estoques/atravessamento); se houver produtividade real (pç/HH), ` +
+      `compare o ganho com a meta e cite o payback, deixando claro quando o valor é projetado; (3) Oportunidades e próximos passos para ` +
       `o estado futuro, com a ferramenta Lean correspondente. Use os números fornecidos e não invente dados. Linguagem ` +
       `executiva, até 230 palavras, texto simples com marcadores "•".\n\nDados do MFV: ${JSON.stringify(data)}` +
       (doc.notes ? `\nPremissas do consultor: ${anonymize ? anonymizeText(doc.notes, study) : doc.notes}` : "");

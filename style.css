@@ -450,6 +450,14 @@ button:focus-visible,
 .status-card.is-balanced .kpi-title,
 .status-card.is-balanced .kpi-caption { color: var(--status-ok-text); }
 
+.status-card.is-warning {
+  background-color: var(--status-warn-bg);
+  border-color: #fde047;
+}
+.status-card.is-warning strong,
+.status-card.is-warning .kpi-title,
+.status-card.is-warning .kpi-caption { color: var(--status-warn-text); }
+
 .status-card.is-invalid {
   background-color: var(--status-warn-bg);
 }
@@ -732,6 +740,44 @@ select.input-type.is-acyclic {
 .mfv-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .kpi-grid-3 { grid-template-columns: repeat(3, 1fr); }
 .mfv-bottom { grid-template-columns: 1fr 1fr; }
+
+/* Produtividade real (pç/HH) e payback */
+.productivity-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 12px;
+  padding: 12px 16px 16px;
+  align-items: start;
+}
+.productivity-grid .params-grid { grid-template-columns: 1fr 1fr; }
+.productivity-table select.input-cell { width: 100%; }
+.productivity-table tr.period-acomp td:first-child { box-shadow: inset 3px 0 0 var(--primary-500); }
+
+/* Peças produzidas por filmagem (cronoanálise) */
+.films-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-light);
+  background-color: var(--bg-subtle);
+}
+.films-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 13px; }
+.films-head .form-hint { margin: 0; }
+.films-head .has-conflict { color: var(--status-danger-text); font-weight: 600; }
+.films-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.film-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+  font-size: 12px;
+}
+.film-box .film-pieces { width: 72px; text-align: right; }
+.film-out { color: var(--text-muted); white-space: nowrap; }
 .mfv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .mfv-table th {
   text-align: left;
@@ -741,6 +787,12 @@ select.input-type.is-acyclic {
   padding: 4px 6px;
   border-bottom: 1px solid var(--border-light);
 }
+/* Estoques: layout fixo para caber no celular (os campos não forçam a largura da tabela) */
+.inventory-table { table-layout: fixed; }
+.inventory-table th:nth-child(2) { width: 30%; }
+.inventory-table th:nth-child(3) { width: 22%; }
+.inventory-table th:nth-child(4) { width: 36px; }
+.inventory-table .tfoot-label { white-space: normal; }
 .mfv-table td { border-bottom: 1px solid var(--border-light); height: 34px; padding: 0; }
 .mfv-table td.cell-readonly { padding: 0 8px; }
 .mfv-table .tfoot-label { padding: 6px 8px; font-weight: 700; }
@@ -1206,7 +1258,8 @@ select.input-type.is-acyclic {
   .kpi-grid { grid-template-columns: repeat(3, 1fr); }
   .params-grid { grid-template-columns: 1fr 1fr; }
   .compilation-grid { grid-template-columns: 1fr; }
-  .mfv-top, .mfv-bottom { grid-template-columns: 1fr; }
+  .mfv-top, .mfv-bottom { grid-template-columns: minmax(0, 1fr); }
+  .productivity-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Celular (modo campo) */

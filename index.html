@@ -226,6 +226,14 @@
           <span class="keyboard-hint" id="summary-hint"></span>
         </div>
       </div>
+      <!-- Peças produzidas em cada filmagem: convertem os acíclicos (tipo A) em tempo por unidade -->
+      <div class="films-panel" id="films-panel" hidden>
+        <div class="films-head">
+          <strong>Peças produzidas por filmagem</strong>
+          <span class="form-hint" id="films-hint"></span>
+        </div>
+        <div class="films-list" id="films-list"></div>
+      </div>
       <div class="table-container summary-container">
         <table class="chrono-table summary-table">
           <colgroup>
@@ -240,7 +248,7 @@
               <th scope="col" title="Quantas vezes o elemento aparece na grade">Ocorr.</th>
               <th scope="col" id="th-sum-qty" title="Soma das quantidades">Qtd. total</th>
               <th scope="col">T. total (<span class="unit-label">min</span>)</th>
-              <th scope="col" title="Tipo C: Σtempo ÷ Σquantidade | Tipo A: Σtempo">T. no ciclo (<span class="unit-label">min</span>)</th>
+              <th scope="col" title="Tipo C: Σtempo ÷ Σquantidade | Tipo A: Σtempo (ou Σtempo ÷ Σpeças, com as peças de todas as filmagens)">T. no ciclo (<span class="unit-label">min</span>)</th>
               <th scope="col">% ciclo</th>
               <th scope="col">Valor</th>
               <th scope="col">Desperdício</th>

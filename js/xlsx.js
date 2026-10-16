@@ -285,7 +285,7 @@
     // ---- LISTAGEM DE ELEMENTOS --------------------------------------------
     const listagem = head("ANÁLISE DE VALOR AGREGADO — LISTAGEM DE ELEMENTOS");
     listagem.push([
-      { v: qtyMode ? "Tipo C: Σtempo ÷ Σquantidade (média por unidade) • Tipo A: Σtempo" : "Modo frequência: média das ocorrências", s: "subtitle" },
+      { v: qtyMode ? `Tipo C: Σtempo ÷ Σquantidade (média por unidade) • Tipo A: ${r.summary.acyclic === "por-unidade" ? `Σtempo ÷ ${r.films.piecesTotal} peças das filmagens` : "Σtempo"}` : "Modo frequência: média das ocorrências", s: "subtitle" },
     ]);
     listagem.push([
       H("Nº"), H("Elemento"), H("Tempo (s)"), H("Qt."), H("Valor"), H("Ação"), H("Desperdício"),

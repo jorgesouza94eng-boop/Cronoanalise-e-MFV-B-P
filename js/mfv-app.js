@@ -19,6 +19,8 @@
   const DISK_SAVE_DELAY_MS = 3000;
   const $ = (id) => document.getElementById(id);
   const fmt = Calc.formatNumber;
+  const money = (v) =>
+    v == null || !Number.isFinite(v) ? "--" : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
 
   const Tpl = root.LeanXlsxTemplate;
   const TEMPLATE_KEY = "template:mfv";
@@ -428,8 +430,102 @@
         return tr;
       })
     );
+    // Produtividade real (pç/HH)
+    $("prod-tbody").replaceChildren(...d.productivity.map((p, i) => prodRow(p, i)));
+    if (!d.productivity.length) {
+      const td = el("td", { className: "cell-text text-muted", textContent: "Registre um dia por linha: produção, nº de operadores e horas trabalhadas. Use '+ Dia (linha de base)' no T1 e '+ Dia (acompanhamento)' no T3." });
+      td.colSpan = 9;
+      $("prod-tbody").append(el("tr", {}, [td]));
+    }
+
     renderStudyPicker();
     update();
+  }
+
+  function prodRow(p, i) {
+    const tr = el("tr", { className: p.period === "acomp" ? "period-acomp" : "" });
+    tr.dataset.id = p.id;
+    const mk = (field, value, cls, extra) => {
+      const inp = el("input", Object.assign({ type: "text", className: `input-cell ${cls || ""}`, value: value == null ? "" : value, autocomplete: "off" }, extra || {}));
+      inp.dataset.field = field;
+      return inp;
+    };
+    const period = el("select", { className: "input-cell", title: "Período da medição" }, [
+      el("option", { value: "base", textContent: "Linha de base" }),
+      el("option", { value: "acomp", textContent: "Acompanhamento" }),
+    ]);
+    period.value = p.period;
+    period.dataset.field = "period";
+    const del = el("button", { type: "button", className: "btn-icon-del", textContent: "×", title: "Remover dia" });
+    del.dataset.action = "remove";
+    tr.append(
+      el("td", { className: "cell-num", textContent: String(i + 1).padStart(2, "0") }),
+      el("td", {}, [mk("date", p.date, "mono", { type: "date" })]),
+      el("td", {}, [period]),
+      el("td", {}, [mk("pieces", p.pieces, "mono", { inputMode: "decimal" })]),
+      el("td", {}, [mk("operators", p.operators, "mono", { inputMode: "decimal" })]),
+      el("td", {}, [mk("hours", p.hours, "mono", { inputMode: "decimal", placeholder: "Ex.: 8,8" })]),
+      el("td", { className: "cell-readonly mono" }),
+      el("td", { className: "cell-readonly mono highlight-col" }),
+      el("td", { className: "cell-actions" }, [del])
+    );
+    tr.children[6].dataset.out = "hh";
+    tr.children[7].dataset.out = "pcHH";
+    return tr;
+  }
+
+  /** Produtividade real e payback (só valores calculados; mantém o foco). */
+  function updateProductivity(r) {
+    const p = r.productivity;
+    const pb = r.payback;
+    $("prod-tbody").querySelectorAll("tr[data-id]").forEach((tr, i) => {
+      const x = p.records[i];
+      if (!x) return;
+      tr.querySelector('[data-out="hh"]').textContent = x.hh != null ? fmt(x.hh, 2) : "--";
+      tr.querySelector('[data-out="pcHH"]').textContent = x.pcHH != null ? fmt(x.pcHH, 3) : "--";
+      tr.classList.toggle("row-error", x.errors.length > 0);
+      tr.title = x.errors.join(" • ");
+    });
+    const cap = (g) => (g.days ? `${g.days} dia(s) • ${fmt(g.pieces, g.pieces % 1 ? 2 : 0)} ${pu()} ÷ ${fmt(g.hh, 1)} HH` : "Sem dias registrados");
+    $("kpi-prod-base").textContent = p.base.pcHH != null ? fmt(p.base.pcHH, 3) : "--";
+    $("kpi-prod-base-cap").textContent = cap(p.base);
+    const projectedOnly = p.source === "projetado";
+    $("kpi-prod-acomp-title").textContent = projectedOnly ? "Projetado (estimativa)" : "Acompanhamento";
+    $("kpi-prod-acomp").textContent = p.compare != null ? fmt(p.compare, 3) : "--";
+    $("kpi-prod-acomp-cap").textContent = projectedOnly ? "Valor digitado: substituído pelo real quando houver acompanhamento" : cap(p.acomp);
+
+    const gainCard = $("kpi-gain-card");
+    gainCard.classList.remove("is-bottleneck", "is-balanced", "is-warning");
+    const target = `Meta B+P: +${fmt(p.targetPct, p.targetPct % 1 ? 1 : 0)}%`;
+    if (p.gainPct != null) {
+      $("kpi-gain").textContent = `${p.gainPct >= 0 ? "+" : ""}${fmt(p.gainPct, 1)}%`;
+      const label = { meta: "✓ meta atingida", abaixo: "abaixo da meta", queda: "⚠ queda de produtividade" }[p.status];
+      $("kpi-gain-cap").textContent = `${target} • ${label}${projectedOnly ? " (projetado)" : ""}`;
+      gainCard.classList.add(p.status === "meta" ? "is-balanced" : p.status === "abaixo" ? "is-warning" : "is-bottleneck");
+    } else {
+      $("kpi-gain").textContent = "--";
+      $("kpi-gain-cap").textContent =
+        p.base.pcHH != null && p.targetPcHH != null ? `${target} → atingir ${fmt(p.targetPcHH, 3)} ${pu()}/HH` : `${target} • registre a linha de base`;
+    }
+
+    $("kpi-hh-saved").textContent = pb.hhSavedMonth != null ? fmt(pb.hhSavedMonth, 1) : "--";
+    $("kpi-hh-saved-cap").textContent =
+      pb.monthlyProd != null ? `${fmt(pb.monthlyProd, 0)} ${pu()}/mês${pb.monthlyProdFromDemand ? " (demanda do MFV)" : ""}` : "Informe a produção ou a demanda mensal";
+    $("kpi-monthly-gain").textContent = money(pb.monthlyGain);
+    $("kpi-monthly-gain-cap").textContent =
+      pb.monthlyGain != null ? `MO ${money(pb.laborGain)} + outros ${money(pb.otherGains)} • ${money(pb.annualGain)}/ano` : "Informe o custo da HH ou outros ganhos";
+    const pbCard = $("kpi-payback-card");
+    pbCard.classList.remove("is-bottleneck", "is-balanced", "is-warning");
+    $("kpi-payback").textContent = pb.months != null ? fmt(pb.months, 1) : "--";
+    const pbCap = {
+      ok: `Investimento ÷ ganho mensal${pb.source === "projetado" ? " (estimativa)" : ""}`,
+      "sem-retorno": "⚠ Sem retorno: o ganho mensal não é positivo",
+      invalido: `⚠ ${pb.issues[0] || "Valores inválidos"}`,
+      incompleto: pb.investment == null ? "Informe o investimento" : "Faltam dados para o ganho mensal",
+    }[pb.status];
+    $("kpi-payback-cap").textContent = pbCap;
+    if (pb.status === "ok") pbCard.classList.add(pb.months <= 12 ? "is-balanced" : "is-warning");
+    else if (pb.status === "sem-retorno" || pb.status === "invalido") pbCard.classList.add("is-bottleneck");
   }
 
   function stepRow(s, i) {
@@ -568,6 +664,8 @@
     $("lead-hint").textContent = r.tcTotal && r.leadTimeDays
       ? `Dias = estoque ÷ demanda diária. Tempo de processamento (ΣTC): ${ft(r.tcTotal)} ${u}.`
       : "Dias = quantidade em estoque ÷ demanda diária.";
+
+    updateProductivity(r);
   }
 
   /** Gráfico de balanceamento: barras verticais por etapa e linha do takt. */
@@ -727,6 +825,39 @@
       const names = inv.querySelectorAll('[data-field="name"]');
       names[names.length - 1].focus();
     });
+
+    // Produtividade real (pç/HH)
+    const prod = $("prod-tbody");
+    const onProdEdit = (e) => {
+      const tr = e.target.closest("tr[data-id]");
+      if (!tr || !e.target.dataset.field) return;
+      const rec = state.doc.productivity.find((x) => x.id === tr.dataset.id);
+      if (!rec) return;
+      rec[e.target.dataset.field] = e.target.value;
+      if (e.target.dataset.field === "period") tr.classList.toggle("period-acomp", e.target.value === "acomp");
+      markChanged();
+    };
+    prod.addEventListener("input", onProdEdit);
+    prod.addEventListener("change", (e) => {
+      if (e.target.tagName === "SELECT" || e.target.type === "date") onProdEdit(e);
+    });
+    prod.addEventListener("click", (e) => {
+      if (!e.target.closest('[data-action="remove"]')) return;
+      const id = e.target.closest("tr").dataset.id;
+      state.doc.productivity = state.doc.productivity.filter((x) => x.id !== id);
+      markChanged({ render: true });
+    });
+    const addDay = (period) => {
+      const list = state.doc.productivity;
+      const last = [...list].reverse().find((x) => x.period === period) || list[list.length - 1];
+      // Repete operadores e horas do último dia do mesmo período (agiliza a digitação).
+      list.push(M.createProductivityRecord({ period, operators: last ? last.operators : "", hours: last ? last.hours : "" }));
+      markChanged({ render: true });
+      const inputs = prod.querySelectorAll('[data-field="pieces"]');
+      inputs[inputs.length - 1].focus();
+    };
+    $("btn-add-prod-base").addEventListener("click", () => addDay("base"));
+    $("btn-add-prod-acomp").addEventListener("click", () => addDay("acomp"));
 
     // Cabeçalho, conflito, exportação
     $("btn-connect-folder").addEventListener("click", connectFolder);

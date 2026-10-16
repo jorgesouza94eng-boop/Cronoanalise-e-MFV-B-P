@@ -234,6 +234,117 @@
         </div>
       </div>
     </section>
+
+    <!-- PRODUTIVIDADE REAL (pç/HH) E PAYBACK — comprovação da meta B+P -->
+    <section class="timesheet-section summary-section" id="productivity-section" aria-label="Produtividade real e payback">
+      <div class="section-toolbar">
+        <div class="toolbar-left">
+          <h2>Produtividade real (<span class="product-unit-label">pç</span>/HH) e payback</h2>
+          <span class="keyboard-hint">Medição diária no chão de fábrica: linha de base (T1) × acompanhamento (T3) • pç/HH = produção ÷ (operadores × horas)</span>
+        </div>
+        <div class="toolbar-actions">
+          <button type="button" id="btn-add-prod-base" class="btn-secondary">+ Dia (linha de base)</button>
+          <button type="button" id="btn-add-prod-acomp" class="btn-outline">+ Dia (acompanhamento)</button>
+        </div>
+      </div>
+      <div class="table-container summary-container">
+        <table class="chrono-table productivity-table">
+          <colgroup>
+            <col style="width:44px"><col style="width:150px"><col style="width:160px"><col><col><col>
+            <col style="width:110px"><col style="width:110px"><col style="width:48px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Nº</th>
+              <th>Data</th>
+              <th>Período</th>
+              <th>Produção (<span class="product-unit-label">pç</span>)</th>
+              <th>Nº operadores</th>
+              <th title="Horas trabalhadas por operador no dia">Horas/operador</th>
+              <th>HH</th>
+              <th><span class="product-unit-label">pç</span>/HH</th>
+              <th><span class="sr-only">Ações</span></th>
+            </tr>
+          </thead>
+          <tbody id="prod-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="productivity-grid">
+        <div class="kpi-grid kpi-grid-3">
+          <div class="kpi-card">
+            <span class="kpi-title">Linha de base</span>
+            <div class="kpi-value-group"><strong id="kpi-prod-base">--</strong><span class="kpi-unit"><span class="product-unit-label">pç</span>/HH</span></div>
+            <span class="kpi-caption" id="kpi-prod-base-cap">Σ produção ÷ Σ HH</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-title" id="kpi-prod-acomp-title">Acompanhamento</span>
+            <div class="kpi-value-group"><strong id="kpi-prod-acomp">--</strong><span class="kpi-unit"><span class="product-unit-label">pç</span>/HH</span></div>
+            <span class="kpi-caption" id="kpi-prod-acomp-cap">Σ produção ÷ Σ HH</span>
+          </div>
+          <div class="kpi-card status-card" id="kpi-gain-card">
+            <span class="kpi-title">Ganho de produtividade</span>
+            <div class="kpi-value-group"><strong id="kpi-gain">--</strong></div>
+            <span class="kpi-caption" id="kpi-gain-cap">Meta B+P: +20%</span>
+          </div>
+        </div>
+        <div class="shift-params-card">
+          <div class="card-header-mini">Meta e estimativa</div>
+          <div class="params-grid">
+            <div class="param-field">
+              <label for="prod-target">Meta de ganho (%)</label>
+              <input type="text" id="prod-target" data-doc="productivityTargetPct" inputmode="decimal" autocomplete="off">
+            </div>
+            <div class="param-field">
+              <label for="prod-projected" title="Usado só enquanto não houver dias de acompanhamento (estimativa para o plano de ação)">pç/HH projetado (opcional)</label>
+              <input type="text" id="prod-projected" data-doc="productivityProjected" inputmode="decimal" placeholder="estimativa" autocomplete="off">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="productivity-grid">
+        <div class="shift-params-card">
+          <div class="card-header-mini">Payback (retorno financeiro)</div>
+          <div class="params-grid">
+            <div class="param-field">
+              <label for="pb-investment">Investimento (R$)</label>
+              <input type="text" id="pb-investment" data-doc="paybackInvestment" inputmode="decimal" placeholder="0,00" autocomplete="off">
+            </div>
+            <div class="param-field">
+              <label for="pb-hh-cost" title="Custo da hora-homem com encargos">Custo da HH (R$/h)</label>
+              <input type="text" id="pb-hh-cost" data-doc="hhCost" inputmode="decimal" placeholder="0,00" autocomplete="off">
+            </div>
+            <div class="param-field">
+              <label for="pb-monthly-prod">Produção mensal (<span class="product-unit-label">pç</span>)</label>
+              <input type="text" id="pb-monthly-prod" data-doc="paybackMonthlyProd" inputmode="decimal" placeholder="demanda mensal" autocomplete="off">
+            </div>
+            <div class="param-field">
+              <label for="pb-other" title="Ganhos mensais comprovados além da mão de obra: refugo, retrabalho, estoque, horas extras...">Outros ganhos mensais (R$)</label>
+              <input type="text" id="pb-other" data-doc="paybackOtherGains" inputmode="decimal" placeholder="0,00" autocomplete="off">
+            </div>
+          </div>
+          <p class="form-hint" id="pb-hint">HH economizadas/mês = produção mensal × (1 ÷ pç/HH base − 1 ÷ pç/HH atual).</p>
+        </div>
+        <div class="kpi-grid kpi-grid-3">
+          <div class="kpi-card">
+            <span class="kpi-title">HH economizadas</span>
+            <div class="kpi-value-group"><strong id="kpi-hh-saved">--</strong><span class="kpi-unit">HH/mês</span></div>
+            <span class="kpi-caption" id="kpi-hh-saved-cap">--</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-title">Ganho mensal</span>
+            <div class="kpi-value-group"><strong id="kpi-monthly-gain">--</strong></div>
+            <span class="kpi-caption" id="kpi-monthly-gain-cap">--</span>
+          </div>
+          <div class="kpi-card status-card" id="kpi-payback-card">
+            <span class="kpi-title">Payback</span>
+            <div class="kpi-value-group"><strong id="kpi-payback">--</strong><span class="kpi-unit">meses</span></div>
+            <span class="kpi-caption" id="kpi-payback-cap">Investimento ÷ ganho mensal</span>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <!-- GERENCIADOR DE MFVs -->

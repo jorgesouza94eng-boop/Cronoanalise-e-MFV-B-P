@@ -75,6 +75,9 @@
       summaryTotal: $("summary-total"),
       summaryNote: $("summary-note"),
       summaryHint: $("summary-hint"),
+      filmsPanel: $("films-panel"),
+      filmsList: $("films-list"),
+      filmsHint: $("films-hint"),
       names: $("element-names"),
       chartValueCount: $("chart-value-count"),
       chartValueTime: $("chart-value-time"),
@@ -104,6 +107,12 @@
     els.btnConnect.addEventListener("click", () => h.onConnectFolder());
     els.btnConflictDisk.addEventListener("click", () => h.onConflictUseDisk());
     els.btnConflictLocal.addEventListener("click", () => h.onConflictKeepLocal());
+
+    // Peças produzidas por filmagem
+    els.filmsList.addEventListener("input", (e) => {
+      const key = e.target.dataset && e.target.dataset.filmKey;
+      if (key) h.onFilmPiecesChange(key, e.target.value);
+    });
 
     // Parâmetros da jornada
     els.params.forEach((input) => {
@@ -440,7 +449,7 @@
     els.thNormal.title = qtyMode ? "Tempo subtraído × (Ritmo/100)" : "Tempo subtraído × (Ritmo/100) × Frequência";
     els.thSumQty.textContent = qtyMode ? "Qtd. total" : "—";
     els.summaryHint.textContent = qtyMode
-      ? "Padrão planilha B+P: Tipo C = Σtempo ÷ Σquantidade (média por unidade) • Tipo A = Σtempo"
+      ? "Padrão planilha B+P: Tipo C = Σtempo ÷ Σquantidade (média por unidade) • Tipo A = Σtempo, ou Σtempo ÷ Σpeças com as peças das filmagens"
       : "Modo frequência: média das ocorrências (a frequência já rateia o acíclico)";
     study.elements.forEach((el) => {
       const tr = els.rowTemplate.content.firstElementChild.cloneNode(true);
@@ -499,6 +508,7 @@
       ? `⚠ ${computed.errorCount} linha(s) com erro fora dos totais`
       : "";
 
+    renderFilms(computed);
     renderSummary(computed);
     renderCompilation(computed);
     renderKpis(computed);
@@ -573,6 +583,62 @@
     });
   }
 
+  /**
+   * Peças produzidas por filmagem (modo quantidade). Os campos só são recriados quando as
+   * filmagens mudam, para não perder o foco durante a digitação.
+   */
+  function renderFilms(computed) {
+    const info = computed.films;
+    const show = computed.mode === "quantidade";
+    els.filmsPanel.hidden = !show;
+    if (!show) return;
+    const unit = computed.unit;
+    const u = Calc.TIME_UNITS[unit].label;
+    const ft = (minutes) => Calc.formatTime(minutes, unit);
+    const sig = info.list.map((f) => f.key).join("|");
+    if (els.filmsList.dataset.sig !== sig) {
+      els.filmsList.dataset.sig = sig;
+      els.filmsList.replaceChildren(
+        ...info.list.map((f) => {
+          const box = document.createElement("label");
+          box.className = "film-box";
+          const tag = document.createElement("span");
+          tag.className = "film-tag";
+          tag.textContent = `F${f.film}`;
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "input-cell mono film-pieces";
+          input.inputMode = "decimal";
+          input.autocomplete = "off";
+          input.placeholder = "peças";
+          input.value = f.raw;
+          input.dataset.filmKey = f.key;
+          input.setAttribute("aria-label", `Peças produzidas na filmagem ${f.film}`);
+          const out = document.createElement("span");
+          out.className = "film-out";
+          box.append(tag, input, out);
+          return box;
+        })
+      );
+    }
+    els.filmsList.querySelectorAll(".film-box").forEach((box, i) => {
+      const f = info.list[i];
+      const input = box.querySelector("input");
+      if (document.activeElement !== input && input.value !== f.raw) input.value = f.raw;
+      input.classList.toggle("input-invalid", !!f.error);
+      input.title = f.error || `Linha ${f.startSeq} em diante`;
+      box.querySelector(".film-out").textContent =
+        `obs. ${ft(f.observed)} ${u}` + (f.observedPerPiece != null ? ` • ${ft(f.observedPerPiece)} ${u}/un` : "");
+    });
+    const hint = {
+      total: "Opcional. Informe as peças de todas as filmagens para converter os acíclicos (tipo A) em tempo por unidade.",
+      incompleto: `⚠ Faltam peças em ${info.list.length - info.filled} filmagem(ns): os acíclicos continuam como tempo total.`,
+      "por-unidade": `Tipo A = Σtempo ÷ ${fmt(info.piecesTotal, info.piecesTotal % 1 ? 2 : 0)} peças. Ciclo real observado: ${ft(info.observedPerPiece)} ${u}/un (inclui tudo, no ritmo filmado).`,
+    }[info.acyclic];
+    els.filmsHint.textContent = hint;
+    els.filmsHint.classList.toggle("has-conflict", info.acyclic === "incompleto");
+  }
+
   /** Tabela "Resumo por elemento" (equivale à aba Listagem de Elementos). */
   function renderSummary(computed) {
     const unit = computed.unit;
@@ -595,6 +661,7 @@
       const tag = document.createElement("span");
       tag.className = "tag-type" + (g.type === "A" ? " is-acyclic" : "");
       tag.textContent = g.type;
+      if (g.perUnit) tag.title = "Acíclico convertido em tempo por unidade (Σtempo ÷ Σpeças das filmagens)";
       const typeTd = cell("", "cell-type");
       typeTd.appendChild(tag);
       tr.append(
@@ -604,7 +671,7 @@
         cell(String(g.occurrences), "cell-readonly mono"),
         cell(qtyMode ? fmt(g.sumQuantity, g.sumQuantity % 1 ? 2 : 0) : "—", "cell-readonly mono"),
         cell(ft(g.sumNormal), "cell-readonly mono"),
-        cell(ft(g.cycleTime), "cell-readonly mono highlight-col"),
+        cell(ft(g.cycleTime), "cell-readonly mono highlight-col", g.type === "A" ? (g.perUnit ? "Σtempo ÷ Σpeças das filmagens" : "Σtempo (tempo total observado)") : ""),
         cell(fmt(g.sharePct, 1) + "%", "cell-readonly mono"),
         cell(g.value ? Calc.VALUES[g.value].label : "—", "cell-text value-" + (g.value || "none")),
         cell(g.waste ? Calc.WASTES[g.waste] : "—", "cell-text"),
