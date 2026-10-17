@@ -4,12 +4,43 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.6** | 17/10/2026 | Suporte à planilha de cronoanálise REV2.1 da equipe |
 | **REV 1.5** | 16/10/2026 | Preencher o produto para baixo |
 | **REV 1.4** | 16/10/2026 | Carga do posto com vários produtos e ligação Cronoanálise → MFV |
 | **REV 1.3** | 16/10/2026 | Início por filmagem, vários produtos no mesmo estudo e filtros |
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.6 — 17/10/2026 (planilha de cronoanálise REV2.1)
+
+### Planilha REV2.1 da equipe (arquivo à parte, fora do repositório)
+- Feita a partir da REV2.0, **em branco**: lançamentos, listagens, constatações, observações, caminho da pasta do atendimento e valores guardados removidos.
+- Mesmo layout, gráficos e macros (código VBA idêntico ao da REV2.0).
+- **Correções:**
+  - acíclico por unidade (peças em GERAL!D7);
+  - Análise!G3 com todos os elementos (antes, só 40);
+  - tempo exato, sem truncar segundos;
+  - alerta de tipo divergente;
+  - ritmo por linha (GERAL!F);
+  - tolerância e tempo padrão (Análise!K6:L8);
+  - planilha vazia sem "QUAL TIPO?" e #DIV/0!.
+- Aba **Controle de Revisão** com a lista de mudanças.
+
+### App
+- Reconhece a REV2.1 ao carregar o modelo e preenche o ritmo de cada linha, as peças das filmagens (D7) e a tolerância (L6). A REV2.0 continua aceita.
+- Com a REV2.0, novo aviso quando há ritmo diferente de 100% (a planilha não tem a coluna).
+
+### Validação
+- 149 lançamentos da Laje Forte na REV2.1, recalculados no LibreOffice:
+  - sem peças: G3 = 7.681 s (igual à REV2.0);
+  - com peças (126): G3 = 60,960 s, igual ao app;
+  - com peças, ritmo 110% e tolerância 10%: G3 = 62,752 s e TP = 69,027 s, iguais ao app.
+- Exportação pela tela do app conferida (modelo reconhecido como REV2.1, sem avisos).
+- 127 testes de unidade (3 novos).
+- Pendente: abrir no Microsoft Excel e testar os botões das macros (Filtrar/Copiar elementos e Salvar PDF).
 
 ---
 

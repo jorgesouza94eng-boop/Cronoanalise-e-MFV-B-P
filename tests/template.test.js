@@ -24,12 +24,16 @@ function deflated(name, text) {
   return { name, raw: { method: 8, compressed: new Uint8Array(zlib.deflateRawSync(data)), crc: X.crc32(data), size: data.length } };
 }
 
-function buildTemplate() {
+/** rev21: cabeçalho F8 "Ritmo (%)" da planilha REV2.1 da equipe (peças em D7, tolerância em Análise!L6). */
+function buildTemplate(rev21) {
   const sst = ["Nº", "Elemento", "Tempo (Inicio)", "Tempo (Fim)", "Quantidade", "agrega?", "Tipo", "todos elementos", "Tempo (s)", "Qt.", "Valor", "Ação",
-    "Agrega", "Não agrega", "Incidental", "Espera", "Transporte", "Processamento Excessivo", "Movimentação ", "Elemento antigo do cliente anterior", "Texto antigo"];
+    "Agrega", "Não agrega", "Incidental", "Espera", "Transporte", "Processamento Excessivo", "Movimentação ", "Elemento antigo do cliente anterior", "Texto antigo",
+    "Ritmo (%)"];
   const s = (i) => `t="s"><v>${i}</v>`;
   const geral =
+    (rev21 ? `<row r="7"><c r="D7" s="12"/></row>` : "") +
     `<row r="8" spans="2:19"><c r="B8" s="1" ${s(0)}</c><c r="C8" s="1" ${s(1)}</c><c r="D8" s="1" ${s(2)}</c><c r="E8" s="1" ${s(3)}</c>` +
+    (rev21 ? `<c r="F8" s="1" ${s(21)}</c>` : "") +
     `<c r="G8" s="1" ${s(4)}</c><c r="H8" s="1" ${s(5)}</c><c r="I8" s="1" ${s(6)}</c><c r="L8" s="1" ${s(7)}</c></row>` +
     `<row r="10" spans="2:19"><c r="B10" s="2"><v>1</v></c><c r="C10" s="3" ${s(19)}</c><c r="D10" s="4"><v>0</v></c><c r="E10" s="4"><v>0.01</v></c>` +
     `<c r="G10" s="5"><v>3</v></c><c r="H10" s="6" t="str"><f>IF(C10="","",C10)</f><v>Elemento antigo</v></c><c r="I10" s="7" t="s"><v>6</v></c>` +
@@ -42,7 +46,7 @@ function buildTemplate() {
   const compil = [15, 16, 17, 18].map((i, k) => `<row r="${39 + k}"><c r="D${39 + k}" ${s(i)}</c><c r="E${39 + k}"><f>COUNTIF(G:G,D${39 + k})</f><v>0</v></c></row>`).join("") +
     `<row r="55"><c r="B55" s="11" ${s(20)}</c></row>`;
   const bd = `<row r="1"><c r="A1" ${s(12)}</c></row><row r="2"><c r="A2" ${s(13)}</c></row><row r="3"><c r="A3" ${s(14)}</c></row>`;
-  const analise = `<row r="15"><c r="F15" ${s(20)}</c></row><row r="16"><c r="C16" ${s(20)}</c></row>`;
+  const analise = (rev21 ? `<row r="6"><c r="L6" s="13"/></row>` : "") + `<row r="15"><c r="F15" ${s(20)}</c></row><row r="16"><c r="C16" ${s(20)}</c></row>`;
   const names = ["GERAL", "Listagem de Elementos", "Compilação e Soluções", "Análise", "BD"];
   const sheets = [geral, listagem, compil, analise, bd];
   const sstXml = `<?xml version="1.0"?><sst ${NS}>${sst.map((t) => `<si><t xml:space="preserve">${X.esc(t)}</t></si>`).join("")}</sst>`;
@@ -297,4 +301,41 @@ test("MFV: limite de 13 etapas da planilha", async () => {
   const d = mfvDoc();
   d.steps = Array.from({ length: 14 }, (_, i) => M.createStep({ name: `E${i}`, tcManualMin: 1 }));
   await assert.rejects(T.fillFromBytes(buildMfvTemplate(), d, { inflate }), /comporta 13/);
+});
+
+/* ==========================================================================
+   PLANILHA REV2.1 DA EQUIPE: ritmo (F), peças (D7) e tolerância (Análise!L6)
+   ========================================================================== */
+
+async function sheetText(out, name) {
+  const e = T.readZip(out.bytes).find((x) => x.name === name);
+  return new TextDecoder().decode(e.method === 0 ? e.compressed : inflate(e.compressed));
+}
+
+test("REV2.1: reconhecida pelo cabeçalho 'Ritmo (%)'; a REV2.0 continua aceita", async () => {
+  assert.equal((await T.loadTemplate(buildTemplate(true), { inflate })).rev, "2.1");
+  assert.equal((await T.loadTemplate(buildTemplate(), { inflate })).rev, "2.0");
+});
+
+test("REV2.1: ritmo por linha, peças das filmagens em D7 e tolerância em L6; sem avisos da REV2.0", async () => {
+  const st = study();
+  st.elements[0].pace = "110";
+  st.shiftParams.tolerancePct = 12;
+  // peças em todas as filmagens → acíclicos por unidade
+  C.computeStudy(st).filmList.forEach((f, i) => (st.filmPieces[f.key] = String(5 + i)));
+  const out = T.fillTemplate(await T.loadTemplate(buildTemplate(true), { inflate }), st);
+  const g = await sheetText(out, "xl/worksheets/sheet1.xml");
+  assert.match(g, /<c r="F10"><v>110<\/v><\/c>/, "ritmo 110% na 1ª linha");
+  assert.ok(!/<c r="F11"[^>]*><v>/.test(g), "ritmo 100% fica vazio (padrão da planilha)");
+  assert.match(g, /<c r="D7" s="12"><v>11<\/v><\/c>/, "D7 = 5 + 6 peças das 2 filmagens");
+  const a = await sheetText(out, "xl/worksheets/sheet4.xml");
+  assert.match(a, /<c r="L6" s="13"><v>12<\/v><\/c>/, "tolerância 12%");
+  assert.ok(!out.warnings.some((w) => /Análise|ritmo/.test(w)), "sem os avisos de limitação da REV2.0");
+});
+
+test("REV2.0: avisa que o ritmo não é levado (a planilha não tem a coluna)", async () => {
+  const st = study();
+  st.elements[0].pace = "90";
+  const out = T.fillTemplate(await T.loadTemplate(buildTemplate(), { inflate }), st);
+  assert.ok(out.warnings.some((w) => /não tem coluna de ritmo/.test(w)));
 });

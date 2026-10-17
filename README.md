@@ -178,6 +178,24 @@ O botão **Exportar Excel** tem dois modos:
 
 O fluxo foi conferido com a planilha real da Laje Forte (149 lançamentos, 9 filmagens). Depois do recálculo, as fórmulas da própria planilha chegaram a **7.681 s** (Análise!G3) e os gráficos de pizza se atualizaram.
 
+#### Planilha REV2.1 da equipe (recomendada)
+
+A REV2.1 é a planilha de cronoanálise da equipe com as fórmulas corrigidas, em branco (sem dados de atendimento), com o mesmo layout, os mesmos gráficos e as mesmas macros da REV2.0. O app reconhece a revisão sozinho ao carregar o modelo.
+
+| Item | Onde | REV2.0 | REV2.1 |
+|---|---|---|---|
+| Acíclico (tipo A) | GERAL!D7 (peças das filmagens) | Tempo total observado | **Σtempo ÷ peças** quando D7 é preenchida (o app preenche quando há peças em todas as filmagens) |
+| Ciclo | Análise!G3 | Soma só 40 elementos | Soma **todos** os elementos |
+| Tempo do elemento | GERAL!R | Truncado em segundos inteiros | Segundos com 3 casas |
+| Tipo divergente | GERAL!T | — | Alerta "⚠ tipo divergente" |
+| Ritmo | GERAL!F | — | **Ritmo (%)** por linha (vazio = 100%); o app leva o ritmo de cada linha |
+| Tolerância e TP | Análise!K6:L8 | — | Tolerância (%) e **tempo padrão** = ciclo × (1 + tolerância) |
+| Planilha vazia | GERAL!O, Análise!G7/I7 | "QUAL TIPO?" e #DIV/0! | Células vazias |
+
+- Conferida com os 149 lançamentos da Laje Forte, recalculada no LibreOffice: sem peças, G3 = **7.681 s** (igual à REV2.0); com peças, ritmo e tolerância, G3 e TP iguais ao ciclo e ao tempo padrão do app.
+- A aba **Controle de Revisão** descreve as mudanças.
+- Com a REV2.0, o app avisa que o ritmo não é levado (a planilha não tem a coluna) e que a G3 não usa o acíclico por unidade.
+
 > Dica: use como modelo uma cópia **em branco** da planilha. O app limpa as áreas que preenche, mas abas ocultas como "Listagem de Elementos (2)" e textos fora dessas áreas ficam como estão no modelo.
 
 ### Várias filmagens no mesmo estudo

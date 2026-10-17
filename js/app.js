@@ -407,7 +407,7 @@
           UI.toast(`Modelo guardado no navegador, mas não na pasta ${TEMPLATE_DIR}: ${err.message || err}`, "warn");
         }
       }
-      UI.toast(`Modelo REV2 reconhecido ✅ ${meta.name}${tpl.macro ? " (com macros)" : ""}.`, "ok", 6000);
+      UI.toast(`Modelo REV${tpl.rev || "2.0"} reconhecido ✅ ${meta.name}${tpl.macro ? " (com macros)" : ""}.`, "ok", 6000);
     },
 
     async onRemoveTemplate() {

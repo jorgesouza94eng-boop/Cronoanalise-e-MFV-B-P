@@ -286,7 +286,9 @@
       if (key) wasteLabels[key] = label; // mantém o texto exato (inclusive espaços) usado no CONT.SE
     }
 
-    return { kind: "crono-rev2", entries, sst, sheets, workbook, valueLabels, wasteLabels, macro: byName.has("xl/vbaProject.bin") };
+    // REV2.1 (equipe, 17/10/2026): GERAL!F8 = "Ritmo (%)", peças em GERAL!D7 e tolerância em Análise!L6
+    const rev = norm(getCell(sheets.geral.parts, "F8", sst)) === "ritmo (%)" ? "2.1" : "2.0";
+    return { kind: "crono-rev2", rev, entries, sst, sheets, workbook, valueLabels, wasteLabels, macro: byName.has("xl/vbaProject.bin") };
   }
 
   /* ==========================================================================
@@ -296,6 +298,7 @@
   /** Gera o .xlsm/.xlsx preenchido. Retorna { bytes, warnings }. */
   function fillTemplate(tpl, study) {
     const r = Calc.computeStudy(study);
+    const rev21 = tpl.rev === "2.1"; // planilha da equipe com ritmo, peças e tolerância
     const warnings = [];
     const qtyMode = r.mode === "quantidade";
     const geral = tpl.sheets.geral.parts;
@@ -314,7 +317,9 @@
         return;
       }
       const qty = qtyMode ? row.quantity : row.frequency > 0 ? 1 / row.frequency : 1;
+      const pace = Calc.parsePace(el.pace).value;
       lines.push({
+        pace: pace == null ? 100 : pace,
         name: String(el.description || "").trim().replace(/\s+/g, " ") || `(linha ${row.seq})`,
         start: (row.timeMinutes - row.subtractedTime) / 1440, // fração de dia (hh:mm:ss no Excel)
         end: row.timeMinutes / 1440,
@@ -323,7 +328,7 @@
       });
     });
     if (skipped) warnings.push(`${skipped} linha(s) sem tempo ou com erro não foram exportadas.`);
-    if (r.summary.acyclic === "por-unidade") {
+    if (!rev21 && r.summary.acyclic === "por-unidade") {
       warnings.push("Acíclicos por unidade: a Listagem recebe o tempo do app (Σtempo ÷ peças), mas o ciclo da aba Análise (G3, soma da GERAL) continua com o tempo total do tipo A.");
     }
     if (r.multiProduct && r.products.length > 1) {
@@ -339,7 +344,10 @@
     const elements = r.summary.elements.filter((g) => !g.key.startsWith("#"));
     const listCap = LIMITS.listLast - LIMITS.listFirst + 1;
     if (elements.length > listCap) throw new Error(`O estudo tem ${elements.length} elementos; a Listagem do modelo comporta ${listCap}.`);
-    if (elements.length > LIMITS.analiseSum) {
+    if (!rev21 && lines.some((l) => Math.abs(l.pace - 100) > 1e-9)) {
+      warnings.push("A planilha REV2.0 não tem coluna de ritmo: os tempos foram exportados como observados (ritmo 100%). Use a REV2.1 para levar o ritmo.");
+    }
+    if (!rev21 && elements.length > LIMITS.analiseSum) {
       warnings.push(`Atenção: a aba Análise da planilha soma só ${LIMITS.analiseSum} elementos (T25:T64); com ${elements.length}, o "tempo de ciclo unitário" dela sairá menor que o do app.`);
     }
 
@@ -351,10 +359,13 @@
       g.set(`D${n}`, l ? l.start : null);
       g.set(`E${n}`, l ? l.end : null);
       g.set(`G${n}`, l ? l.qty : null);
+      if (rev21) g.set(`F${n}`, l && Math.abs(l.pace - 100) > 1e-9 ? l.pace : null); // vazio = 100%
       g.set(`I${n}`, l ? l.type : null);
       g.set(`L${n}`, u ? u.name : null);
       g.set(`S${n}`, null); // observações de revisões anteriores do modelo
     }
+    // REV2.1: peças das filmagens (acíclicos por unidade) em D7
+    if (rev21) g.set("D7", r.summary.acyclic === "por-unidade" ? r.films.piecesTotal : null);
     applyUpdates(geral, g);
 
     // ---- Listagem de Elementos (valores do resumo do app; a coluna F "Ação" é fórmula)
@@ -386,7 +397,7 @@
         new Map([
           ["C16", `${study.clientName || "Cliente"} — ${study.processName || "Posto"}${r.multiProduct ? ` — ${r.product.name}` : ""} (${r.filmCount} filmagem(ns), exportado pelo Lean Chrono)`],
           ["F15", null], // comentário da revisão anterior do modelo
-        ])
+        ].concat(rev21 ? [["L6", Calc.parseNumber(String(study.shiftParams.tolerancePct == null ? "" : study.shiftParams.tolerancePct)) || null]] : []))
       );
     }
 
