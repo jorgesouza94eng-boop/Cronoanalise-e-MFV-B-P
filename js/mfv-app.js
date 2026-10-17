@@ -41,6 +41,7 @@
     studies: [], // estudos disponíveis para vincular: { key, id, product, productName, fileName, clientName, processName, tcMin }
     pendingStudyKey: null, // estudo trazido pelo botão "→ MFV" da cronoanálise, ainda sem MFV escolhido
     tcChanges: [], // últimas atualizações de TC (para o "Desfazer")
+    docsCache: [], // MFVs salvos (para sugerir famílias da empresa)
   };
   let localTimer = null;
   let diskTimer = null;
@@ -438,6 +439,7 @@
       }
     }
     const list = Array.from(items.values()).sort((a, b) => String(b.doc.updatedAt).localeCompare(String(a.doc.updatedAt)));
+    state.docsCache = list;
     return { list, source };
   }
 
@@ -484,6 +486,12 @@
       })
     );
     $("new-doc-studies").hidden = !list.length;
+    // Família: sugere os produtos dos estudos e as famílias dos MFVs desta empresa (o consultor escolhe)
+    const fam = new Map();
+    const addFam = (n) => n && !fam.has(Calc.elementKey(n)) && fam.set(Calc.elementKey(n), n.trim());
+    list.forEach((st) => st.product !== MIX_KEY && addFam(st.productName));
+    state.docsCache.forEach(({ doc }) => key && Calc.elementKey(doc.clientName) === key && addFam(doc.family));
+    $("family-list").replaceChildren(...Array.from(fam.values()).map((n) => el("option", { value: n })));
     $("new-doc-hint").textContent = !key
       ? "Escolha a empresa: os estudos de cronoanálise dela aparecem aqui para virar etapas, com o TC já preenchido."
       : list.length
@@ -540,6 +548,8 @@
     }
     await showDocs();
     $("new-client").value = st.clientName || "";
+    // Vindo de um produto do resumo: sugere o nome dele como família (editável)
+    if (st.productName && st.product !== MIX_KEY && !$("new-family").value.trim()) $("new-family").value = st.productName;
     renderNewDocStudies();
     if (same.length > 1) {
       toast(`${st.clientName} tem ${same.length} MFVs: abra o desejado na lista (o estudo será incluído) ou crie um novo.`, "warn", 8000);

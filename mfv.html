@@ -366,7 +366,7 @@
       <div class="card-header-mini">Novo MFV (1 arquivo por cliente / família)</div>
       <div class="new-study-grid">
         <div class="param-field"><label for="new-client">Empresa / Cliente</label><input type="text" id="new-client" list="client-list" required></div>
-        <div class="param-field"><label for="new-family">Família / Produto</label><input type="text" id="new-family" required></div>
+        <div class="param-field"><label for="new-family">Família / Produto</label><input type="text" id="new-family" list="family-list" required></div>
         <button type="submit" class="btn-primary">Criar MFV</button>
       </div>
       <div class="new-doc-studies" id="new-doc-studies" hidden>
@@ -376,6 +376,7 @@
       <p class="form-hint" id="new-doc-hint">Escolha a empresa: os estudos de cronoanálise dela aparecem aqui para virar etapas, com o TC já preenchido.</p>
     </form>
     <datalist id="client-list"></datalist>
+    <datalist id="family-list"></datalist>
     <div class="study-list-header">
       <div class="card-header-mini">MFVs salvos</div>
       <span id="doc-source" class="study-source"></span>

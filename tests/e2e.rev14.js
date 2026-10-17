@@ -74,6 +74,9 @@ function prensa() {
   check(items.length === 4, "lista os estudos da empresa: Furadeira A, B, Mix e Prensa (" + items.length + ")");
   check(items.some(([c, t]) => c && t.includes("Furadeira • Produto A")) && items.filter(([c]) => c).length === 1, "o estudo do botão (Produto A) já vem marcado");
   check(items.some(([, t]) => t.includes("Mix (TC ponderado)")), "opção Mix (TC ponderado)");
+  check(await p.inputValue("#new-family") === "Produto A", "família pré-preenchida com o produto do resumo (editável)");
+  const fams = await p.$$eval("#family-list option", (o) => o.map((x) => x.value));
+  check(fams.includes("Produto A") && fams.includes("Produto B") && !fams.some((f) => f.includes("Mix")), "família sugere os produtos dos estudos da empresa: " + fams.join(", "));
   await p.check("#new-doc-study-list label:has-text('Prensa') input");
   await p.fill("#new-family", "Suportes");
   await p.click("#new-doc-form button[type=submit]");
@@ -120,6 +123,7 @@ function prensa() {
   await p.fill("#new-client", "metal  delta");
   await p.dispatchEvent("#new-client", "input");
   check(await p.$$eval("#new-doc-study-list label", (l) => l.length) === 4, "a lista de estudos aparece mesmo com grafia diferente");
+  check(await p.$$eval("#family-list option", (o) => o.some((x) => x.value === "Suportes")), "família sugere também as famílias dos MFVs da empresa");
   await p.fill("#new-family", "Outra família");
   await p.click("#new-doc-form button[type=submit]");
   await p.waitForFunction(() => LeanMfvApp.state.doc.family === "Outra família");

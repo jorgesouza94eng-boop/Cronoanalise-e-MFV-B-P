@@ -269,6 +269,7 @@ Conferência com o MFV real da Laje Forte (aba EP): deram os mesmos 440 min/dia,
 | Recurso | Como funciona |
 |---|---|
 | **Empresa puxada dos estudos** | No **Novo MFV**, o campo Empresa sugere as empresas dos estudos e dos MFVs. Se a grafia for diferente ("metal alfa"), o MFV é gravado com o nome já usado nos estudos ("Metal Alfa") |
+| **Família sugerida (REV 1.7)** | O campo Família sugere os **produtos** dos estudos da empresa e as **famílias** dos MFVs que ela já tem. Pelo botão "→ MFV" com um produto selecionado, a Família já vem com o nome dele (editável). A família é decisão do consultor: sem produto, o campo fica em branco |
 | **Estudos da empresa** | Ao informar a empresa, aparecem os estudos dela (com produto e Mix, quando houver) e o TC de cada um. Os marcados viram etapas, na ordem da lista, com o TC preenchido. Nº de operadores e uptime ficam para você |
 | **Botão "→ MFV"** (na cronoanálise) | Grava o estudo e abre o MFV da mesma empresa. Sem MFV: abre o Novo MFV com a empresa e o estudo já marcados. Com 1 MFV: abre e inclui o estudo como etapa (sem duplicar). Com mais de 1: mostra a lista para você escolher. Com vários produtos, leva o produto exibido no resumo |
 | **Aviso de TC atualizado** | Ao abrir o MFV, os TCs das etapas ligadas aos estudos são atualizados e uma faixa mostra o que mudou ("Corte 0,750 → 0,800 min"). **Desfazer** mantém os valores anteriores como TC editado (✎). As etapas editadas à mão nunca são atualizadas |
