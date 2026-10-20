@@ -772,6 +772,8 @@ select.input-type.is-acyclic {
   align-items: start;
 }
 .productivity-grid .params-grid { grid-template-columns: 1fr 1fr; }
+.productivity-grid .params-grid .pb-wide { grid-column: 1 / -1; }
+.productivity-grid .param-field[hidden] { display: none; }
 .productivity-table select.input-cell { width: 100%; }
 .productivity-table tr.period-acomp td:first-child { box-shadow: inset 3px 0 0 var(--primary-500); }
 

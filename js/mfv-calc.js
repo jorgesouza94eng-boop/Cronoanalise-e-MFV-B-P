@@ -20,7 +20,7 @@
   "use strict";
 
   const SCHEMA_ID = "lean-chrono-mfv";
-  const SCHEMA_VERSION = 3; // v2: produtividade (pç/HH) e payback • v3: produto do estudo vinculado
+  const SCHEMA_VERSION = 4; // v2: pç/HH e payback • v3: produto do estudo vinculado • v4: payback no padrão B+P
   const FILE_PATTERN = /^MFV_.+\.json$/i;
   const DAYS = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
   const EPS = 1e-9;
@@ -156,7 +156,11 @@
       productivity: [],
       productivityTargetPct: "20",
       productivityProjected: "", // pç/HH esperado (estimativa até haver acompanhamento)
-      paybackInvestment: "",
+      paybackMethod: "bp", // "bp" (padrão do programa) | "hh" (mão de obra)
+      paybackProgramCost: "", // custo do programa B+P (digitado pelo consultor)
+      paybackInvestment: "", // investimentos do cliente (se houver)
+      paybackProdT3: "", // produção mensal após as melhorias (vazio = estimada pelo ganho de pç/HH)
+      paybackPrice: "", // preço de venda por unidade (R$)
       hhCost: "",
       paybackMonthlyProd: "", // vazio = demanda mensal
       paybackOtherGains: "",
@@ -230,7 +234,12 @@
         ),
       productivityTargetPct: raw.productivityTargetPct == null ? "20" : str(raw.productivityTargetPct),
       productivityProjected: str(raw.productivityProjected),
+      // Arquivos anteriores: payback pelo método das HH (o único que existia)
+      paybackMethod: raw.paybackMethod === "bp" || raw.paybackMethod === "hh" ? raw.paybackMethod : raw.paybackInvestment || raw.hhCost ? "hh" : "bp",
+      paybackProgramCost: str(raw.paybackProgramCost),
       paybackInvestment: str(raw.paybackInvestment),
+      paybackProdT3: str(raw.paybackProdT3),
+      paybackPrice: str(raw.paybackPrice),
       hhCost: str(raw.hhCost),
       paybackMonthlyProd: str(raw.paybackMonthlyProd),
       paybackOtherGains: str(raw.paybackOtherGains),
@@ -432,27 +441,49 @@
   }
 
   /**
-   * Payback simples (meses) = Investimento ÷ Ganho mensal.
-   *  - HH economizadas/mês = Produção mensal × (1/pç/HH base − 1/pç/HH comparado).
-   *  - Ganho com mão de obra = HH economizadas × Custo da HH.
-   *  - Ganho mensal = ganho com mão de obra + outros ganhos informados (refugo, estoque, horas extras...).
-   * Produção mensal: valor digitado ou, se vazio, a demanda mensal do MFV.
+   * Payback simples (meses) = Investimento total ÷ Ganho mensal.
+   * Investimento total = custo do programa B+P (digitado; varia por porte) + investimentos do cliente.
+   * Dois métodos para o ganho mensal:
+   *  - "bp" (padrão do programa, Módulo T1.4 Indicadores): ganho = (produção mensal T3 − T1) × preço
+   *    de venda por unidade. Sem a produção T3 medida, estima T3 = T1 × (1 + ganho de pç/HH),
+   *    mantidas as HH (sempre identificado como estimativa). Ganho em faturamento, não em lucro.
+   *  - "hh" (mão de obra): HH economizadas/mês = produção × (1/pç/HH base − 1/pç/HH atual);
+   *    ganho = HH economizadas × custo da HH.
+   *  Em ambos, somam-se os outros ganhos mensais informados.
+   * Produção mensal T1: valor digitado ou, se vazio, a demanda mensal do MFV.
    */
   function computePayback(doc, prod, demandMonthly) {
-    const investment = num(doc.paybackInvestment);
+    const method = doc.paybackMethod === "hh" ? "hh" : "bp";
+    const programCost = num(doc.paybackProgramCost);
+    const clientInv = num(doc.paybackInvestment);
+    const investment = programCost == null && clientInv == null ? null : (programCost || 0) + (clientInv || 0);
     const hhCost = num(doc.hhCost);
     const typedProd = num(doc.paybackMonthlyProd);
     const monthlyProd = typedProd > 0 ? typedProd : demandMonthly > 0 ? demandMonthly : null;
+    const prodT3Typed = num(doc.paybackProdT3);
+    const price = num(doc.paybackPrice);
     const other = num(doc.paybackOtherGains);
     const issues = [];
-    if (investment != null && investment < 0) issues.push("Investimento não pode ser negativo");
-    if (hhCost != null && hhCost < 0) issues.push("Custo da HH não pode ser negativo");
+    if ((programCost != null && programCost < 0) || (clientInv != null && clientInv < 0)) issues.push("Investimento não pode ser negativo");
+    if (method === "hh" && hhCost != null && hhCost < 0) issues.push("Custo da HH não pode ser negativo");
+    if (method === "bp" && price != null && price < 0) issues.push("Preço de venda não pode ser negativo");
 
     const hhSavedMonth =
       prod.base.pcHH > 0 && prod.compare > 0 && monthlyProd != null ? monthlyProd * (1 / prod.base.pcHH - 1 / prod.compare) : null;
-    const laborGain = hhSavedMonth != null && hhCost != null && hhCost >= 0 ? hhSavedMonth * hhCost : null;
+    // Método B+P: produção T3 medida ou estimada pelo ganho de pç/HH (mesmas HH)
+    let prodT3 = null;
+    let prodT3Estimated = false;
+    if (prodT3Typed != null && prodT3Typed >= 0) prodT3 = prodT3Typed;
+    else if (monthlyProd != null && prod.gainPct != null) {
+      prodT3 = monthlyProd * (1 + prod.gainPct / 100);
+      prodT3Estimated = true;
+    }
+    const prodIncrease = monthlyProd != null && prodT3 != null ? prodT3 - monthlyProd : null;
+    const salesGain = method === "bp" && prodIncrease != null && price != null && price >= 0 ? prodIncrease * price : null;
+    const laborGain = method === "hh" && hhSavedMonth != null && hhCost != null && hhCost >= 0 ? hhSavedMonth * hhCost : null;
+    const mainGain = method === "bp" ? salesGain : laborGain;
     const hasOther = other != null && other !== 0;
-    const monthlyGain = laborGain == null && !hasOther ? null : (laborGain || 0) + (hasOther ? other : 0);
+    const monthlyGain = mainGain == null && !hasOther ? null : (mainGain || 0) + (hasOther ? other : 0);
 
     let months = null;
     let status = "incompleto";
@@ -469,21 +500,30 @@
       status = "ok";
     }
     return {
+      method,
       investment,
+      programCost,
+      clientInvestment: clientInv,
       hhCost,
       monthlyProd,
       monthlyProdFromDemand: !(typedProd > 0) && monthlyProd != null,
+      prodT3,
+      prodT3Estimated,
+      prodIncrease,
+      price,
+      salesGain,
       otherGains: hasOther ? other : 0,
       hhSavedMonth,
       laborGain,
       monthlyGain,
       annualGain: monthlyGain != null ? monthlyGain * 12 : null,
       months,
-      source: prod.source,
+      source: method === "bp" ? (prodT3Estimated ? "estimado" : prodT3 != null ? "medido" : null) : prod.source,
       status,
       issues,
     };
   }
+
 
   /** Capacidade e produtividade para um TC limitante e um nº de operadores. */
   function lineResults(availDayMin, tcLimit, operators) {
@@ -526,6 +566,10 @@
             status: r.productivity.status,
           },
           payback: {
+            method: r.payback.method,
+            investment: round(r.payback.investment, 2),
+            productionIncreaseMonth: round(r.payback.prodIncrease, 2),
+            productionT3Estimated: r.payback.prodT3Estimated,
             hhSavedMonth: round(r.payback.hhSavedMonth, 2),
             monthlyGain: round(r.payback.monthlyGain, 2),
             months: round(r.payback.months, 2),

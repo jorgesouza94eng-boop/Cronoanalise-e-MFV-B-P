@@ -86,6 +86,9 @@ function studyJson() {
   check(await txt("#kpi-prod-acomp") === "9,063" && (await txt("#kpi-gain")) === "+31,8%", "acompanhamento real: 9,063 pç/HH, +31,8%");
   check(await p.$eval("#kpi-gain-card", (c) => c.classList.contains("is-balanced")), "meta atingida: semáforo verde");
 
+  check(await p.inputValue("#pb-method") === "bp" && (await p.isHidden("#pb-hh-cost")), "MFV novo: payback no padrão B+P (campo de custo da HH escondido)");
+  await p.selectOption("#pb-method", "hh");
+  check(await p.isVisible("#pb-hh-cost") && (await p.isHidden("#pb-price")), "método mão de obra: mostra o custo da HH");
   await p.fill("#pb-investment", "20000");
   await p.fill("#pb-hh-cost", "30");
   await p.fill("#pb-monthly-prod", "5000");
@@ -95,10 +98,24 @@ function studyJson() {
   check(await txt("#kpi-hh-saved") === C.formatNumber(saved, 1), `HH economizadas = ${C.formatNumber(saved, 1)}/mês`);
   check(await txt("#kpi-payback") === C.formatNumber(months, 1), `payback = ${C.formatNumber(months, 1)} meses`);
 
+  // Padrão B+P: (T3 − T1) × preço de venda; investimento = custo do programa + investimentos do cliente
+  await p.selectOption("#pb-method", "bp");
+  await p.fill("#pb-program", "13920");
+  await p.fill("#pb-prod-t3", "6000");
+  await p.fill("#pb-price", "3,65");
+  // ganho = 1.000 × 3,65 + 500 = 4.150 • investimento = 13.920 + 20.000 = 33.920 → 8,2 meses
+  check(await p.textContent("#kpi-hh-saved") === "1.000" && (await p.textContent("#kpi-payback")) === C.formatNumber(33920 / 4150, 1), "padrão B+P: +1.000 pç × R$ 3,65 + outros → payback " + C.formatNumber(33920 / 4150, 1));
+  await p.fill("#pb-prod-t3", "");
+  check((await p.textContent("#kpi-hh-saved-cap")).includes("estimada"), "sem T3: produção estimada pelo ganho de pç/HH");
+  await p.fill("#pb-prod-t3", "6000");
+  await p.selectOption("#pb-method", "hh");
+
   await p.evaluate(() => LeanMfvApp.flushSave());
   await p.reload();
   await p.waitForFunction(() => window.LeanMfvApp && LeanMfvApp.state.doc);
-  check(await p.$$eval("#prod-tbody tr[data-id]", (r) => r.length) === 4 && (await txt("#kpi-payback")) === C.formatNumber(months, 1), "pç/HH e payback preservados após recarregar");
+  // custo do programa (13.920) entra no investimento também no método da mão de obra
+  const months2 = (13920 + 20000) / (saved * 30 + 500);
+  check(await p.$$eval("#prod-tbody tr[data-id]", (r) => r.length) === 4 && (await txt("#kpi-payback")) === C.formatNumber(months2, 1), "pç/HH e payback preservados após recarregar (investimento = programa + cliente)");
   await p.click("#prod-tbody tr:nth-child(4) [data-action=remove]");
   check(await txt("#kpi-prod-acomp") === "9,375", "remover dia recalcula o acompanhamento");
 

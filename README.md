@@ -293,17 +293,21 @@ A "produtividade" do bloco *Resultados* é **teórica** (capacidade do gargalo �
 - **pç/HH projetado** (opcional): estimativa para o plano de ação, usada só enquanto não houver dias de acompanhamento. Os cartões indicam "projetado" com clareza.
 - Linhas incompletas ficam fora das médias e são marcadas em vermelho.
 
-**Payback:**
+**Payback (REV 1.8: padrão do B+P):**
 
-| Indicador | Fórmula |
-|---|---|
-| HH economizadas/mês | Produção mensal × (1 ÷ pç/HH base − 1 ÷ pç/HH atual) |
-| Ganho mensal | HH economizadas × custo da HH + outros ganhos mensais |
-| Payback (meses) | Investimento ÷ ganho mensal |
+**Investimento** = **custo do programa B+P** (digitado; varia com o porte e o contrato) + **investimentos do cliente** (se houver). Vale para os dois métodos.
 
-- **Produção mensal** vazia = demanda mensal do MFV.
-- **Outros ganhos mensais**: só valores comprovados (refugo, retrabalho, estoque, horas extras…).
-- Payback de até 12 meses fica verde; acima disso, amarelo; sem ganho positivo, "sem retorno".
+| Método | Ganho mensal | Quando usar |
+|---|---|---|
+| **Padrão B+P** (padrão nos MFVs novos) | (produção mensal **T3** − **T1**) × **preço de venda** por unidade + outros ganhos | É o cálculo do programa (Módulo T1.4 Indicadores). Exemplo do módulo: +1.000 kg/mês × R$ 3,65 = R$ 3.650/mês; com o custo do programa de R$ 13.920 → **3,8 meses** |
+| **Mão de obra** | HH economizadas × custo da HH + outros ganhos. HH economizadas/mês = produção × (1 ÷ pç/HH base − 1 ÷ pç/HH atual) | Quando o ganho é a liberação de horas (sem aumento de produção) |
+
+- **Produção mensal T1** vazia = demanda mensal do MFV.
+- **Produção mensal T3** vazia = **estimada** pelo ganho de pç/HH, com as mesmas HH (T1 × (1 + ganho)). O cartão indica "estimada".
+- **Atenção:** pelo preço de venda, o ganho é de **faturamento** e só vale se a produção a mais for vendida. Pelo método da mão de obra, só há ganho financeiro se as HH liberadas forem realocadas ou evitadas.
+- **Outros ganhos mensais**: só valores comprovados (refugo, retrabalho, estoque, horas extras, área…).
+- **Payback (meses) = investimento ÷ ganho mensal**. Até 12 meses fica verde; acima disso, amarelo; sem ganho positivo, "sem retorno".
+- MFVs das revisões anteriores com payback preenchido continuam no método da mão de obra.
 
 ### Exportar Excel do MFV (modelo B+P)
 

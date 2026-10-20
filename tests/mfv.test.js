@@ -194,6 +194,7 @@ test("pç/HH: sem acompanhamento usa o projetado como estimativa; queda é sinal
 
 test("payback: HH economizadas × custo da HH + outros ganhos; meses = investimento ÷ ganho", () => {
   const d = withDays(M.createMfv({}));
+  d.paybackMethod = "hh";
   d.paybackInvestment = "20000";
   d.hhCost = "30";
   d.paybackMonthlyProd = "5000";
@@ -214,6 +215,7 @@ test("payback: HH economizadas × custo da HH + outros ganhos; meses = investime
 test("payback: produção mensal vem da demanda do MFV; sem investimento ou com queda não calcula", () => {
   const d = withDays(M.createMfv({}));
   d.demandMonthly = "4400";
+  d.paybackMethod = "hh";
   d.hhCost = "30";
   let pb = M.computeMfv(d).payback;
   assert.equal(pb.monthlyProd, 4400);
@@ -242,4 +244,43 @@ test("pç/HH e payback: gravados no arquivo; MFV da versão anterior abre com a 
   const old = M.normalizeMfv({ schema: M.SCHEMA_ID, schemaVersion: 1, id: "x" }).doc;
   assert.deepEqual(old.productivity, []);
   assert.equal(old.productivityTargetPct, "20");
+});
+
+/* ==========================================================================
+   PAYBACK NO PADRÃO B+P (REV 1.8) — Módulo T1.4 Indicadores, exemplo do programa
+   ========================================================================== */
+
+test("payback B+P: exemplo do módulo de Indicadores (+1.000 kg/mês × R$ 3,65 = R$ 3.650/mês)", () => {
+  const d = M.createMfv({});
+  assert.equal(d.paybackMethod, "bp", "MFV novo usa o padrão do programa");
+  d.paybackProgramCost = "13920"; // custo do programa (média empresa), digitado pelo consultor
+  d.paybackMonthlyProd = "11600";
+  d.paybackProdT3 = "12600";
+  d.paybackPrice = "3,65";
+  const pb = M.computeMfv(d).payback;
+  close(pb.prodIncrease, 1000);
+  close(pb.salesGain, 3650);
+  close(pb.monthlyGain, 3650);
+  close(pb.investment, 13920);
+  close(pb.months, 13920 / 3650, "≈ 3,8 meses");
+  assert.equal(pb.source, "medido");
+  // investimentos do cliente somam ao custo do programa
+  d.paybackInvestment = "2000";
+  close(M.computeMfv(d).payback.months, 15920 / 3650);
+});
+
+test("payback B+P: sem a produção T3, estima pelo ganho de pç/HH (mesmas HH) e marca como estimativa", () => {
+  const d = withDays(M.createMfv({})); // ganho = 290/220 − 1
+  d.paybackProgramCost = "9120";
+  d.paybackMonthlyProd = "1000";
+  d.paybackPrice = "10";
+  const pb = M.computeMfv(d).payback;
+  assert.equal(pb.prodT3Estimated, true);
+  assert.equal(pb.source, "estimado");
+  close(pb.prodIncrease, 1000 * (290 / 220 - 1));
+  close(pb.months, 9120 / (1000 * (290 / 220 - 1) * 10));
+  // MFV da versão anterior com payback pelas HH continua no método antigo
+  const old = M.normalizeMfv({ schema: M.SCHEMA_ID, schemaVersion: 3, id: "x", paybackInvestment: "500", hhCost: "30" }).doc;
+  assert.equal(old.paybackMethod, "hh");
+  assert.equal(M.normalizeMfv({ schema: M.SCHEMA_ID, schemaVersion: 3, id: "y" }).doc.paybackMethod, "bp");
 });

@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.8** | 20/10/2026 | Payback no padrão B+P e regras do programa no CLAUDE.md |
 | **REV 1.7** | 17/10/2026 | Família sugerida no Novo MFV |
 | **REV 1.6** | 17/10/2026 | Suporte à planilha de cronoanálise REV2.1 da equipe |
 | **REV 1.5** | 16/10/2026 | Preencher o produto para baixo |
@@ -12,6 +13,29 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.8 — 20/10/2026 (payback no padrão B+P)
+
+### Novidades
+- **Payback no padrão do programa** (Módulo T1.4 Indicadores), agora o método padrão dos MFVs novos:
+  - investimento = **custo do programa B+P** (preenchido pelo consultor) + investimentos do cliente;
+  - ganho mensal = (produção mensal T3 − T1) × **preço de venda**;
+  - sem a produção T3 medida, ela é **estimada** pelo ganho de pç/HH (mesmas HH) e aparece identificada como estimativa.
+- O método da **mão de obra** (HH economizadas × custo da HH) continua disponível. Os MFVs das revisões anteriores com payback preenchido continuam nesse método.
+- Aviso na tela: pelo preço de venda, o ganho é de faturamento e só vale se a produção a mais for vendida.
+- **CLAUDE.md:**
+  - regra de perguntar antes de implementar uma regra de B+P não confirmada;
+  - correção das entregas do MFV (atual e futuro só para médias empresas);
+  - regras do programa confirmadas na base do consultor, com o módulo de referência;
+  - regra do grupo "Posto" no MFV, confirmada e a implementar.
+
+### Compatibilidade
+- MFV no formato versão 4 (campos novos do payback). Os arquivos anteriores abrem com os mesmos resultados.
+
+### Testes
+- 129 testes de unidade (2 novos, incluindo o exemplo do módulo do programa: 3,8 meses). Teste de navegador do pç/HH e payback ampliado com os dois métodos.
 
 ---
 

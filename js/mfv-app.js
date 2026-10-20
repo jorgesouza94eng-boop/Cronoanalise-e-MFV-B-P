@@ -703,20 +703,44 @@
         p.base.pcHH != null && p.targetPcHH != null ? `${target} → atingir ${fmt(p.targetPcHH, 3)} ${pu()}/HH` : `${target} • registre a linha de base`;
     }
 
-    $("kpi-hh-saved").textContent = pb.hhSavedMonth != null ? fmt(pb.hhSavedMonth, 1) : "--";
-    $("kpi-hh-saved-cap").textContent =
-      pb.monthlyProd != null ? `${fmt(pb.monthlyProd, 0)} ${pu()}/mês${pb.monthlyProdFromDemand ? " (demanda do MFV)" : ""}` : "Informe a produção ou a demanda mensal";
-    $("kpi-monthly-gain").textContent = money(pb.monthlyGain);
-    $("kpi-monthly-gain-cap").textContent =
-      pb.monthlyGain != null ? `MO ${money(pb.laborGain)} + outros ${money(pb.otherGains)} • ${money(pb.annualGain)}/ano` : "Informe o custo da HH ou outros ganhos";
+    // Payback: campos e cartões conforme o método (padrão B+P ou mão de obra)
+    const bp = pb.method === "bp";
+    document.querySelectorAll(".pb-bp").forEach((n) => (n.hidden = !bp));
+    document.querySelectorAll(".pb-hh").forEach((n) => (n.hidden = bp));
+    const prodLabel = pb.monthlyProd != null ? `${fmt(pb.monthlyProd, 0)} ${pu()}/mês${pb.monthlyProdFromDemand ? " (demanda do MFV)" : ""}` : null;
+    if (bp) {
+      $("pb-hint").textContent =
+        "Padrão B+P (Módulo T1.4): ganho = (produção T3 − T1) × preço de venda. É ganho de faturamento e só vale se a produção a mais for vendida. Investimento = custo do programa + investimentos do cliente.";
+      $("kpi-hh-saved-title").textContent = "Aumento de produção";
+      $("kpi-hh-saved-unit").textContent = `${pu()}/mês`;
+      $("kpi-hh-saved").textContent = pb.prodIncrease != null ? fmt(pb.prodIncrease, pb.prodIncrease % 1 ? 1 : 0) : "--";
+      $("kpi-hh-saved-cap").textContent =
+        pb.prodIncrease != null
+          ? `T1 ${prodLabel} → T3 ${fmt(pb.prodT3, 0)}${pb.prodT3Estimated ? " (estimada pelo ganho de pç/HH)" : ""}`
+          : prodLabel
+            ? "Informe a produção T3 ou registre o pç/HH (linha de base e acompanhamento)"
+            : "Informe a produção mensal T1 ou a demanda";
+      $("kpi-monthly-gain").textContent = money(pb.monthlyGain);
+      $("kpi-monthly-gain-cap").textContent =
+        pb.monthlyGain != null ? `Vendas ${money(pb.salesGain)} + outros ${money(pb.otherGains)} • ${money(pb.annualGain)}/ano` : "Informe o preço de venda ou outros ganhos";
+    } else {
+      $("pb-hint").textContent = "HH economizadas/mês = produção mensal × (1 ÷ pç/HH base − 1 ÷ pç/HH atual). Ganho = HH economizadas × custo da HH. Só é ganho financeiro se as HH liberadas forem realocadas ou evitadas (hora extra, contratação).";
+      $("kpi-hh-saved-title").textContent = "HH economizadas";
+      $("kpi-hh-saved-unit").textContent = "HH/mês";
+      $("kpi-hh-saved").textContent = pb.hhSavedMonth != null ? fmt(pb.hhSavedMonth, 1) : "--";
+      $("kpi-hh-saved-cap").textContent = prodLabel || "Informe a produção ou a demanda mensal";
+      $("kpi-monthly-gain").textContent = money(pb.monthlyGain);
+      $("kpi-monthly-gain-cap").textContent =
+        pb.monthlyGain != null ? `MO ${money(pb.laborGain)} + outros ${money(pb.otherGains)} • ${money(pb.annualGain)}/ano` : "Informe o custo da HH ou outros ganhos";
+    }
     const pbCard = $("kpi-payback-card");
     pbCard.classList.remove("is-bottleneck", "is-balanced", "is-warning");
     $("kpi-payback").textContent = pb.months != null ? fmt(pb.months, 1) : "--";
     const pbCap = {
-      ok: `Investimento ÷ ganho mensal${pb.source === "projetado" ? " (estimativa)" : ""}`,
+      ok: `${money(pb.investment)} ÷ ganho mensal${pb.source === "projetado" || pb.source === "estimado" ? " (estimativa)" : ""}`,
       "sem-retorno": "⚠ Sem retorno: o ganho mensal não é positivo",
       invalido: `⚠ ${pb.issues[0] || "Valores inválidos"}`,
-      incompleto: pb.investment == null ? "Informe o investimento" : "Faltam dados para o ganho mensal",
+      incompleto: pb.investment == null ? "Informe o custo do programa e/ou os investimentos" : "Faltam dados para o ganho mensal",
     }[pb.status];
     $("kpi-payback-cap").textContent = pbCap;
     if (pb.status === "ok") pbCard.classList.add(pb.months <= 12 ? "is-balanced" : "is-warning");

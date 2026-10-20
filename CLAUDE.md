@@ -22,11 +22,11 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - **T4 – Encerramento (12h):** apresentação final para a diretoria e entrega de relatórios.
 
 ### 3. Entregas obrigatórias e indicadores
-- Mapeamento de Fluxo de Valor (MFV) Atual e Futuro.
+- Mapeamento de Fluxo de Valor (MFV): **médias empresas** — MFV tradicional **atual e futuro** (obrigatório); **micro e pequenas** — MFV simplificado (sem estado futuro), não obrigatório (Módulo 6, MFV Simplificado).
 - Implementação do Gerenciamento Diário (GD) com gestão à vista.
 - Aplicação de pelo menos +1 ferramenta Lean (TRF/SMED, Qualidade na Fonte/Poka-Yoke, Trabalho Padronizado ou Fluxo Contínuo/Kanban).
 - Atingimento da meta de ganho de +20% de produtividade (peças/hora-homem).
-- Cálculo do Retorno Financeiro (Payback) e monitoramento de +1 indicador relativo aos desperdícios (ex.: OEE, Lead Time, Qualidade).
+- Cálculo do Retorno Financeiro (Payback) e monitoramento de +1 indicador relativo aos desperdícios. Indicadores relativos do programa: transporte/movimentação, % qualidade, disponibilidade, lead time e área útil (Módulo T1.4).
 
 ### 4. Como você deve me ajudar
 - **Análise de dados:** analise planilhas de cronoanálise, tempos/métodos e OEE. Calcule Takt Time, tempo de ciclo e produtividade, identificando gargalos com base nos dados fornecidos. **Nunca invente dados ausentes.**
@@ -44,6 +44,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 4. **Sem dados de clientes no repositório.** As planilhas e os vídeos dos clientes ficam fora do Git; os testes usam dados sintéticos ou valores numéricos de conferência.
 5. **IA só sugere.** Os cálculos (TS, TN, TP, takt, GBO, pç/HH, payback) não dependem de IA. A chave de API fica só no navegador do consultor, e a anonimização vem ligada por padrão.
 6. **Revisões:** registre cada entrega no `CHANGELOG.md` (REV x.y) e incremente `CACHE_VERSION` em `sw.js` sempre que alterar qualquer arquivo do app.
+7. **Dúvidas de B+P e de engenharia de produção:** antes de implementar uma regra de cálculo ou de método que não esteja confirmada, pergunte ao consultor. Ele tem uma base de dados para conferir: o material da formação de consultores do B+P no Google Drive (pasta "B+P"), consultado só para leitura e com autorização. O material não vai para o repositório; registre só a regra e a referência (ex.: "Módulo T1.4").
 
 ---
 
@@ -52,7 +53,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - HTML/CSS/JS puro, **sem build e sem servidor**. Funciona por `file://`, por servidor local e pelo GitHub Pages.
 - Scripts clássicos no padrão UMD (`window.LeanX` no navegador e `module.exports` nos testes do Node). **Não usar módulos ES** (quebram no `file://`).
 - Armazenamento local-first: IndexedDB (`LeanChronoDB`) e pasta do OneDrive pela File System Access API, com debounce de 3 s e proteção contra conflito (revisão + cópia `_conflito_`).
-- Arquivos: `Crono_*.json` (estudo) e `MFV_*.json` (MFV), estudo no formato versão 4 e MFV na versão 3 (REV 1.4).
+- Arquivos: `Crono_*.json` (estudo) e `MFV_*.json` (MFV), estudo no formato versão 4 e MFV na versão 4 (REV 1.8).
 
 | Arquivo | Função |
 |---|---|
@@ -69,7 +70,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 ```bash
 npm test                                    # testes de unidade (node:test, sem dependências)
 npx http-server -c-1 -p 8765 -s .           # servidor local para os testes de navegador
-CHROMIUM_PATH=/caminho/chrome node tests/e2e.rev15.js http://localhost:8765/
+CHROMIUM_PATH=/caminho/chrome node tests/e2e.rev12.js http://localhost:8765/   # pç/HH e payback
 npm run test:e2e                            # todos os testes de navegador (Playwright)
 ```
 
@@ -81,3 +82,27 @@ npm run test:e2e                            # todos os testes de navegador (Play
 - Filtros são só de exibição: nunca alteram a leitura contínua nem os cálculos.
 - Posto com vários produtos: o gargalo é avaliado pela **carga do mix** (Σ TP × demanda ÷ tempo líquido), não pelo takt de cada produto isolado.
 - Um MFV em que a demanda é igual à capacidade declarada fica **circular** (operadores ideais ≈ atuais e capacidade = demanda). Registre essa premissa nas observações.
+
+## Regras do B+P confirmadas na base do consultor (formação de consultores)
+
+| Tema | Regra | Fonte |
+|---|---|---|
+| Produtividade (obrigatório) | Produtos ÷ (horas trabalhadas × operadores); ganho % = (T3 − T1) ÷ T1 × 100 | Módulo T1.4 Indicadores, parte 2 |
+| Payback (obrigatório) | Investimento = **custo do programa** (por porte; digitado pelo consultor) + investimentos do cliente (se houver). Ganho mensal = (produção mensal T3 − T1) × **preço de venda** por unidade | Módulo T1.4, parte 2 (exemplo: +1.000 kg/mês × R$ 3,65 = R$ 3.650/mês) |
+| Disponibilidade (relativo) | Tempo real ÷ tempo disponível para produção (após paradas planejadas) | Módulo T1.4, parte 3 |
+| Melhoria em % | Proporção, não subtração (70% → 88% = 26%) | Módulo 6 |
+| Takt | Tempo disponível ÷ demanda diária da **família inteira** | Módulo 6 |
+| Operadores ideais | Σ tempos dos processos ÷ takt | Módulo 6, MFV Simplificado |
+| Tempo de ciclo | Tempo que **um operador** leva para percorrer todos os seus elementos de trabalho | Módulo 6, MFV Convencional |
+| Lead time | Σ estoques (dias) + processamento; tempo de processamento = Σ TC (não é tempo de agregação de valor) | Módulo 6 |
+
+Não encontrados na base (perguntar antes de assumir): fórmula oficial de tolerância, nº mínimo de ciclos, aplicação do uptime e limite de ocupação.
+
+## Regra confirmada (a implementar): grupo "Posto" no MFV
+
+- **Ciclo do posto** = maior TP dos estudos do grupo (cada estudo = 1 operador). Usado no TC do GBO, % do takt, gargalo e capacidade.
+- **Conteúdo de trabalho** = Σ (TP − espera); espera = elementos com o desperdício "Espera". Usado nos operadores ideais: Σ (TC das etapas comuns + conteúdo dos grupos) ÷ takt.
+- Operadores atuais = nº de estudos × uptime (o total digitado prevalece). Balanceamento do posto = conteúdo ÷ (nº de operadores × ciclo); da linha = Σ conteúdo ÷ (operadores atuais × gargalo).
+- Tempo de processamento (lead time) usa Σ TC com o ciclo do posto. No MFV vale o takt do MFV.
+- TC editado à mão: o conteúdo é ajustado na mesma proporção e pode ser editado à parte, com aviso.
+- Fora da regra: grupo "Linha" (cada estudo vira uma etapa) e postos paralelos idênticos (TC ÷ nº de pessoas).

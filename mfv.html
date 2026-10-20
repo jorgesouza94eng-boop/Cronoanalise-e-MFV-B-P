@@ -316,29 +316,48 @@
         <div class="shift-params-card">
           <div class="card-header-mini">Payback (retorno financeiro)</div>
           <div class="params-grid">
+            <div class="param-field pb-wide">
+              <label for="pb-method">Método do ganho mensal</label>
+              <select id="pb-method" data-doc="paybackMethod">
+                <option value="bp">Padrão B+P: aumento de produção × preço de venda</option>
+                <option value="hh">Mão de obra: HH economizadas × custo da HH</option>
+              </select>
+            </div>
             <div class="param-field">
-              <label for="pb-investment">Investimento (R$)</label>
+              <label for="pb-program" title="Custo da consultoria B+P conforme o porte e o contrato (preenchimento manual)">Custo do programa B+P (R$)</label>
+              <input type="text" id="pb-program" data-doc="paybackProgramCost" inputmode="decimal" placeholder="conforme contrato" autocomplete="off">
+            </div>
+            <div class="param-field">
+              <label for="pb-investment" title="Investimentos do cliente nas ações de melhoria (somente se houver)">Investimentos do cliente (R$)</label>
               <input type="text" id="pb-investment" data-doc="paybackInvestment" inputmode="decimal" placeholder="0,00" autocomplete="off">
             </div>
             <div class="param-field">
+              <label for="pb-monthly-prod">Produção mensal T1 (<span class="product-unit-label">pç</span>)</label>
+              <input type="text" id="pb-monthly-prod" data-doc="paybackMonthlyProd" inputmode="decimal" placeholder="demanda mensal" autocomplete="off">
+            </div>
+            <div class="param-field pb-bp">
+              <label for="pb-prod-t3" title="Produção mensal medida após as melhorias. Vazio = estimada pelo ganho de pç/HH, com as mesmas HH">Produção mensal T3 (<span class="product-unit-label">pç</span>)</label>
+              <input type="text" id="pb-prod-t3" data-doc="paybackProdT3" inputmode="decimal" placeholder="estimada pelo pç/HH" autocomplete="off">
+            </div>
+            <div class="param-field pb-bp">
+              <label for="pb-price">Preço de venda (R$/<span class="product-unit-label">pç</span>)</label>
+              <input type="text" id="pb-price" data-doc="paybackPrice" inputmode="decimal" placeholder="0,00" autocomplete="off">
+            </div>
+            <div class="param-field pb-hh">
               <label for="pb-hh-cost" title="Custo da hora-homem com encargos">Custo da HH (R$/h)</label>
               <input type="text" id="pb-hh-cost" data-doc="hhCost" inputmode="decimal" placeholder="0,00" autocomplete="off">
             </div>
             <div class="param-field">
-              <label for="pb-monthly-prod">Produção mensal (<span class="product-unit-label">pç</span>)</label>
-              <input type="text" id="pb-monthly-prod" data-doc="paybackMonthlyProd" inputmode="decimal" placeholder="demanda mensal" autocomplete="off">
-            </div>
-            <div class="param-field">
-              <label for="pb-other" title="Ganhos mensais comprovados além da mão de obra: refugo, retrabalho, estoque, horas extras...">Outros ganhos mensais (R$)</label>
+              <label for="pb-other" title="Ganhos mensais comprovados além do principal: refugo, retrabalho, estoque, horas extras, área...">Outros ganhos mensais (R$)</label>
               <input type="text" id="pb-other" data-doc="paybackOtherGains" inputmode="decimal" placeholder="0,00" autocomplete="off">
             </div>
           </div>
-          <p class="form-hint" id="pb-hint">HH economizadas/mês = produção mensal × (1 ÷ pç/HH base − 1 ÷ pç/HH atual).</p>
+          <p class="form-hint" id="pb-hint"></p>
         </div>
         <div class="kpi-grid kpi-grid-3">
           <div class="kpi-card">
-            <span class="kpi-title">HH economizadas</span>
-            <div class="kpi-value-group"><strong id="kpi-hh-saved">--</strong><span class="kpi-unit">HH/mês</span></div>
+            <span class="kpi-title" id="kpi-hh-saved-title">HH economizadas</span>
+            <div class="kpi-value-group"><strong id="kpi-hh-saved">--</strong><span class="kpi-unit" id="kpi-hh-saved-unit">HH/mês</span></div>
             <span class="kpi-caption" id="kpi-hh-saved-cap">--</span>
           </div>
           <div class="kpi-card">
