@@ -328,6 +328,22 @@ Conferido com o MFV real da Laje Forte: depois do recálculo, 20 de 22 células 
 
 ![MFV](docs/tela-mfv.png)
 
+## 2.1.1 Yamazumi — grupos de estudos (`yamazumi.html`, REV 1.9)
+
+Use quando **um produto depende de mais de uma pessoa** (posto com 2 operadores fazendo atividades diferentes) ou para ver a linha inteira empilhada por classe de valor.
+
+1. Em **Grupos**, informe a empresa e o nome, escolha o tipo e a situação (T1 ou T3) e marque os estudos (cada estudo = 1 operador).
+   - **Posto:** vira 1 etapa no MFV.
+   - **Linha:** cada estudo vira 1 etapa.
+2. O gráfico empilha o TP de cada estudo por **classe de valor** ou **por elemento**, com a linha do takt.
+3. Indicadores do grupo:
+   - **ciclo** = maior TP;
+   - **conteúdo de trabalho** = Σ (TP − espera), em que espera são os elementos com o desperdício "Espera";
+   - **balanceamento** = conteúdo ÷ (nº de estudos × ciclo);
+   - **operadores ideais** = conteúdo ÷ takt.
+4. **Comparar com:** escolha o grupo da outra situação para ver o antes × depois (T1 × T3), com a variação de cada indicador.
+5. **→ MFV:** inclui o grupo no MFV da empresa. No posto, o TC é o ciclo, e os operadores ideais do MFV usam o conteúdo de trabalho. O takt do grupo vale só no Yamazumi.
+
 ## 2.2 Assistente de IA (Gemini), opcional
 
 O botão **✨ IA** na barra da grade abre o assistente. Ele precisa de **internet** e de uma **chave de API do Google AI Studio** (aistudio.google.com → ícone 🔑 → *Create API key*).
@@ -444,6 +460,9 @@ js/ai-ui.js           Tela do assistente de IA (configuração, sugestões e apl
 mfv.html              Página do MFV (estado presente)
 js/mfv-calc.js        Motor de cálculo do MFV (aba EP: horário, takt, GBO, capacidade, atravessamento)
 js/mfv-app.js         Tela e salvamento do MFV (mesma pasta e proteção contra conflito)
+yamazumi.html         Página do Yamazumi (grupos de estudos)
+js/yamazumi-calc.js   Motor do Yamazumi: classes de valor, ciclo, conteúdo, balanceamento, T1 × T3
+js/yamazumi-app.js    Tela e salvamento dos grupos
 sw.js                 Service worker (offline)
 manifest.webmanifest  Instalação como app (PWA)
 tests/                Testes automatizados
@@ -456,8 +475,8 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 124 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback e IA (Node 18+, sem dependências)
-npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada e REV 1.2 a 1.5 — requer o servidor local
+npm test             # 139 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA e Yamazumi (Node 18+, sem dependências)
+npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.5 e Yamazumi (REV 1.9) — requer o servidor local
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

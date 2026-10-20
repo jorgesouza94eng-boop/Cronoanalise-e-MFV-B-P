@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.9** | 20/10/2026 | Yamazumi (grupos de estudos), grupo Posto no MFV e comparação T1 × T3 |
 | **REV 1.8** | 20/10/2026 | Payback no padrão B+P e regras do programa no CLAUDE.md |
 | **REV 1.7** | 17/10/2026 | Família sugerida no Novo MFV |
 | **REV 1.6** | 17/10/2026 | Suporte à planilha de cronoanálise REV2.1 da equipe |
@@ -13,6 +14,52 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.9 — 20/10/2026 (Yamazumi e grupo Posto no MFV)
+
+### Novidades
+- **Página Yamazumi** (`yamazumi.html`, no menu de todas as páginas). Um grupo junta estudos de cronoanálise, e cada estudo = 1 operador:
+  - **Posto:** vários operadores no mesmo posto. Vira **1 etapa** no MFV.
+  - **Linha:** estudos em sequência. Cada estudo vira **1 etapa** no MFV.
+- **Gráfico de barras empilhadas** com o TP de cada estudo e a linha do takt:
+  - por **classe de valor**: Agrega, Incidental, Não agrega, Espera, Sem classificação e Tolerância;
+  - ou **por elemento**, com a cor da classe.
+- **Indicadores do grupo:**
+  - ciclo (maior TP) e % do takt;
+  - conteúdo de trabalho = Σ (TP − espera);
+  - balanceamento = conteúdo ÷ (nº de estudos × ciclo);
+  - operadores ideais = conteúdo ÷ takt;
+  - capacidade, HH/pç e pç/HH teórico.
+- **Takt do grupo** editável, pré-preenchido com o do 1º estudo. Vale só no Yamazumi; no MFV vale o takt do MFV.
+- **Avisos:** estudo não encontrado, empresas diferentes, tolerâncias diferentes, produtos diferentes no posto, peças das filmagens incompletas, elementos sem classificação e linhas com erro.
+- **Comparação T1 × T3** (antes × depois) com outro grupo da empresa:
+  - indicadores: ciclo, conteúdo, operadores, HH/pç, pç/HH, balanceamento, % Não agrega e movimentação + transporte;
+  - variação = (T3 − T1) ÷ T1, com o resultado "melhora", "piora" ou "igual".
+- **Exportação:**
+  - Excel simples com as abas Yamazumi, Elementos (com filtro) e T1 x T3;
+  - impressão;
+  - JSON.
+  - Botão **"→ MFV"**, que inclui o grupo no MFV da empresa.
+- **Grupo Posto no MFV** (regra confirmada, ver CLAUDE.md):
+  - TC = ciclo do posto; nº de operadores = nº de estudos;
+  - operadores ideais = Σ (TC das etapas comuns + conteúdo dos grupos) ÷ takt;
+  - novo **balanceamento da linha** = Σ conteúdo ÷ (operadores atuais × gargalo);
+  - TC do posto editado à mão: o conteúdo é ajustado na mesma proporção e pode ser digitado à parte, com aviso;
+  - "Atualizar TCs" também atualiza os grupos.
+- Exportação para o modelo MFV B+P: aviso de que a planilha calcula os operadores ideais por ΣTC.
+
+### Correções
+- Formulário "Novo grupo" limpo depois de criar (não carrega as marcações do grupo anterior).
+- Botões de exportação quebram linha no celular.
+
+### Compatibilidade
+- MFV no formato versão 5 (campos da etapa de grupo). Os arquivos anteriores abrem com os mesmos resultados; sem grupos, os operadores ideais continuam ΣTC ÷ takt.
+- Armazenamento do navegador na versão 3 (store nova de grupos). Os estudos e MFVs já salvos são mantidos.
+
+### Testes
+- 139 testes de unidade (10 novos no Yamazumi, incluindo o exemplo de conferência da regra). Novo teste de navegador `tests/e2e.rev19.js`.
 
 ---
 

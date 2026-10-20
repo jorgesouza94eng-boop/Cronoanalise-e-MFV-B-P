@@ -52,7 +52,7 @@ const check = (cond, msg) => { console.log((cond ? "  OK  " : "  FALHA ") + msg)
   check(await txt("#kpi-takt") === "1,300", "takt = 520 ÷ 400 = 1,300 min");
   check(await txt("#tc-total") === "2,750", "ΣTC = 0,750 + 0,833 + 1,167");
   check((await txt("#kpi-bottleneck-name")).includes("Solda"), "gargalo = Solda");
-  check((await txt("#kpi-ops-ideal")).endsWith("2,12"), "operadores ideais = 2,12");
+  check((await txt("#kpi-ops-ideal")).includes("ΣTC ÷ takt): 2,12 •"), "operadores ideais = 2,12");
   check(await txt("#kpi-cap") === "445,7", "capacidade = 520 ÷ 1,167 = 445,7/dia");
   check(await txt("#kpi-prod") === "12,86", "produtividade = 12,86 pç/h/op");
   check((await txt("#kpi-kaizen-detail")).startsWith("Montagem"), "processo Kaizen = Montagem");

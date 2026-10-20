@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="Yamazumi: grupos de estudos de cronoanálise (posto com vários operadores ou linha), balanceamento e comparação T1 × T3 — funciona 100% offline.">
+  <title>Yamazumi | Lean Chrono &amp; MFV</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-mfv page-yamazumi">
+
+  <header class="app-header">
+    <div class="brand-area">
+      <div class="brand-badge">LEAN</div>
+      <div class="brand-titles">
+        <h1>Yamazumi — Grupos de estudos</h1>
+        <nav class="app-nav" aria-label="Módulos">
+          <a href="index.html">Cronoanálise</a><a href="mfv.html">MFV</a><a href="yamazumi.html" aria-current="page">Yamazumi</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="client-context">
+      <div class="input-inline">
+        <label for="grp-client">Empresa / Cliente</label>
+        <input type="text" id="grp-client" data-doc="clientName" placeholder="Nome da indústria..." autocomplete="off">
+      </div>
+      <div class="input-inline">
+        <label for="grp-name">Grupo</label>
+        <input type="text" id="grp-name" data-doc="name" placeholder="Ex.: Célula de montagem" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="storage-controls">
+      <span id="sync-status" class="status-pill status-offline" role="status" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span><span class="status-text">Iniciando...</span>
+      </span>
+      <button id="btn-docs" class="btn-header" type="button" title="Abrir, criar ou importar grupos">Grupos</button>
+      <button id="btn-connect-folder" class="btn-primary" type="button" hidden>
+        <span class="btn-label">Conectar pasta (OneDrive)</span>
+      </button>
+    </div>
+  </header>
+
+  <div id="conflict-banner" class="conflict-banner" role="alert" hidden>
+    <div class="conflict-text"><strong>Conflito de versões.</strong> <span id="conflict-detail"></span></div>
+    <div class="conflict-actions">
+      <button type="button" id="btn-conflict-disk" class="btn-outline">Usar versão da pasta</button>
+      <button type="button" id="btn-conflict-local" class="btn-danger">Manter minha versão (sobrescrever)</button>
+    </div>
+  </div>
+
+  <main class="app-workspace">
+
+    <!-- PARÂMETROS DO GRUPO -->
+    <section class="dashboard-section" aria-label="Parâmetros do grupo">
+      <div class="shift-params-card">
+        <div class="card-header-mini">Parâmetros do grupo</div>
+        <div class="params-grid yz-params">
+          <div class="param-field">
+            <label for="grp-kind" title="Posto: operadores no mesmo posto (vira 1 etapa no MFV). Linha: estudos em sequência (cada estudo vira 1 etapa)">Tipo de grupo</label>
+            <select id="grp-kind" data-doc="kind">
+              <option value="posto" title="Operadores no mesmo posto: vira 1 etapa no MFV">Posto</option>
+              <option value="linha" title="Estudos em sequência: cada estudo vira 1 etapa no MFV">Linha</option>
+            </select>
+          </div>
+          <div class="param-field">
+            <label for="grp-situation">Situação</label>
+            <select id="grp-situation" data-doc="situation">
+              <option value="T1">T1 — linha de base</option>
+              <option value="T3">T3 — após as melhorias</option>
+            </select>
+          </div>
+          <div class="param-field">
+            <label for="grp-takt" title="Vale só para o Yamazumi. No MFV vale o takt do MFV. Vazio = takt do 1º estudo">Takt do grupo (<span class="unit-label">s</span>/pç)</label>
+            <input type="text" id="grp-takt" inputmode="decimal" autocomplete="off">
+          </div>
+          <div class="param-field">
+            <label for="grp-net" title="Tempo líquido disponível por dia, para a capacidade. Vazio = o do 1º estudo">Tempo líquido (min/dia)</label>
+            <input type="text" id="grp-net" inputmode="decimal" autocomplete="off">
+          </div>
+          <div class="param-field">
+            <label for="grp-time-unit">Unidade de tempo</label>
+            <select id="grp-time-unit" data-doc="timeUnit">
+              <option value="s">Segundos</option><option value="min">Minutos</option><option value="h">Horas</option>
+            </select>
+          </div>
+          <div class="param-field">
+            <label for="grp-chart-mode">Barras do gráfico</label>
+            <select id="grp-chart-mode" data-doc="chartMode">
+              <option value="classe">Por classe de valor</option>
+              <option value="elemento">Por elemento</option>
+            </select>
+          </div>
+          <div class="param-field">
+            <label for="grp-compare" title="Grupo da outra situação (T1 ou T3) para a comparação antes × depois">Comparar com</label>
+            <select id="grp-compare" data-doc="compareWithId"></select>
+          </div>
+        </div>
+        <p class="form-hint" id="grp-takt-hint"></p>
+      </div>
+    </section>
+
+    <!-- ESTUDOS DO GRUPO -->
+    <section class="timesheet-section summary-section" aria-label="Estudos do grupo">
+      <div class="section-toolbar">
+        <div class="toolbar-left">
+          <h2>Estudos do grupo</h2>
+          <span class="keyboard-hint" id="members-hint">Cada estudo = 1 operador • ciclo do posto = maior TP • conteúdo = TP − espera</span>
+        </div>
+        <div class="toolbar-actions">
+          <div class="inline-field">
+            <label for="study-picker">Estudo</label>
+            <select id="study-picker" class="study-picker"></select>
+          </div>
+          <button type="button" id="btn-add-member" class="btn-secondary">+ Estudo</button>
+          <button type="button" id="btn-refresh-studies" class="btn-outline" title="Reler os estudos da pasta e do navegador">Atualizar estudos</button>
+        </div>
+      </div>
+      <div class="table-container summary-container">
+        <table class="chrono-table yz-members-table">
+          <colgroup>
+            <col style="width:56px"><col style="width:150px"><col><col style="width:100px"><col style="width:100px">
+            <col style="width:100px"><col style="width:110px"><col style="width:90px"><col style="width:100px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Nº</th>
+              <th id="th-member-label">Operador</th>
+              <th>Estudo (posto • produto)</th>
+              <th>TN (<span class="unit-label">s</span>)</th>
+              <th>TP (<span class="unit-label">s</span>)</th>
+              <th title="Elementos com desperdício Espera (parcela no TP)">Espera (<span class="unit-label">s</span>)</th>
+              <th title="TP − espera">Conteúdo (<span class="unit-label">s</span>)</th>
+              <th>% do takt</th>
+              <th><span class="sr-only">Ações</span></th>
+            </tr>
+          </thead>
+          <tbody id="members-tbody"></tbody>
+          <tfoot>
+            <tr>
+              <td colspan="4" class="tfoot-label">Ciclo (maior TP) / conteúdo total:</td>
+              <td class="cell-total mono highlight-col" id="ft-cycle">--</td>
+              <td class="cell-total mono" id="ft-wait">--</td>
+              <td class="cell-total mono" id="ft-content">--</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="gbo-chart-wrap">
+        <div class="chart-card">
+          <h3>Gráfico Yamazumi</h3>
+          <p class="chart-sub" id="yz-chart-sub">TP de cada estudo empilhado por classe de valor × takt (linha tracejada).</p>
+          <div id="yz-chart" class="gbo-chart" role="img" aria-label="Gráfico Yamazumi: tempo padrão de cada estudo por classe de valor em relação ao takt"></div>
+          <div id="yz-legend" class="yz-legend"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESULTADOS -->
+    <section class="kpi-grid" aria-label="Resultados do grupo">
+      <div class="kpi-card status-card" id="kpi-cycle-card">
+        <span class="kpi-title" id="kpi-cycle-title">Ciclo do posto</span>
+        <div class="kpi-value-group"><strong id="kpi-cycle">--</strong><span class="kpi-unit" id="kpi-cycle-unit"></span></div>
+        <span class="kpi-caption" id="kpi-cycle-cap">--</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Conteúdo de trabalho</span>
+        <div class="kpi-value-group"><strong id="kpi-content">--</strong><span class="kpi-unit" id="kpi-content-unit"></span></div>
+        <span class="kpi-caption">Σ (TP − espera)</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Balanceamento</span>
+        <div class="kpi-value-group"><strong id="kpi-balance">--</strong><span class="kpi-unit">%</span></div>
+        <span class="kpi-caption" id="kpi-balance-cap">Conteúdo ÷ (nº de estudos × ciclo)</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Operadores</span>
+        <div class="kpi-value-group"><strong id="kpi-ops">--</strong><span class="kpi-unit">atuais</span></div>
+        <span class="kpi-caption" id="kpi-ops-ideal">Ideal (conteúdo ÷ takt): --</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Capacidade</span>
+        <div class="kpi-value-group"><strong id="kpi-cap">--</strong><span class="kpi-unit">pç/dia</span></div>
+        <span class="kpi-caption" id="kpi-hh">--</span>
+      </div>
+    </section>
+
+    <div id="yz-warnings" class="info-banner yz-warnings" role="status" hidden></div>
+
+    <!-- COMPARAÇÃO T1 × T3 -->
+    <section class="timesheet-section summary-section" id="compare-section" aria-label="Comparação T1 × T3" hidden>
+      <div class="section-toolbar">
+        <div class="toolbar-left">
+          <h2>Comparação T1 × T3 (antes × depois)</h2>
+          <span class="keyboard-hint" id="compare-hint">Variação = (T3 − T1) ÷ T1</span>
+        </div>
+      </div>
+      <div class="table-container summary-container">
+        <table class="chrono-table yz-compare-table">
+          <thead><tr><th>Indicador</th><th>T1</th><th>T3</th><th>Variação</th><th>Resultado</th></tr></thead>
+          <tbody id="compare-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- PREMISSAS E EXPORTAÇÃO -->
+    <section class="dashboard-section mfv-bottom" aria-label="Premissas e exportação">
+      <div class="shift-params-card notes-card">
+        <div class="card-header-mini">Premissas e observações</div>
+        <textarea id="grp-notes" data-doc="notes" rows="6"
+                  placeholder="Ex.: Op.2 aguarda a peça do Op.1 (espera lançada no estudo); mesmo produto nos dois estudos..."></textarea>
+        <div class="notes-actions">
+          <button type="button" id="btn-to-mfv" class="btn-secondary" title="Abre o MFV da empresa e inclui este grupo como etapa (posto) ou etapas (linha)">→ MFV</button>
+          <button type="button" id="btn-export-xlsx" class="btn-outline">Exportar Excel</button>
+          <button type="button" id="btn-print" class="btn-outline">Imprimir</button>
+          <button type="button" id="btn-export-json" class="btn-outline">Exportar JSON</button>
+          <button type="button" id="btn-delete-group" class="btn-outline btn-danger-outline" title="Remove o grupo deste navegador (o arquivo da pasta é mantido)">Excluir grupo</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- GERENCIADOR DE GRUPOS -->
+  <dialog id="doc-dialog" class="study-dialog" aria-labelledby="doc-dialog-title">
+    <div class="dialog-header">
+      <h2 id="doc-dialog-title">Grupos Yamazumi</h2>
+      <button type="button" class="btn-icon-close" id="btn-close-dialog" aria-label="Fechar">&times;</button>
+    </div>
+    <form id="new-doc-form" class="new-study-form" autocomplete="off">
+      <div class="card-header-mini">Novo grupo (1 arquivo por grupo e situação)</div>
+      <div class="new-study-grid yz-new-grid">
+        <div class="param-field"><label for="new-client">Empresa / Cliente</label><input type="text" id="new-client" list="client-list" required></div>
+        <div class="param-field"><label for="new-name">Nome do grupo</label><input type="text" id="new-name" placeholder="Ex.: Célula de montagem" required></div>
+        <div class="param-field">
+          <label for="new-kind">Tipo</label>
+          <select id="new-kind"><option value="posto">Posto</option><option value="linha">Linha</option></select>
+        </div>
+        <div class="param-field">
+          <label for="new-situation">Situação</label>
+          <select id="new-situation"><option value="T1">T1</option><option value="T3">T3</option></select>
+        </div>
+        <button type="submit" class="btn-primary">Criar grupo</button>
+      </div>
+      <div class="new-doc-studies" id="new-doc-studies" hidden>
+        <div class="card-header-mini">Estudos desta empresa — marque os do grupo (cada estudo = 1 operador)</div>
+        <ul class="study-check-list" id="new-doc-study-list"></ul>
+      </div>
+      <p class="form-hint" id="new-doc-hint">Escolha a empresa: os estudos de cronoanálise dela aparecem aqui.</p>
+    </form>
+    <datalist id="client-list"></datalist>
+    <div class="study-list-header">
+      <div class="card-header-mini">Grupos salvos</div>
+      <span id="doc-source" class="study-source"></span>
+    </div>
+    <ul id="doc-list" class="study-list" aria-label="Grupos salvos"></ul>
+    <div class="dialog-footer">
+      <label class="btn-outline file-button">Importar JSON
+        <input type="file" id="input-import" accept=".json,application/json" hidden>
+      </label>
+    </div>
+  </dialog>
+
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+
+  <!-- Scripts clássicos (sem módulos ES) para funcionar também via file:// -->
+  <script src="js/calc.js"></script>
+  <script src="js/xlsx.js"></script>
+  <script src="js/yamazumi-calc.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/yamazumi-app.js"></script>
+</body>
+</html>

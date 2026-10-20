@@ -5,7 +5,9 @@
  * Tela + orquestração do MFV. Usa o mesmo armazenamento da cronoanálise
  * (navegador + pasta do OneDrive, com controle de revisão contra conflito)
  * e lê os estudos para preencher o TC de cada etapa (editável).
- * Depende de: LeanCalc, LeanMfv, LeanStorage.
+ * Grupos do Yamazumi: "posto" vira 1 etapa (TC = ciclo, conteúdo de trabalho, nº de
+ * operadores = nº de estudos); "linha" vira 1 etapa por estudo.
+ * Depende de: LeanCalc, LeanMfv, LeanStorage, LeanYamazumi.
  * ============================================================================
  */
 (function (root) {
@@ -13,6 +15,7 @@
 
   const Calc = root.LeanCalc;
   const M = root.LeanMfv;
+  const Y = root.LeanYamazumi;
   const Store = root.LeanStorage;
   const STORE = Store.STORE_MFV;
   const IO = { normalize: M.normalizeMfv, serialize: M.serializeMfv };
@@ -40,6 +43,9 @@
     changeSeq: 0,
     studies: [], // estudos disponíveis para vincular: { key, id, product, productName, fileName, clientName, processName, tcMin }
     pendingStudyKey: null, // estudo trazido pelo botão "→ MFV" da cronoanálise, ainda sem MFV escolhido
+    pendingGroupId: null, // grupo trazido pelo botão "→ MFV" do Yamazumi
+    studyDocs: new Map(), // id → estudo (para calcular os grupos)
+    groups: [], // grupos do Yamazumi: { id, name, kind, situation, clientName, fileName, cycle, content, n, members }
     tcChanges: [], // últimas atualizações de TC (para o "Desfazer")
     docsCache: [], // MFVs salvos (para sugerir famílias da empresa)
   };
@@ -299,9 +305,11 @@
   /** Lê os estudos do navegador e da pasta e calcula o tempo padrão de cada um. */
   async function loadStudies() {
     const map = new Map();
+    const docs = new Map();
     const add = (study, fileName) => {
       const prev = map.get(study.id);
       if (prev && String(prev.updatedAt) >= String(study.updatedAt)) return;
+      docs.set(study.id, study);
       // Estudo com vários produtos: uma opção por produto (cada um com o seu tempo padrão)
       const r = Calc.computeStudy(study);
       const tc = (k) => (k.standardTime > 0 ? k.standardTime : k.sumNormal > 0 ? k.sumNormal : null);
@@ -334,7 +342,89 @@
       if (!st.products.length) state.studies.push(Object.assign({ key: st.id, product: "", productName: "" }, st));
       else st.products.forEach((p) => state.studies.push(Object.assign({}, st, { key: `${st.id}::${p.key}`, product: p.key, productName: p.name, tcMin: p.tcMin })));
     });
+    state.studyDocs = docs;
+    await loadGroups();
     renderStudyPicker();
+  }
+
+  /** Grupos do Yamazumi (navegador e pasta), calculados com os estudos atuais. */
+  async function loadGroups() {
+    if (!Y) return;
+    const items = new Map();
+    (await Store.listLocal(Store.STORE_GROUPS)).forEach((r) => r && r.study && items.set(r.id, r.study));
+    if (await Store.folderReady()) {
+      try {
+        const { studies } = await Store.listFolderStudies({ pattern: Y.FILE_PATTERN, normalize: Y.normalizeGroup });
+        studies.forEach((g) => {
+          const prev = items.get(g.id);
+          if (!prev || String(g.updatedAt) > String(prev.updatedAt)) items.set(g.id, g);
+        });
+      } catch (err) {
+        console.warn("Erro ao ler grupos da pasta:", err);
+      }
+    }
+    state.groups = Array.from(items.values()).map((g) => {
+      const r = Y.computeGroup(g, state.studyDocs);
+      return {
+        id: g.id,
+        name: g.name || "Grupo",
+        kind: g.kind,
+        situation: g.situation,
+        clientName: g.clientName,
+        fileName: g.fileName,
+        cycle: r.cycle,
+        content: r.n ? r.content : null,
+        n: r.n,
+        members: r.members.filter((m) => m.found && m.tp > 0).map((m) => ({ studyId: m.studyId, product: m.productKey || "", label: m.label })),
+      };
+    });
+  }
+
+  function findGroup(step) {
+    return state.groups.find((g) => g.id === step.groupId) || null;
+  }
+
+  /** Etapas criadas a partir de um grupo: posto = 1 etapa; linha = 1 etapa por estudo. */
+  function stepsFromGroup(g) {
+    if (g.kind === "linha") {
+      return g.members
+        .map((m) => {
+          const st = state.studies.find((x) => x.id === m.studyId && x.product === m.product) || state.studies.find((x) => x.id === m.studyId);
+          if (!st) return null;
+          const step = stepFromStudy(st);
+          if (m.label && !/^Etapa \d+$/.test(m.label)) step.name = m.label;
+          return step;
+        })
+        .filter(Boolean);
+    }
+    return [
+      M.createStep({
+        name: g.name,
+        source: "group",
+        groupId: g.id,
+        groupFileName: g.fileName,
+        tcGroupMin: g.cycle,
+        contentGroupMin: g.content,
+        groupOperators: g.n,
+        operators: String(g.n || 1),
+      }),
+    ];
+  }
+
+  function addGroupSteps(g) {
+    if (!g.n) return toast(`O grupo "${g.name}" não tem estudos com tempo padrão.`, "warn");
+    if (g.kind === "posto" && state.doc.steps.some((s) => s.groupId === g.id)) return toast(`"${g.name}" já é etapa deste MFV.`, "ok");
+    const steps = stepsFromGroup(g);
+    state.doc.steps.push(...steps);
+    if (!state.doc.clientName && g.clientName) state.doc.clientName = g.clientName;
+    markChanged({ render: true });
+    toast(
+      g.kind === "posto"
+        ? `Etapa do posto "${g.name}": TC = ciclo ${ft(g.cycle)} ${Calc.TIME_UNITS[unitOf()].label}, ${g.n} operador(es). No MFV vale o takt do MFV.`
+        : `${steps.length} etapa(s) da linha "${g.name}" adicionada(s). Preencha o uptime.`,
+      "ok",
+      7000
+    );
   }
 
   function renderStudyPicker() {
@@ -345,14 +435,24 @@
       const mb = Calc.elementKey(b.clientName) === client ? 0 : 1;
       return ma - mb || String(a.processName).localeCompare(String(b.processName), "pt-BR");
     });
-    sel.replaceChildren(
-      el("option", { value: "", textContent: list.length ? "Selecione um estudo..." : "Nenhum estudo encontrado" }),
-      ...list.map((s) =>
+    const options = list.map((s) =>
+      el("option", {
+        value: s.key,
+        textContent: `${s.processName || "Sem posto"}${s.productName ? ` • ${s.productName}` : ""} — ${s.clientName || "Sem cliente"} (${s.tcMin ? ft(s.tcMin) + " " + Calc.TIME_UNITS[unitOf()].label : "sem tempo"})`,
+      })
+    );
+    const groups = state.groups
+      .slice()
+      .sort((a, b) => (Calc.elementKey(a.clientName) === client ? 0 : 1) - (Calc.elementKey(b.clientName) === client ? 0 : 1) || a.name.localeCompare(b.name, "pt-BR"))
+      .map((g) =>
         el("option", {
-          value: s.key,
-          textContent: `${s.processName || "Sem posto"}${s.productName ? ` • ${s.productName}` : ""} — ${s.clientName || "Sem cliente"} (${s.tcMin ? ft(s.tcMin) + " " + Calc.TIME_UNITS[unitOf()].label : "sem tempo"})`,
+          value: `grupo:${g.id}`,
+          textContent: `${g.kind === "linha" ? "Linha" : "Posto"}: ${g.name} (${g.situation}) — ${g.clientName || "Sem cliente"} (${g.cycle ? `${g.kind === "linha" ? "gargalo" : "ciclo"} ${ft(g.cycle)} ${Calc.TIME_UNITS[unitOf()].label}, ${g.n} estudo(s)` : "sem tempo"})`,
         })
-      )
+      );
+    sel.replaceChildren(
+      el("option", { value: "", textContent: list.length || groups.length ? "Selecione um estudo ou grupo..." : "Nenhum estudo encontrado" }),
+      ...(groups.length ? [el("optgroup", { label: "Estudos de cronoanálise" }, options), el("optgroup", { label: "Grupos do Yamazumi" }, groups)] : options)
     );
   }
 
@@ -362,6 +462,23 @@
     let changed = 0;
     const visible = []; // mudanças que alteram o TC usado (etapa não editada à mão)
     state.doc.steps.forEach((s) => {
+      if (s.groupId) {
+        const g = findGroup(s);
+        if (!g) return;
+        if (g.cycle !== s.tcGroupMin || g.content !== s.contentGroupMin || g.n !== s.groupOperators || g.fileName !== s.groupFileName) {
+          if (s.source === "group" && Number.isFinite(s.tcGroupMin) && g.cycle !== s.tcGroupMin) {
+            visible.push({ id: s.id, name: s.name || g.name, from: s.tcGroupMin, to: g.cycle });
+          }
+          // Nº de operadores acompanha o grupo, salvo se tiver sido alterado à mão
+          if (g.n && String(s.operators).trim() === String(s.groupOperators)) s.operators = String(g.n);
+          s.tcGroupMin = g.cycle;
+          s.contentGroupMin = g.content;
+          s.groupOperators = g.n;
+          s.groupFileName = g.fileName;
+          changed += 1;
+        }
+        return;
+      }
       if (!s.studyId) return;
       const st = findStudy(s);
       if (!st) return;
@@ -411,7 +528,7 @@
         step.tcManualMin = c.from;
       }
     });
-    toast(`${state.tcChanges.length} TC(s) mantido(s) como antes (marcados como editados; use ↺ usar estudo para voltar).`, "ok", 6000);
+    toast(`${state.tcChanges.length} TC(s) mantido(s) como antes (marcados como editados; use ↺ para voltar ao estudo ou grupo).`, "ok", 6000);
     showTcBanner([]);
     markChanged({ render: true });
   }
@@ -516,6 +633,46 @@
     toast(`Etapa adicionada: ${st.processName}${st.productName ? ` • ${st.productName}` : ""} (TC ${st.tcMin ? ft(st.tcMin) + " " + Calc.TIME_UNITS[unitOf()].label : "sem tempo padrão"}). Preencha nº de operadores e uptime.`, "ok", 7000);
   }
 
+  function addPendingGroup() {
+    const id = state.pendingGroupId;
+    state.pendingGroupId = null;
+    if (!id || !state.doc) return;
+    const g = state.groups.find((x) => x.id === id);
+    if (g) addGroupSteps(g);
+  }
+
+  /** Abertura pelo botão "→ MFV" do Yamazumi: mfv.html?grupo=<id>. */
+  async function openFromGroup(id) {
+    try {
+      root.history.replaceState(null, "", root.location.pathname);
+    } catch (e) {
+      /* file:// em alguns navegadores: ignora */
+    }
+    const g = state.groups.find((x) => x.id === id);
+    if (!g) {
+      toast("Grupo não encontrado. Salve o grupo e tente de novo.", "warn");
+      return false;
+    }
+    state.pendingGroupId = g.id;
+    const { list } = await listDocs();
+    const same = list.filter(({ doc }) => Calc.elementKey(doc.clientName) === Calc.elementKey(g.clientName));
+    if (same.length === 1 && (await openDoc(same[0].doc.id, same[0].doc.fileName))) {
+      addPendingGroup();
+      return true;
+    }
+    await showDocs();
+    $("new-client").value = g.clientName || "";
+    renderNewDocStudies();
+    toast(
+      same.length > 1
+        ? `${g.clientName} tem ${same.length} MFVs: abra o desejado na lista (o grupo será incluído) ou crie um novo.`
+        : `${g.clientName} ainda não tem MFV: informe a família e crie. O grupo "${g.name}" entra como etapa.`,
+      same.length > 1 ? "warn" : "ok",
+      8000
+    );
+    return true;
+  }
+
   /** Abertura pelo botão "→ MFV" da cronoanálise: mfv.html?estudo=<id>&produto=<chave>. */
   async function openFromCrono() {
     let params;
@@ -524,6 +681,8 @@
     } catch (e) {
       return false;
     }
+    const groupId = params.get("grupo");
+    if (groupId) return openFromGroup(groupId);
     const id = params.get("estudo");
     if (!id) return false;
     try {
@@ -752,8 +911,32 @@
     tr.dataset.id = s.id;
     const radio = el("input", { type: "radio", name: "kaizen", checked: !!s.kaizen, title: "Processo Kaizen" });
     radio.dataset.field = "kaizen";
-    const origin = el("td", { className: "cell-text origin-cell" });
-    if (s.studyId) {
+    const origin = el("td", { className: "cell-text origin-cell" + (s.groupId ? " origin-cell-group" : "") });
+    if (s.groupId) {
+      const g = findGroup(s);
+      const edited = s.source === "manual";
+      origin.append(
+        el("span", {
+          className: "origin-study origin-group",
+          textContent: `${edited ? "✎ editado • " : "Posto: "}${g ? `${g.name} (${g.n} estudo(s))` : s.groupFileName || "grupo não encontrado"}`,
+          title: s.groupFileName,
+        })
+      );
+      if (edited) {
+        const back = el("button", { type: "button", className: "btn-link", textContent: "↺ usar grupo", title: "Voltar a usar o ciclo do grupo" });
+        back.dataset.action = "use-study";
+        origin.append(back);
+      }
+      const content = el("input", {
+        type: "text",
+        className: "input-cell mono input-content",
+        inputMode: "decimal",
+        autocomplete: "off",
+        title: "Conteúdo de trabalho Σ(TP − espera). Vazio = calculado pelo grupo (proporcional ao TC, se o TC for editado)",
+      });
+      content.dataset.field = "content";
+      origin.append(el("label", { className: "content-cell" }, ["Conteúdo ", content]));
+    } else if (s.studyId) {
       const edited = s.source === "manual";
       origin.append(el("span", { className: "origin-study", textContent: `${edited ? "✎ editado • " : "Estudo: "}${studyLabel(s)}`, title: s.studyFileName }));
       if (edited) {
@@ -847,14 +1030,19 @@
       const src = d.steps[i];
       const tcInput = tr.querySelector('[data-field="tc"]');
       if (document.activeElement !== tcInput) {
-        const tcMin = src.source === "study" ? src.tcStudyMin : src.tcManualMin;
+        const tcMin = src.source === "study" ? src.tcStudyMin : src.source === "group" ? src.tcGroupMin : src.tcManualMin;
         tcInput.value = Number.isFinite(tcMin) ? ft(tcMin) : "";
+      }
+      const contentInput = tr.querySelector('[data-field="content"]');
+      if (contentInput && document.activeElement !== contentInput) {
+        contentInput.value = Number.isFinite(src.contentManualMin) ? ft(src.contentManualMin) : "";
+        contentInput.placeholder = s.content != null ? ft(s.content) : "";
       }
       tr.querySelector('[data-out="opsEff"]').textContent = fmt(s.opsEff, 2);
       tr.querySelector('[data-out="takt"]').textContent = s.taktPct != null ? `${fmt(s.taktPct, 1)}%` : "--";
       tr.classList.toggle("row-error", s.errors.length > 0);
       tr.classList.toggle("row-over-takt", s.overTakt);
-      tr.title = s.errors.join(" • ") || (s.overTakt ? "TC acima do takt (gargalo)" : "");
+      tr.title = s.errors.concat(s.warnings).join(" • ") || (s.overTakt ? "TC acima do takt (gargalo)" : "");
     });
     $("tc-total").textContent = r.tcTotal ? ft(r.tcTotal) : "--";
     $("ops-total").textContent = fmt(r.opsTotal, 2);
@@ -866,7 +1054,9 @@
     $("kpi-bottleneck-name").textContent = r.bottleneck ? `${r.bottleneck.seq}. ${r.bottleneck.name}` : "Sem etapas";
     $("kpi-ops").textContent = fmt(r.opsTotal, 2);
     $("kpi-ops").title = r.opsTyped ? `Digitado (equipe compartilhada). Soma das etapas: ${fmt(r.opsSum, 2)}` : "Soma dos operadores efetivos das etapas";
-    $("kpi-ops-ideal").textContent = `Ideal (ΣTC ÷ takt): ${r.opsIdeal != null ? fmt(r.opsIdeal, 2) : "--"}`;
+    $("kpi-ops-ideal").textContent =
+      `Ideal (${r.hasGroups ? "Σ conteúdo" : "ΣTC"} ÷ takt): ${r.opsIdeal != null ? fmt(r.opsIdeal, 2) : "--"} • Balanceamento: ${r.lineBalancePct != null ? fmt(r.lineBalancePct, 1) + "%" : "--"}`;
+    $("kpi-ops-ideal").title = "Balanceamento da linha = Σ conteúdo ÷ (operadores atuais × TC do gargalo)";
     $("kpi-cap").textContent = fmt(r.line.capacityDay, 1);
     $("kpi-cap-unit").textContent = `${pu()}/dia`;
     $("kpi-cap-hour").textContent = r.line.capacityHour != null ? `${fmt(r.line.capacityHour, 2)} ${pu()}/hora (limitada pelo gargalo)` : "--";
@@ -971,15 +1161,18 @@
       const f = e.target.dataset.field;
       if (!tr || !f || f === "kaizen") return;
       const s = state.doc.steps.find((x) => x.id === tr.dataset.id);
-      if (f === "tc") {
+      if (f === "content") {
+        const v = Calc.parseNumber(e.target.value);
+        s.contentManualMin = v != null && v > 0 ? v / Calc.TIME_UNITS[unitOf()].factor : null;
+      } else if (f === "tc") {
         const v = Calc.parseNumber(e.target.value);
         s.tcManualMin = v != null && v > 0 ? v / Calc.TIME_UNITS[unitOf()].factor : null;
         if (s.source !== "manual") {
           s.source = "manual"; // TC editado: passa a usar o valor digitado
-          markChanged();
           const origin = tr.querySelector(".origin-cell");
           const fresh = stepRow(s, Array.from(steps.children).indexOf(tr));
           origin.replaceWith(fresh.querySelector(".origin-cell"));
+          markChanged();
           return;
         }
       } else {
@@ -1001,7 +1194,7 @@
       const i = list.findIndex((s) => s.id === id);
       const a = btn.dataset.action;
       if (a === "use-study") {
-        list[i].source = "study";
+        list[i].source = list[i].groupId ? "group" : "study";
         list[i].tcManualMin = null;
       } else if (a === "up" && i > 0) list.splice(i - 1, 0, list.splice(i, 1)[0]);
       else if (a === "down" && i < list.length - 1) list.splice(i + 1, 0, list.splice(i, 1)[0]);
@@ -1013,7 +1206,12 @@
     });
 
     $("btn-add-study-step").addEventListener("click", () => {
-      const st = state.studies.find((x) => x.key === $("study-picker").value);
+      const value = $("study-picker").value;
+      if (value.startsWith("grupo:")) {
+        const g = state.groups.find((x) => x.id === value.slice(6));
+        return g ? addGroupSteps(g) : toast("Grupo não encontrado.", "warn");
+      }
+      const st = state.studies.find((x) => x.key === value);
       if (!st) return toast("Escolha um estudo na lista.", "warn");
       state.doc.steps.push(stepFromStudy(st));
       if (!state.doc.clientName && st.clientName) state.doc.clientName = st.clientName;
@@ -1090,7 +1288,10 @@
     $("btn-connect-folder").addEventListener("click", connectFolder);
     $("btn-docs").addEventListener("click", () => showDocs());
     $("new-client").addEventListener("input", renderNewDocStudies);
-    $("doc-dialog").addEventListener("close", () => (state.pendingStudyKey = null));
+    $("doc-dialog").addEventListener("close", () => {
+      state.pendingStudyKey = null;
+      state.pendingGroupId = null;
+    });
     $("btn-tc-undo").addEventListener("click", undoTcChanges);
     $("btn-tc-ok").addEventListener("click", () => showTcBanner([]));
     $("btn-export-xlsx-mfv").addEventListener("click", exportXlsx);
@@ -1157,6 +1358,9 @@
       await flushSave();
       const doc = M.createMfv({ clientName: client, family });
       doc.steps = chosen.map(stepFromStudy);
+      const pg = state.pendingGroupId && state.groups.find((g) => g.id === state.pendingGroupId);
+      state.pendingGroupId = null;
+      if (pg) doc.steps.push(...stepsFromGroup(pg));
       setCurrent({ study: doc, diskRevision: null, dirty: true });
       await persistLocal();
       await Store.setKV("lastMfvId", doc.id);
@@ -1172,6 +1376,7 @@
         await flushSave();
         if (await openDoc(li.dataset.id, li.dataset.fileName)) {
           addPendingStudy();
+          addPendingGroup();
           dlg.close();
         }
       }

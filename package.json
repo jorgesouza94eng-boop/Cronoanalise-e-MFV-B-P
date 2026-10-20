@@ -1,11 +1,11 @@
 {
   "name": "lean-chrono-mfv",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Cronoanálise de vídeo e apoio ao Mapa de Fluxo de Valor — aplicação web local-first, sem backend e sem build.",
   "private": true,
   "scripts": {
-    "test": "node --test tests/calc.test.js tests/xlsx.test.js tests/mfv.test.js tests/template.test.js tests/ai.test.js",
-    "test:e2e": "node tests/e2e.browser.js && node tests/e2e.mfv.js && node tests/e2e.ai.js && node tests/e2e.rev12.js && node tests/e2e.rev13.js && node tests/e2e.rev14.js && node tests/e2e.rev15.js",
+    "test": "node --test tests/calc.test.js tests/xlsx.test.js tests/mfv.test.js tests/template.test.js tests/ai.test.js tests/yamazumi.test.js",
+    "test:e2e": "node tests/e2e.browser.js && node tests/e2e.mfv.js && node tests/e2e.ai.js && node tests/e2e.rev12.js && node tests/e2e.rev13.js && node tests/e2e.rev14.js && node tests/e2e.rev15.js && node tests/e2e.rev19.js",
     "start": "npx --yes http-server -c-1 -p 8080 ."
   },
   "engines": {

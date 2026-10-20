@@ -529,6 +529,12 @@
       if (st && calc.tc == null) warnings.push(`Etapa "${calc.name}" sem TC: exportada sem tempo.`);
     }
     ep.set("K37", Math.round(r.opsTotal * 1000) / 1000 || null);
+    if (r.hasGroups) {
+      warnings.push(
+        `Etapa(s) de grupo Posto: a planilha recebe TC = ciclo do posto e Nº ops = nº de estudos, mas calcula os operadores ideais por ΣTC. ` +
+          `No app, operadores ideais = Σ conteúdo ÷ takt = ${r.opsIdeal != null ? Calc.formatNumber(r.opsIdeal, 2) : "--"}; registre nas premissas, se necessário.`
+      );
+    }
     for (let n = MFV.stockFirst; n <= MFV.stockLast; n++) {
       const inv = doc.inventories[n - MFV.stockFirst];
       ep.set(`B${n}`, inv ? inv.name || null : null);

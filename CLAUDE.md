@@ -53,14 +53,15 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - HTML/CSS/JS puro, **sem build e sem servidor**. Funciona por `file://`, por servidor local e pelo GitHub Pages.
 - Scripts clássicos no padrão UMD (`window.LeanX` no navegador e `module.exports` nos testes do Node). **Não usar módulos ES** (quebram no `file://`).
 - Armazenamento local-first: IndexedDB (`LeanChronoDB`) e pasta do OneDrive pela File System Access API, com debounce de 3 s e proteção contra conflito (revisão + cópia `_conflito_`).
-- Arquivos: `Crono_*.json` (estudo) e `MFV_*.json` (MFV), estudo no formato versão 4 e MFV na versão 4 (REV 1.8).
+- Arquivos: `Crono_*.json` (estudo, versão 4), `MFV_*.json` (MFV, versão 5) e `Yamazumi_*.json` (grupo de estudos, versão 1) — REV 1.9.
 
 | Arquivo | Função |
 |---|---|
 | `js/calc.js` | Cronoanálise: leitura contínua, filmagens (início e peças), produtos, resumo por elemento, KPIs (TP = ΣTN × (1 + Tol%), OIT) |
 | `js/mfv-calc.js` | MFV (aba EP): horário, takt, GBO, capacidade, atravessamento, pç/HH real e payback |
 | `js/ui.js`, `js/app.js` | Tela e orquestração da cronoanálise |
-| `js/mfv-app.js` | Tela e salvamento do MFV |
+| `js/mfv-app.js` | Tela e salvamento do MFV (inclui etapas de grupo Posto/Linha) |
+| `js/yamazumi-calc.js`, `js/yamazumi-app.js` | Yamazumi: grupos de estudos, barras por classe de valor, balanceamento, T1 × T3 |
 | `js/xlsx.js`, `js/xlsx-template.js` | Excel simples e preenchimento dos modelos B+P do consultor |
 | `js/ai.js`, `js/ai-ui.js` | Assistente Gemini (opcional) |
 | `js/storage.js` | IndexedDB, pasta e importação/exportação |
@@ -98,11 +99,13 @@ npm run test:e2e                            # todos os testes de navegador (Play
 
 Não encontrados na base (perguntar antes de assumir): fórmula oficial de tolerância, nº mínimo de ciclos, aplicação do uptime e limite de ocupação.
 
-## Regra confirmada (a implementar): grupo "Posto" no MFV
+## Regra confirmada (implementada na REV 1.9): grupo "Posto" no MFV
 
 - **Ciclo do posto** = maior TP dos estudos do grupo (cada estudo = 1 operador). Usado no TC do GBO, % do takt, gargalo e capacidade.
 - **Conteúdo de trabalho** = Σ (TP − espera); espera = elementos com o desperdício "Espera". Usado nos operadores ideais: Σ (TC das etapas comuns + conteúdo dos grupos) ÷ takt.
 - Operadores atuais = nº de estudos × uptime (o total digitado prevalece). Balanceamento do posto = conteúdo ÷ (nº de operadores × ciclo); da linha = Σ conteúdo ÷ (operadores atuais × gargalo).
 - Tempo de processamento (lead time) usa Σ TC com o ciclo do posto. No MFV vale o takt do MFV.
 - TC editado à mão: o conteúdo é ajustado na mesma proporção e pode ser editado à parte, com aviso.
-- Fora da regra: grupo "Linha" (cada estudo vira uma etapa) e postos paralelos idênticos (TC ÷ nº de pessoas).
+- Grupo "Linha": cada estudo vira uma etapa comum. Fora da regra: postos paralelos idênticos (TC ÷ nº de pessoas).
+- No Yamazumi, a espera entra no TP com a tolerância (espera = TN da espera × (1 + Tol%)), e o mix ponderado não é usado (a composição é por elemento de um produto).
+- Exemplo de conferência (testes `tests/yamazumi.test.js` e `tests/e2e.rev19.js`): Corte 30, Solda 52, Célula (40 + 28), Embalagem 18, takt 45 s → ciclo 40 (89%), gargalo Solda, capacidade 553,8, ideais 3,73, atuais 5, balanceamento 85% (célula) e 64,6% (linha).

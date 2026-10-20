@@ -20,7 +20,7 @@
   "use strict";
 
   const SCHEMA_ID = "lean-chrono-mfv";
-  const SCHEMA_VERSION = 4; // v2: pç/HH e payback • v3: produto do estudo vinculado • v4: payback no padrão B+P
+  const SCHEMA_VERSION = 5; // v2: pç/HH e payback • v3: produto do estudo vinculado • v4: payback no padrão B+P • v5: etapa de grupo Posto (Yamazumi)
   const FILE_PATTERN = /^MFV_.+\.json$/i;
   const DAYS = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
   const EPS = 1e-9;
@@ -93,7 +93,10 @@
 
   /**
    * Etapa do GBO. O TC vem do estudo de cronoanálise vinculado (tcStudyMin, atualizado
-   * pelo app) ou é digitado (tcManualMin). source: "study" | "manual".
+   * pelo app), de um grupo Posto do Yamazumi (tcGroupMin = ciclo do posto) ou é digitado
+   * (tcManualMin). source: "study" | "group" | "manual".
+   * Grupo Posto: contentGroupMin = conteúdo de trabalho Σ(TP − espera); contentManualMin =
+   * conteúdo digitado (prevalece).
    */
   function createStep(overrides) {
     return Object.assign(
@@ -106,6 +109,12 @@
         studyFileName: "",
         tcStudyMin: null,
         tcManualMin: null,
+        groupId: "",
+        groupFileName: "",
+        tcGroupMin: null,
+        contentGroupMin: null,
+        contentManualMin: null,
+        groupOperators: null, // nº de estudos do grupo na última atualização
         operators: "1",
         uptimePct: "",
         kaizen: false,
@@ -205,12 +214,18 @@
           createStep({
             id: typeof s.id === "string" && s.id ? s.id : Calc.generateId(),
             name: str(s.name),
-            source: s.source === "study" ? "study" : "manual",
+            source: s.source === "study" || s.source === "group" ? s.source : "manual",
             studyId: str(s.studyId),
             studyProduct: str(s.studyProduct),
             studyFileName: str(s.studyFileName),
             tcStudyMin: Number.isFinite(s.tcStudyMin) ? s.tcStudyMin : null,
             tcManualMin: Number.isFinite(s.tcManualMin) ? s.tcManualMin : null,
+            groupId: str(s.groupId),
+            groupFileName: str(s.groupFileName),
+            tcGroupMin: Number.isFinite(s.tcGroupMin) ? s.tcGroupMin : null,
+            contentGroupMin: Number.isFinite(s.contentGroupMin) ? s.contentGroupMin : null,
+            contentManualMin: Number.isFinite(s.contentManualMin) && s.contentManualMin > 0 ? s.contentManualMin : null,
+            groupOperators: Number.isFinite(s.groupOperators) ? s.groupOperators : null,
             operators: s.operators == null ? "1" : str(s.operators),
             uptimePct: str(s.uptimePct),
             kaizen: s.kaizen === true,
@@ -259,7 +274,12 @@
    *  - Takt = Tempo disponível/dia ÷ Demanda diária.
    *  - Operadores efetivos da etapa = Nº ops × Uptime (%) [se informado].
    *  - Nº total de operadores = valor digitado (equipe compartilhada) ou soma das etapas.
-   *  - Nº ideal de operadores = ΣTC ÷ Takt.
+   *  - Conteúdo de trabalho da etapa = TC (etapa comum) ou, no grupo Posto, Σ(TP − espera)
+   *    dos estudos. TC do posto editado à mão: conteúdo × TC editado ÷ ciclo (proporcional),
+   *    salvo se o conteúdo também for digitado.
+   *  - Nº ideal de operadores = Σ conteúdo ÷ Takt (sem grupos, = ΣTC ÷ Takt).
+   *  - Balanceamento da linha = Σ conteúdo ÷ (Nº de operadores × TC do gargalo).
+   *  - Tempo de processamento = ΣTC (no posto, o ciclo).
    *  - Capacidade da linha = Tempo disponível/dia ÷ maior TC (gargalo).
    *  - Produtividade = Capacidade ÷ Nº de operadores (por dia e por hora).
    *  - Atravessamento = Σ (estoque ÷ demanda diária), em dias.
@@ -301,14 +321,34 @@
 
     const steps = doc.steps.map((s, i) => {
       const fromStudy = s.source === "study" && Number.isFinite(s.tcStudyMin);
-      const tc = fromStudy ? s.tcStudyMin : Number.isFinite(s.tcManualMin) ? s.tcManualMin : null;
+      const fromGroup = s.source === "group" && Number.isFinite(s.tcGroupMin);
+      const tc = fromStudy ? s.tcStudyMin : fromGroup ? s.tcGroupMin : Number.isFinite(s.tcManualMin) ? s.tcManualMin : null;
       const ops = num(s.operators);
       const uptime = num(s.uptimePct);
       const errors = [];
-      if (tc == null || tc <= 0) errors.push(s.source === "study" ? "Estudo sem tempo padrão" : "Informe o TC");
+      if (tc == null || tc <= 0) errors.push(s.source === "study" ? "Estudo sem tempo padrão" : s.source === "group" ? "Grupo sem ciclo" : "Informe o TC");
       if (ops == null || ops < 0) errors.push("Nº de operadores inválido");
       if (uptime != null && (uptime <= 0 || uptime > 100)) errors.push("Uptime deve estar entre 1% e 100%");
       const opsEff = ops == null ? 0 : uptime > 0 && uptime <= 100 ? ops * (uptime / 100) : ops;
+      // Conteúdo de trabalho (operadores ideais e balanceamento da linha)
+      let content = errors.length ? null : tc;
+      let contentSource = "tc";
+      const warnings = [];
+      if (s.groupId && !errors.length) {
+        if (Number.isFinite(s.contentManualMin) && s.contentManualMin > 0) {
+          content = s.contentManualMin;
+          contentSource = "manual";
+          warnings.push("Conteúdo de trabalho digitado à mão");
+        } else if (fromGroup && Number.isFinite(s.contentGroupMin)) {
+          content = s.contentGroupMin;
+          contentSource = "group";
+        } else if (Number.isFinite(s.contentGroupMin) && s.tcGroupMin > EPS) {
+          content = (s.contentGroupMin * tc) / s.tcGroupMin;
+          contentSource = "proporcional";
+          warnings.push("TC do posto editado: conteúdo ajustado na mesma proporção");
+        }
+        if (ops > 0 && content > ops * tc + EPS) warnings.push("Conteúdo maior que Nº ops × TC: confira");
+      }
       return {
         id: s.id,
         seq: i + 1,
@@ -317,6 +357,10 @@
         fromStudy,
         operators: ops,
         opsEff,
+        content,
+        contentSource,
+        isGroup: !!s.groupId,
+        warnings,
         kaizen: !!s.kaizen,
         taktPct: takt && tc ? (tc / takt) * 100 : null,
         overTakt: !!(takt && tc && tc > takt + EPS),
@@ -326,6 +370,7 @@
 
     const valid = steps.filter((s) => s.tc != null);
     const tcTotal = valid.reduce((a, s) => a + s.tc, 0);
+    const contentTotal = valid.reduce((a, s) => a + s.content, 0);
     const bottleneck = valid.reduce((m, s) => (!m || s.tc > m.tc ? s : m), null);
     // Nº total de operadores da linha: digitado (equipe compartilhada entre etapas, como na
     // planilha K37) ou, se vazio, a soma dos operadores efetivos das etapas.
@@ -361,7 +406,10 @@
       opsTotal,
       opsSum,
       opsTyped: opsTyped > 0,
-      opsIdeal: takt && tcTotal ? tcTotal / takt : null,
+      contentTotal,
+      hasGroups: steps.some((s) => s.isGroup),
+      opsIdeal: takt && contentTotal ? contentTotal / takt : null,
+      lineBalancePct: bottleneck && opsTotal > 0 ? (contentTotal / (opsTotal * bottleneck.tc)) * 100 : null,
       line,
       kaizen,
       inventories,
@@ -550,6 +598,8 @@
           demandDaily: round(r.demandDaily, 3),
           taktMin: round(r.takt, 4),
           cycleTimeTotalMin: round(r.tcTotal, 4),
+          workContentMin: round(r.contentTotal, 4),
+          lineBalancePct: round(r.lineBalancePct, 2),
           bottleneck: r.bottleneck,
           operatorsTotal: round(r.opsTotal, 3),
           operatorsIdeal: round(r.opsIdeal, 3),
