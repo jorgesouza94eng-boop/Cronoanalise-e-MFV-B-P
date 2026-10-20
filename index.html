@@ -9,7 +9,7 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="no-doc">
 
   <!-- CABEÇALHO -->
   <header class="app-header">
@@ -51,6 +51,13 @@
       </button>
     </div>
   </header>
+
+  <!-- Nenhum documento aberto: a janela pode ser fechada e o menu continua acessível -->
+  <section id="empty-state" class="empty-state" aria-label="Nenhum estudo aberto">
+    <p class="empty-title">Nenhum estudo aberto.</p>
+    <p class="form-hint">Abra ou crie um, ou vá para outro módulo pelo menu acima.</p>
+    <button type="button" class="btn-primary" id="btn-empty-open">Abrir ou criar estudo</button>
+  </section>
 
   <!-- AVISO DE CONFLITO COM A PASTA -->
   <div id="conflict-banner" class="conflict-banner" role="alert" hidden>
@@ -409,6 +416,7 @@
   <dialog id="study-dialog" class="study-dialog" aria-labelledby="study-dialog-title">
     <div class="dialog-header">
       <h2 id="study-dialog-title">Estudos de cronoanálise</h2>
+      <nav class="app-nav dialog-nav" aria-label="Ir para outro módulo"><a href="index.html" aria-current="page">Cronoanálise</a><a href="mfv.html">MFV</a><a href="yamazumi.html">Yamazumi</a></nav>
       <button type="button" class="btn-icon-close" id="btn-close-dialog" aria-label="Fechar">&times;</button>
     </div>
 

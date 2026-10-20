@@ -9,7 +9,7 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="page-mfv">
+<body class="page-mfv no-doc">
 
   <header class="app-header">
     <div class="brand-area">
@@ -43,6 +43,13 @@
       </button>
     </div>
   </header>
+
+  <!-- Nenhum documento aberto: a janela pode ser fechada e o menu continua acessível -->
+  <section id="empty-state" class="empty-state" aria-label="Nenhum MFV aberto">
+    <p class="empty-title">Nenhum MFV aberto.</p>
+    <p class="form-hint">Abra ou crie um, ou vá para outro módulo pelo menu acima.</p>
+    <button type="button" class="btn-primary" id="btn-empty-open">Abrir ou criar MFV</button>
+  </section>
 
   <div id="conflict-banner" class="conflict-banner" role="alert" hidden>
     <div class="conflict-text"><strong>Conflito de versões.</strong> <span id="conflict-detail"></span></div>
@@ -379,6 +386,7 @@
   <dialog id="doc-dialog" class="study-dialog" aria-labelledby="doc-dialog-title">
     <div class="dialog-header">
       <h2 id="doc-dialog-title">Mapas de Fluxo de Valor</h2>
+      <nav class="app-nav dialog-nav" aria-label="Ir para outro módulo"><a href="index.html">Cronoanálise</a><a href="mfv.html" aria-current="page">MFV</a><a href="yamazumi.html">Yamazumi</a></nav>
       <button type="button" class="btn-icon-close" id="btn-close-dialog" aria-label="Fechar">&times;</button>
     </div>
     <form id="new-doc-form" class="new-study-form" autocomplete="off">

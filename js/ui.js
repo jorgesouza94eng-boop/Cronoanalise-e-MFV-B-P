@@ -252,9 +252,9 @@
 
     // Diálogo de estudos
     els.btnCloseDialog.addEventListener("click", () => closeDialog());
-    els.dialog.addEventListener("cancel", (e) => {
-      if (!h.hasOpenStudy()) e.preventDefault(); // sem estudo aberto não há para onde voltar
-    });
+    // Sem estudo aberto a janela também fecha: fica a tela vazia, com o menu dos módulos
+    const emptyOpen = document.getElementById("btn-empty-open");
+    if (emptyOpen) emptyOpen.addEventListener("click", () => h.onOpenStudies());
     els.newStudyForm.addEventListener("submit", (e) => {
       e.preventDefault();
       const client = els.newClient.value.trim();
@@ -519,7 +519,7 @@
 
   function onGlobalKeyDown(e) {
     // Ctrl+Enter: nova linha (de qualquer lugar fora do diálogo)
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !els.dialog.open) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !els.dialog.open && h.hasOpenStudy()) {
       e.preventDefault();
       addRowAndFocus();
       return;
@@ -1182,7 +1182,6 @@
    */
   function openDialog(items, info) {
     renderStudyList(items, info);
-    els.btnCloseDialog.hidden = !h.hasOpenStudy();
     if (!els.dialog.open) {
       if (typeof els.dialog.showModal === "function") els.dialog.showModal();
       else els.dialog.setAttribute("open", "");

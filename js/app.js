@@ -563,6 +563,7 @@
 
   function setCurrent(record) {
     state.study = record.study;
+    document.body.classList.remove("no-doc");
     state.diskRevision = record.diskRevision == null ? null : record.diskRevision;
     state.dirty = !!record.dirty;
     state.exportedAt = record.exportedAt || null;

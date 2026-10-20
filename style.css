@@ -1442,3 +1442,27 @@ select.input-type.is-acyclic {
   #btn-docs, .notes-actions, .dialog-footer { display: none !important; }
 }
 .notes-actions { flex-wrap: wrap; }
+
+/* Nenhum documento aberto (REV 1.10): tela vazia com o menu acessível */
+.empty-state { display: none; }
+body.no-doc .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 64px auto;
+  padding: 32px 24px;
+  max-width: 480px;
+  text-align: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+}
+body.no-doc .empty-state .empty-title { font-size: 16px; font-weight: 600; color: var(--text-main); }
+body.no-doc .app-workspace, body.no-doc .client-context { display: none !important; }
+.dialog-header { gap: 12px; flex-wrap: wrap; }
+.dialog-header h2 { flex: 1; }
+.dialog-nav { margin-top: 0; }
+@media (max-width: 760px) {
+  .dialog-nav { order: 3; width: 100%; }
+}

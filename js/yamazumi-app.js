@@ -239,6 +239,7 @@
 
   function setCurrent(record) {
     state.doc = record.study;
+    document.body.classList.remove("no-doc");
     state.diskRevision = record.diskRevision == null ? null : record.diskRevision;
     state.dirty = !!record.dirty;
     state.conflict = null;
@@ -695,6 +696,7 @@
       if (!root.confirm(`Excluir o grupo "${state.doc.name || state.doc.fileName}" deste navegador? O arquivo da pasta, se houver, é mantido.`)) return;
       await Store.deleteLocal(state.doc.id, STORE);
       state.doc = null;
+      document.body.classList.add("no-doc");
       await Store.setKV("lastGroupId", null);
       refreshStatus();
       showDocs();
@@ -725,9 +727,8 @@
     // Diálogo
     const dlg = $("doc-dialog");
     $("btn-close-dialog").addEventListener("click", () => dlg.close());
-    dlg.addEventListener("cancel", (e) => {
-      if (!state.doc) e.preventDefault();
-    });
+    // Sem grupo aberto a janela também fecha: fica a tela vazia, com o menu dos módulos
+    $("btn-empty-open").addEventListener("click", () => showDocs());
     $("new-doc-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const typed = $("new-client").value.trim();
@@ -846,7 +847,6 @@
           })
         : [el("li", { className: "empty", textContent: "Nenhum grupo salvo ainda. Crie o primeiro acima." })])
     );
-    $("btn-close-dialog").hidden = !state.doc;
     const dlg = $("doc-dialog");
     if (!dlg.open) dlg.showModal();
     (list.length ? $("doc-list").querySelector(".study-item") : $("new-client")).focus();

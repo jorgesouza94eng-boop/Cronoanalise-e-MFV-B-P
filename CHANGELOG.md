@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.10** | 20/10/2026 | Sair da janela inicial sem abrir um documento |
 | **REV 1.9** | 20/10/2026 | Yamazumi (grupos de estudos), grupo Posto no MFV e comparação T1 × T3 |
 | **REV 1.8** | 20/10/2026 | Payback no padrão B+P e regras do programa no CLAUDE.md |
 | **REV 1.7** | 17/10/2026 | Família sugerida no Novo MFV |
@@ -14,6 +15,20 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.10 — 20/10/2026 (sair da janela inicial)
+
+### Correções
+- Sem documento aberto, a janela inicial (estudos, MFVs ou grupos) prendia o usuário: o × ficava escondido, o Esc era bloqueado e a janela cobria o menu. Agora:
+  - o menu **Cronoanálise · MFV · Yamazumi** aparece também no cabeçalho da janela;
+  - o **×** e o **Esc** fecham a janela sempre;
+  - sem documento aberto, a página mostra só "Nenhum … aberto" e o botão para abrir ou criar (os campos e tabelas ficam escondidos).
+- Ctrl+Enter (nova linha) não age sem estudo aberto.
+
+### Testes
+- Novo teste de navegador `tests/e2e.rev110.js` (as 3 páginas sem documento). Nenhuma mudança nos cálculos nem nos arquivos.
 
 ---
 
