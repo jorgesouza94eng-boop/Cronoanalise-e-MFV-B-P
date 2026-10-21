@@ -1466,3 +1466,10 @@ body.no-doc .app-workspace, body.no-doc .client-context { display: none !importa
 @media (max-width: 760px) {
   .dialog-nav { order: 3; width: 100%; }
 }
+
+/* Conferência dos vínculos do MFV (REV 1.11) */
+.link-checks { flex-direction: column; align-items: flex-start; gap: 4px; margin: 0 16px 12px; border: 1px solid #c7d2fe; border-radius: var(--radius-md); }
+.link-checks .link-duplo { color: var(--status-danger-text); font-weight: 600; }
+.form-warning { color: var(--status-danger-text); font-weight: 600; }
+.study-check-order { min-width: 22px; font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--primary-700); }
+.study-check-warn { color: var(--status-warn-text); cursor: help; }

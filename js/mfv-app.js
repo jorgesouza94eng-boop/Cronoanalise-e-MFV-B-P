@@ -27,7 +27,7 @@
 
   const Tpl = root.LeanXlsxTemplate;
   const TEMPLATE_KEY = "template:mfv";
-  const MIX_KEY = "__mix__"; // opção "Mix (TC ponderado)" de um estudo com vários produtos
+  const MIX_KEY = M.MIX_KEY; // opção "Mix (TC ponderado)" de um estudo com vários produtos
   const TEMPLATE_DIR = "_Modelos";
 
   const state = {
@@ -48,6 +48,7 @@
     groups: [], // grupos do Yamazumi: { id, name, kind, situation, clientName, fileName, cycle, content, n, members }
     tcChanges: [], // últimas atualizações de TC (para o "Desfazer")
     docsCache: [], // MFVs salvos (para sugerir famílias da empresa)
+    checkOrder: [], // Novo MFV: estudos na ordem em que foram marcados (= ordem das etapas)
   };
   let localTimer = null;
   let diskTimer = null;
@@ -314,6 +315,8 @@
       // Estudo com vários produtos: uma opção por produto (cada um com o seu tempo padrão)
       const r = Calc.computeStudy(study);
       const tc = (k) => (k.standardTime > 0 ? k.standardTime : k.sumNormal > 0 ? k.sumNormal : null);
+      const quality = (k) => M.studyQuality(r, k); // avisos levados à etapa do MFV (REV 1.11)
+      const q0 = quality("");
       map.set(study.id, {
         id: study.id,
         fileName: fileName || study.fileName,
@@ -321,10 +324,12 @@
         processName: study.processName,
         updatedAt: study.updatedAt,
         tcMin: tc(r.kpis),
+        warnings: q0.warnings,
+        demand: q0.demand,
         products: r.multiProduct
           ? r.products
-              .map((p) => ({ key: p.key, name: p.name, tcMin: tc(p.kpis) }))
-              .concat(r.mix && r.mix.status !== "incompleto" ? [{ key: MIX_KEY, name: "Mix (TC ponderado)", tcMin: r.mix.weightedTP }] : [])
+              .map((p) => Object.assign({ key: p.key, name: p.name, tcMin: tc(p.kpis) }, quality(p.key)))
+              .concat(r.mix && r.mix.status !== "incompleto" ? [Object.assign({ key: MIX_KEY, name: "Mix (TC ponderado)", tcMin: r.mix.weightedTP }, quality(MIX_KEY))] : [])
           : [],
       });
     };
@@ -341,7 +346,10 @@
     state.studies = [];
     map.forEach((st) => {
       if (!st.products.length) state.studies.push(Object.assign({ key: st.id, product: "", productName: "" }, st));
-      else st.products.forEach((p) => state.studies.push(Object.assign({}, st, { key: `${st.id}::${p.key}`, product: p.key, productName: p.name, tcMin: p.tcMin })));
+      else
+        st.products.forEach((p) =>
+          state.studies.push(Object.assign({}, st, { key: `${st.id}::${p.key}`, product: p.key, productName: p.name, tcMin: p.tcMin, warnings: p.warnings, demand: p.demand }))
+        );
     });
     state.studyDocs = docs;
     await loadGroups();
@@ -376,9 +384,31 @@
         cycle: r.cycle,
         content: r.n ? r.content : null,
         n: r.n,
+        // O takt do grupo não vale no MFV: esse aviso fica só no Yamazumi
+        warnings: r.warnings.filter((w) => !/takt do grupo/.test(w)),
+        studyIds: r.members.filter((m) => m.found).map((m) => m.studyId),
         members: r.members.filter((m) => m.found && m.tp > 0).map((m) => ({ studyId: m.studyId, product: m.productKey || "", label: m.label })),
       };
     });
+  }
+
+  /** Dados de conferência de uma etapa (avisos, demanda do estudo, estudos do grupo). */
+  function linkInfo(step) {
+    if (step.groupId) {
+      const g = findGroup(step);
+      return g ? { warnings: g.warnings, demand: null, studyIds: g.studyIds } : null;
+    }
+    if (!step.studyId) return null;
+    const st = findStudy(step);
+    return st ? { warnings: st.warnings || [], demand: st.demand } : null;
+  }
+
+  /** Avisos de contagem dupla que surgiriam ao incluir estas etapas (pede confirmação). */
+  function confirmNoDouble(doc, newSteps) {
+    const before = M.linkChecks(doc, { demandDaily: null }, linkInfo).filter((c) => c.kind === "duplo").length;
+    const after = M.linkChecks(Object.assign({}, doc, { steps: doc.steps.concat(newSteps) }), { demandDaily: null }, linkInfo).filter((c) => c.kind === "duplo");
+    if (after.length <= before) return true;
+    return root.confirm(`${after[after.length - 1].text}.\n\nIncluir mesmo assim?`);
   }
 
   function findGroup(step) {
@@ -416,6 +446,7 @@
     if (!g.n) return toast(`O grupo "${g.name}" não tem estudos com tempo padrão.`, "warn");
     if (g.kind === "posto" && state.doc.steps.some((s) => s.groupId === g.id)) return toast(`"${g.name}" já é etapa deste MFV.`, "ok");
     const steps = stepsFromGroup(g);
+    if (!confirmNoDouble(state.doc, steps)) return;
     state.doc.steps.push(...steps);
     if (!state.doc.clientName && g.clientName) state.doc.clientName = g.clientName;
     markChanged({ render: true });
@@ -589,20 +620,25 @@
           .sort((a, b) => String(a.processName).localeCompare(String(b.processName), "pt-BR") || (a.product === MIX_KEY) - (b.product === MIX_KEY))
       : [];
     const ul = $("new-doc-study-list");
-    const prev = new Set(Array.from(ul.querySelectorAll("input:checked")).map((i) => i.value));
-    if (state.pendingStudyKey) prev.add(state.pendingStudyKey);
+    if (state.pendingStudyKey && !state.checkOrder.includes(state.pendingStudyKey)) state.checkOrder.push(state.pendingStudyKey);
+    const keys = new Set(list.map((s) => s.key));
+    state.checkOrder = state.checkOrder.filter((k) => keys.has(k));
     const u = Calc.TIME_UNITS[unitOf()].label;
     ul.replaceChildren(
       ...list.map((s) => {
-        const cb = el("input", { type: "checkbox", value: s.key, checked: prev.has(s.key) });
+        const cb = el("input", { type: "checkbox", value: s.key, checked: state.checkOrder.includes(s.key) });
+        const warn = s.warnings && s.warnings.length ? el("span", { className: "study-check-warn", textContent: "⚠", title: s.warnings.join("\n") }) : "";
         const label = el("label", {}, [
           cb,
+          el("span", { className: "study-check-order" }),
           el("span", { textContent: `${s.processName || "Sem posto"}${s.productName ? ` • ${s.productName}` : ""}` }),
+          warn,
           el("span", { className: "study-check-tc", textContent: s.tcMin ? `TC ${ft(s.tcMin)} ${u}` : "sem tempo padrão" }),
         ]);
         return el("li", {}, [label]);
       })
     );
+    updateCheckOrder();
     $("new-doc-studies").hidden = !list.length;
     // Família: sugere os produtos dos estudos e as famílias dos MFVs desta empresa (o consultor escolhe)
     const fam = new Map();
@@ -615,6 +651,20 @@
       : list.length
         ? `${list.length} estudo(s) desta empresa. Nº de operadores e uptime ficam para você preencher.`
         : "Nenhum estudo de cronoanálise com esta empresa. As etapas podem ser incluídas depois.";
+  }
+
+  /** Nº de ordem ao lado dos estudos marcados e aviso de Mix + produto do mesmo estudo. */
+  function updateCheckOrder() {
+    $("new-doc-study-list").querySelectorAll("input").forEach((cb) => {
+      const i = state.checkOrder.indexOf(cb.value);
+      cb.closest("label").querySelector(".study-check-order").textContent = i >= 0 ? `${i + 1}º` : "";
+    });
+    const chosen = state.checkOrder.map((k) => state.studies.find((x) => x.key === k)).filter(Boolean);
+    const dup = M.linkChecks({ steps: chosen.map(stepFromStudy) }, { demandDaily: null }, linkInfo).filter((c) => c.kind === "duplo");
+    const box = $("new-doc-warning");
+    box.textContent = dup.length ? `⚠ ${dup[0].text}.` : "";
+    box.hidden = !dup.length;
+    return dup;
   }
 
   /** Inclui no MFV aberto o estudo trazido pelo botão "→ MFV" (se ainda não for etapa). */
@@ -1045,6 +1095,7 @@
       tr.classList.toggle("row-over-takt", s.overTakt);
       tr.title = s.errors.concat(s.warnings).join(" • ") || (s.overTakt ? "TC acima do takt (gargalo)" : "");
     });
+    renderLinkChecks(M.linkChecks(d, r, linkInfo));
     $("tc-total").textContent = r.tcTotal ? ft(r.tcTotal) : "--";
     $("ops-total").textContent = fmt(r.opsTotal, 2);
     renderGbo(r);
@@ -1086,6 +1137,15 @@
       : "Dias = quantidade em estoque ÷ demanda diária.";
 
     updateProductivity(r);
+  }
+
+  /** Avisos dos vínculos: contagem dupla, qualidade dos estudos e demanda da família. */
+  function renderLinkChecks(checks) {
+    const box = $("steps-warnings");
+    box.replaceChildren(
+      ...checks.map((c) => el("div", { className: `link-check link-${c.kind}`, textContent: `⚠ ${c.text}` }))
+    );
+    box.hidden = !checks.length;
   }
 
   /** Gráfico de balanceamento: barras verticais por etapa e linha do takt. */
@@ -1214,7 +1274,9 @@
       }
       const st = state.studies.find((x) => x.key === value);
       if (!st) return toast("Escolha um estudo na lista.", "warn");
-      state.doc.steps.push(stepFromStudy(st));
+      const step = stepFromStudy(st);
+      if (!confirmNoDouble(state.doc, [step])) return;
+      state.doc.steps.push(step);
       if (!state.doc.clientName && st.clientName) state.doc.clientName = st.clientName;
       markChanged({ render: true });
       toast(`Etapa adicionada: ${st.processName} (TC ${st.tcMin ? ft(st.tcMin) + " " + Calc.TIME_UNITS[unitOf()].label : "sem tempo padrão"}).`, "ok");
@@ -1289,8 +1351,16 @@
     $("btn-connect-folder").addEventListener("click", connectFolder);
     $("btn-docs").addEventListener("click", () => showDocs());
     $("new-client").addEventListener("input", renderNewDocStudies);
+    $("new-doc-study-list").addEventListener("change", (e) => {
+      if (e.target.type !== "checkbox") return;
+      const k = e.target.value;
+      state.checkOrder = state.checkOrder.filter((x) => x !== k);
+      if (e.target.checked) state.checkOrder.push(k);
+      updateCheckOrder();
+    });
     $("doc-dialog").addEventListener("close", () => {
       state.pendingStudyKey = null;
+      state.checkOrder = [];
       state.pendingGroupId = null;
     });
     $("btn-tc-undo").addEventListener("click", undoTcChanges);
@@ -1351,10 +1421,12 @@
       if (!typed || !family) return toast("Informe a empresa e a família.", "warn");
       // Mesma empresa dos estudos com a mesma grafia ("metal alfa" → "Metal Alfa")
       const client = knownClients().get(Calc.elementKey(typed)) || typed;
-      const chosen = Array.from($("new-doc-study-list").querySelectorAll("input:checked"))
-        .map((i) => state.studies.find((x) => x.key === i.value))
-        .filter(Boolean);
+      // Etapas na ordem em que os estudos foram marcados (a ordem do processo)
+      const chosen = state.checkOrder.map((k) => state.studies.find((x) => x.key === k)).filter(Boolean);
+      const dup = updateCheckOrder();
+      if (dup.length && !root.confirm(`${dup[0].text}.\n\nCriar o MFV mesmo assim?`)) return;
       state.pendingStudyKey = null;
+      state.checkOrder = [];
       await flushSave();
       const doc = M.createMfv({ clientName: client, family });
       doc.steps = chosen.map(stepFromStudy);

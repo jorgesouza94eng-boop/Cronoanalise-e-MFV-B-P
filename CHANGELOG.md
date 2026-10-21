@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.11** | 21/10/2026 | Conferência dos vínculos do MFV (contagem dupla, mix, avisos e demanda) |
 | **REV 1.10** | 20/10/2026 | Sair da janela inicial sem abrir um documento |
 | **REV 1.9** | 20/10/2026 | Yamazumi (grupos de estudos), grupo Posto no MFV e comparação T1 × T3 |
 | **REV 1.8** | 20/10/2026 | Payback no padrão B+P e regras do programa no CLAUDE.md |
@@ -15,6 +16,32 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.11 — 21/10/2026 (conferência dos vínculos do MFV)
+
+Só avisos: nenhum cálculo do MFV muda.
+
+### Novidades
+- **Contagem dupla:** o MFV avisa e pede confirmação quando o mesmo posto entra mais de uma vez. Isso acontece em três casos:
+  - **Mix e produto** do mesmo estudo;
+  - dois produtos do mesmo estudo;
+  - um estudo que já está num grupo do Yamazumi e também em outra etapa.
+  - No **Novo MFV**, o aviso aparece enquanto você marca os estudos.
+- **Mix sem demanda por produto:** aviso de **pesos iguais** (média simples) quando os produtos do estudo não têm demanda própria. Quando só parte não tem, o aviso diz quais produtos.
+- **Avisos do estudo levados à etapa:**
+  - acíclicos (tipo A) como tempo total, sem as peças das filmagens;
+  - elementos sem classificação de valor;
+  - tipo ou valor divergente;
+  - linhas com erro;
+  - avisos dos grupos do Yamazumi.
+  - No Novo MFV, o estudo com aviso aparece com ⚠ (passe o mouse para ver).
+- **Ordem das etapas:** no Novo MFV, as etapas seguem a **ordem em que os estudos são marcados** (1º, 2º, 3º…), e não a ordem alfabética.
+- **Demanda da família:** aviso quando a demanda diária usada nos estudos é diferente da demanda diária do MFV (tolerância de 1%). O takt do MFV usa a demanda da família inteira (Módulo 6).
+
+### Testes
+- 143 testes de unidade (4 novos em `tests/mfv-checks.test.js`). Novo teste de navegador `tests/e2e.rev111.js`.
 
 ---
 

@@ -24,6 +24,7 @@
   const FILE_PATTERN = /^MFV_.+\.json$/i;
   const DAYS = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
   const EPS = 1e-9;
+  const MIX_KEY = "__mix__"; // etapa vinculada ao "Mix (TC ponderado)" de um estudo com vários produtos
 
   /* ==========================================================================
      ENTRADAS
@@ -573,6 +574,92 @@
   }
 
 
+  /* ==========================================================================
+     CONFERÊNCIA DOS VÍNCULOS (REV 1.11) — só avisos, não altera nenhum cálculo
+     ========================================================================== */
+
+  /**
+   * Qualidade do tempo que um estudo entrega ao MFV. r = Calc.computeStudy(estudo);
+   * productKey = "" (produto único), chave do produto ou MIX_KEY.
+   * Retorna { warnings: [texto], demand: demanda diária usada no estudo (ou null) }.
+   */
+  function studyQuality(r, productKey) {
+    const warnings = [];
+    const isMix = productKey === MIX_KEY;
+    const one = r.products.find((p) => p.key === productKey) || r.product;
+    const products = isMix ? r.products : [one];
+    products.forEach((p) => {
+      const tag = r.multiProduct && p.name ? `${p.name}: ` : "";
+      const els = p.summary.elements;
+      if (r.mode === "quantidade" && els.some((g) => g.type === "A") && p.films.acyclic !== "por-unidade") {
+        warnings.push(`${tag}acíclicos (tipo A) entram como tempo total — informe as peças de todas as filmagens`);
+      }
+      const unclassified = els.filter((g) => !g.value).length;
+      if (unclassified) warnings.push(`${tag}${unclassified} elemento(s) sem classificação de valor`);
+      if (p.summary.conflictCount) warnings.push(`${tag}${p.summary.conflictCount} elemento(s) com tipo ou valor divergente`);
+    });
+    if (r.errorCount) warnings.push(`${r.errorCount} linha(s) com erro, fora do cálculo`);
+    if (isMix && r.mix) {
+      const without = r.mix.items.filter((i) => !i.demandOwn);
+      if (without.length === r.mix.items.length) {
+        warnings.push("mix sem a demanda de cada produto: pesos iguais (média simples) — preencha a demanda por produto no estudo");
+      } else if (without.length) {
+        warnings.push(`mix: ${without.map((i) => i.name).join(", ")} sem demanda própria (usa a demanda geral)`);
+      }
+    }
+    const demand = isMix ? (r.mix && r.mix.demand > 0 ? r.mix.demand : null) : one && one.demand > 0 ? one.demand : null;
+    return { warnings, demand };
+  }
+
+  /**
+   * Avisos dos vínculos das etapas: contagem dupla do mesmo estudo, qualidade dos estudos e
+   * demanda dos estudos diferente da demanda diária do MFV (o takt é da família inteira, Módulo 6).
+   * lookup(step) → { label, warnings, demand, studyIds } | null  (studyIds: estudos de um grupo).
+   */
+  function linkChecks(doc, computed, lookup) {
+    const out = [];
+    const uses = new Map(); // estudo → [{ seq, name, product, via }]
+    const mismatch = [];
+    doc.steps.forEach((s, i) => {
+      const seq = i + 1;
+      const name = s.name || `Etapa ${seq}`;
+      const info = lookup(s);
+      const add = (id, product, via) => {
+        if (!uses.has(id)) uses.set(id, []);
+        uses.get(id).push({ seq, name, product, via });
+      };
+      if (s.studyId) add(s.studyId, s.studyProduct || "", "etapa");
+      if (s.groupId && info && info.studyIds) info.studyIds.forEach((id) => add(id, null, "grupo"));
+      if (!info) return;
+      info.warnings.forEach((w) => out.push({ kind: "estudo", seq, text: `${seq}. ${name}: ${w}` }));
+      const dd = computed.demandDaily;
+      if (s.studyId && dd > 0 && info.demand > 0 && Math.abs(info.demand - dd) / dd > 0.01) {
+        mismatch.push(`${seq}. ${name} (${Calc.formatNumber(info.demand, 1)}/dia)`);
+      }
+    });
+    uses.forEach((list) => {
+      if (list.length < 2) return;
+      const steps = list.map((u) => `${u.seq}. ${u.name}`).join(" e ");
+      const viaGroup = list.some((u) => u.via === "grupo");
+      const mix = list.some((u) => u.product === MIX_KEY) && list.some((u) => u.product != null && u.product !== MIX_KEY);
+      const text = viaGroup
+        ? `Contagem dupla: o mesmo estudo está no grupo e em outra etapa (${steps})`
+        : mix
+          ? `Contagem dupla: Mix e produto(s) do mesmo estudo como etapas separadas (${steps}) — use só o Mix ou só os produtos`
+          : `Contagem dupla: o mesmo posto em mais de uma etapa (${steps}) — para o posto que faz vários produtos, use o Mix`;
+      out.unshift({ kind: "duplo", text });
+    });
+    if (mismatch.length) {
+      out.push({
+        kind: "demanda",
+        text:
+          `Demanda diária do MFV (${Calc.formatNumber(computed.demandDaily, 1)}/dia) diferente da usada nos estudos: ${mismatch.join(", ")}. ` +
+          "O takt do MFV usa a demanda da família inteira (Módulo 6): confira a demanda mensal e os dias úteis.",
+      });
+    }
+    return out;
+  }
+
   /** Capacidade e produtividade para um TC limitante e um nº de operadores. */
   function lineResults(availDayMin, tcLimit, operators) {
     const capDay = availDayMin > 0 && tcLimit > 0 ? availDayMin / tcLimit : null;
@@ -636,6 +723,7 @@
     SCHEMA_ID,
     SCHEMA_VERSION,
     FILE_PATTERN,
+    MIX_KEY,
     DAYS,
     parseClock,
     formatClock,
@@ -648,6 +736,8 @@
     computeProductivity,
     computePayback,
     computeMfv,
+    studyQuality,
+    linkChecks,
     serializeMfv,
   };
 });

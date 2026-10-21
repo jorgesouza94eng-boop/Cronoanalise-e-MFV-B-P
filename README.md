@@ -276,6 +276,17 @@ Conferência com o MFV real da Laje Forte (aba EP): deram os mesmos 440 min/dia,
 
 **Nº total de operadores:** se a mesma equipe faz várias etapas (como na Laje Forte), informe o total da linha em *Demanda e disponibilidade*, como no K37 da planilha. Vazio = soma dos operadores das etapas.
 
+### Conferência dos vínculos (REV 1.11)
+
+Abaixo da tabela de etapas, o MFV lista os avisos (os cálculos não mudam):
+
+- **contagem dupla:** Mix e produto do mesmo estudo, o mesmo posto em duas etapas, ou o estudo de um grupo também como etapa;
+- **mix com pesos iguais:** produtos sem demanda própria no estudo;
+- **avisos do estudo:** acíclicos sem peças, elementos sem classe, divergências e linhas com erro;
+- **demanda da família:** a demanda dos estudos é diferente da demanda diária do MFV.
+
+No **Novo MFV**, as etapas seguem a ordem em que você marca os estudos (1º, 2º, 3º…).
+
 ### Produtividade real (pç/HH) e payback — comprovação da meta B+P
 
 A "produtividade" do bloco *Resultados* é **teórica** (capacidade do gargalo ÷ operadores). A meta do programa (+20%) é comprovada com a **produtividade real**, medida no chão de fábrica. Para isso, use o bloco no fim da página:
@@ -475,7 +486,7 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 139 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA e Yamazumi (Node 18+, sem dependências)
+npm test             # 143 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA e Yamazumi (Node 18+, sem dependências)
 npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.5 e Yamazumi (REV 1.9) — requer o servidor local
 ```
 

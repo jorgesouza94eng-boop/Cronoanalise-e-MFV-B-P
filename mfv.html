@@ -187,6 +187,7 @@
           </tfoot>
         </table>
       </div>
+      <div id="steps-warnings" class="info-banner link-checks" role="status" hidden></div>
       <div class="gbo-chart-wrap">
         <div class="chart-card">
           <h3>Gráfico de balanceamento (GBO)</h3>
@@ -397,8 +398,9 @@
         <button type="submit" class="btn-primary">Criar MFV</button>
       </div>
       <div class="new-doc-studies" id="new-doc-studies" hidden>
-        <div class="card-header-mini">Estudos desta empresa — marque os que serão etapas (na ordem da lista)</div>
+        <div class="card-header-mini">Estudos desta empresa — marque na ordem do processo (a ordem de marcação = ordem das etapas)</div>
         <ul class="study-check-list" id="new-doc-study-list"></ul>
+        <p class="form-hint form-warning" id="new-doc-warning" role="alert" hidden></p>
       </div>
       <p class="form-hint" id="new-doc-hint">Escolha a empresa: os estudos de cronoanálise dela aparecem aqui para virar etapas, com o TC já preenchido.</p>
     </form>
