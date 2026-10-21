@@ -41,7 +41,7 @@ function abc() {
 
   await p.goto(base + "index.html");
   await p.waitForSelector("#study-dialog[open]");
-  check(await txt(".app-header .app-rev") === "REV 1.12", "rótulo da revisão no cabeçalho");
+  check(/^REV 1\.\d+$/.test(await txt(".app-header .app-rev")), "rótulo da revisão no cabeçalho");
   await p.setInputFiles("#input-import-json", { name: "e.json", mimeType: "application/json", buffer: Buffer.from(C.serializeStudy(abc())) });
   await p.waitForFunction(() => window.LeanApp && LeanApp.state.study && LeanApp.state.study.processName === "Posto");
 

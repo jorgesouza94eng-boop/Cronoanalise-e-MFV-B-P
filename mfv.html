@@ -18,7 +18,7 @@
         <h1>MFV — Estado presente</h1>
         <nav class="app-nav" aria-label="Módulos">
           <a href="index.html">Cronoanálise</a><a href="mfv.html" aria-current="page">MFV</a><a href="yamazumi.html">Yamazumi</a>
-        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.12</span></nav>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.13</span></nav>
       </div>
     </div>
 
@@ -159,7 +159,7 @@
         <table class="chrono-table mfv-steps-table">
           <colgroup>
             <col style="width:64px"><col style="width:44px"><col><col style="width:220px"><col style="width:110px">
-            <col style="width:80px"><col style="width:90px"><col style="width:90px"><col style="width:90px"><col style="width:100px">
+            <col style="width:80px"><col style="width:90px"><col style="width:90px"><col style="width:90px"><col style="width:100px"><col style="width:100px">
           </colgroup>
           <thead>
             <tr>
@@ -172,6 +172,7 @@
               <th title="Disponibilidade / uptime da etapa (vazio = 100%)">Uptime (%)</th>
               <th>Ops efet.</th>
               <th>% do takt</th>
+              <th title="TC × demanda ÷ tempo disponível. Etapa de um produto: demanda própria do produto (sem herdar a geral); etapa da família: = % do takt">Ocupação</th>
               <th><span class="sr-only">Ações</span></th>
             </tr>
           </thead>
@@ -182,7 +183,7 @@
               <td class="cell-total mono highlight-col" id="tc-total">--</td>
               <td></td><td></td>
               <td class="cell-total mono" id="ops-total">--</td>
-              <td colspan="2"></td>
+              <td colspan="3"></td>
             </tr>
           </tfoot>
         </table>
@@ -193,6 +194,29 @@
           <h3>Gráfico de balanceamento (GBO)</h3>
           <p class="chart-sub">TC por etapa × takt (linha tracejada). Barras acima do takt = gargalo.</p>
           <div id="gbo-chart" class="gbo-chart" role="img" aria-label="Gráfico de balanceamento das etapas em relação ao takt"></div>
+        </div>
+      </div>
+      <!-- Ocupação dos recursos pelas macro-etapas dos estudos (REV 1.13): o TC do GBO não muda -->
+      <div class="resource-panel" id="resource-panel" hidden>
+        <div class="films-head">
+          <strong>Ocupação dos recursos (macro-etapas dos estudos)</strong>
+          <span class="form-hint">Carga = Σ TP da macro × demanda própria do produto • TC ponderado = carga ÷ demanda da família • Ocupação = carga ÷ tempo disponível (= TC ponderado ÷ takt). A mesma macro em produtos diferentes soma (mesmo recurso).</span>
+        </div>
+        <div class="mix-issues" id="resource-issues" role="status" hidden></div>
+        <div class="table-container">
+          <table class="chrono-table mix-table resource-table">
+            <thead>
+              <tr>
+                <th scope="col">Estudo (operador)</th>
+                <th scope="col">Macro-etapa (recurso)</th>
+                <th scope="col">Produtos: TP × demanda</th>
+                <th scope="col">Carga (min/dia)</th>
+                <th scope="col">TC ponderado (<span class="unit-label">min</span>/pç)</th>
+                <th scope="col">Ocupação</th>
+              </tr>
+            </thead>
+            <tbody id="resource-tbody"></tbody>
+          </table>
         </div>
       </div>
     </section>

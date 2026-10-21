@@ -39,6 +39,7 @@
     ESP: { label: "Espera", color: "esp" },
     SC: { label: "Sem classificação", color: "sc" },
     TOL: { label: "Tolerância", color: "tol" },
+    M: { label: "Macro-etapa", color: "m" },
   };
   const CLASS_ORDER = ["AG", "IN", "NA", "ESP", "SC", "TOL"];
 
@@ -127,7 +128,7 @@
       taktMin: fin(raw.taktMin),
       netTimeMin: fin(raw.netTimeMin),
       compareWithId: str(raw.compareWithId),
-      chartMode: raw.chartMode === "elemento" ? "elemento" : "classe",
+      chartMode: raw.chartMode === "elemento" || raw.chartMode === "macro" ? raw.chartMode : "classe",
       notes: str(raw.notes),
     };
     return { ok: true, doc, study: doc }; // "study": nome esperado pela camada de armazenamento
@@ -166,7 +167,7 @@
       const cls = classOf(g);
       classes[cls] += g.cycleTime;
       if (g.waste === "movimentacao" || g.waste === "transporte") motion += g.cycleTime;
-      return { name: g.name, value: g.value, waste: g.waste, cls, tn: g.cycleTime };
+      return { name: g.name, value: g.value, waste: g.waste, cls, tn: g.cycleTime, macro: g.macro };
     });
     const wait = classes.ESP * (1 + tol / 100);
     return {
@@ -187,6 +188,7 @@
       elements,
       unclassified: elements.filter((e) => e.cls === "SC").length,
       acyclic: p.films ? p.films.acyclic : "total",
+      macros: p.macros ? p.macros.list.map((m) => ({ name: m.name, none: m.none, tn: m.tn })) : null,
       netTime: p.kpis.netTime,
       takt: p.kpis.taktTime,
       errorCount: r.errorCount,
@@ -279,6 +281,14 @@
   /** Segmentos empilhados de um membro: por classe (com tolerância) ou por elemento. */
   function segments(member, mode) {
     if (!member || !member.found) return [];
+    // Por macro-etapa (REV 1.13): uma cor por macro, na ordem do estudo; tolerância à parte
+    if (mode === "macro") {
+      const list = (member.macros || [{ name: "Sem macro-etapa", none: true, tn: member.tn }])
+        .filter((m) => m.tn > EPS)
+        .map((m, i) => ({ key: `M${i}`, label: m.name, value: m.tn, cls: "M", idx: i }));
+      if (member.tolerance > EPS) list.push({ key: "TOL", label: CLASSES.TOL.label, value: member.tolerance, cls: "TOL" });
+      return list;
+    }
     if (mode === "elemento") {
       const list = member.elements.filter((e) => e.tn > EPS).map((e) => ({ key: e.cls, label: e.name, value: e.tn, cls: e.cls }));
       if (member.tolerance > EPS) list.push({ key: "TOL", label: CLASSES.TOL.label, value: member.tolerance, cls: "TOL" });

@@ -596,7 +596,7 @@
       }
       const unclassified = els.filter((g) => !g.value).length;
       if (unclassified) warnings.push(`${tag}${unclassified} elemento(s) sem classificação de valor`);
-      if (p.summary.conflictCount) warnings.push(`${tag}${p.summary.conflictCount} elemento(s) com tipo ou valor divergente`);
+      if (p.summary.conflictCount) warnings.push(`${tag}${p.summary.conflictCount} elemento(s) com tipo, valor ou macro-etapa divergente`);
     });
     if (r.errorCount) warnings.push(`${r.errorCount} linha(s) com erro, fora do cálculo`);
     // REV 1.12: produto fora do mix e mix parcial (o produto sem demanda própria não herda mais a geral)
@@ -653,6 +653,81 @@
       });
     }
     return out;
+  }
+
+  /* ==========================================================================
+     OCUPAÇÃO PELA DEMANDA (REV 1.13) — o TC do GBO não muda (Módulo 6: TC por operador)
+     ========================================================================== */
+
+  /**
+   * Ocupação de uma etapa = TC × demanda ÷ tempo disponível/dia (%).
+   * demand: demanda própria do produto da etapa; undefined = demanda diária da família (MFV);
+   * null = produto sem demanda própria (resultado "--", sem herdar a demanda geral).
+   * Na etapa de toda a família, ocupação = % do takt.
+   */
+  function stepOccupancy(computed, stepResult, demand) {
+    const d = demand === undefined ? computed.demandDaily : demand;
+    if (!stepResult || stepResult.tc == null || !(d > 0) || !(computed.availDayMin > 0)) return null;
+    return ((stepResult.tc * d) / computed.availDayMin) * 100;
+  }
+
+  /**
+   * Ocupação dos recursos de um estudo pelas macro-etapas (agrupadas pelo nome em todos os
+   * produtos do estudo, porque o recurso é o mesmo):
+   *  - Carga da macro = Σ (TP da macro no produto × demanda própria do produto) (min/dia).
+   *  - TC ponderado = carga ÷ demanda diária da família (MFV).
+   *  - Ocupação = carga ÷ tempo disponível/dia (= TC ponderado ÷ takt).
+   * Estudo de um produto só: a demanda é a da família. Produto fora do mix fica de fora (nota).
+   * Produto sem demanda própria: "--" e aviso (não herda a demanda geral, regra da REV 1.12).
+   * Conferência: Σ cargas = carga do mix do estudo. Retorna null se o estudo não tem macro.
+   */
+  function resourceOccupancy(r, opts) {
+    if (!r || !r.macroUsed) return null;
+    const avail = opts && opts.availDayMin > 0 ? opts.availDayMin : null;
+    const D = opts && opts.demandDaily > 0 ? opts.demandDaily : null;
+    const issues = [];
+    const rows = new Map();
+    let missing = false;
+    r.products.forEach((p) => {
+      if (r.multiProduct && p.inMix === false) {
+        issues.push(`${p.name} fora do mix na Cronoanálise: não entra na ocupação`);
+        return;
+      }
+      const demand = r.multiProduct ? (p.demandOwn && p.demand > 0 ? p.demand : null) : D;
+      if (demand == null) {
+        missing = true;
+        issues.push(r.multiProduct ? `${p.name} sem demanda própria: informe a demanda do produto na Cronoanálise` : "Informe a demanda mensal e os dias úteis do MFV");
+      }
+      p.macros.list.forEach((m) => {
+        const key = m.none ? "" : Calc.elementKey(m.name);
+        if (!rows.has(key)) rows.set(key, { key, name: m.name, none: m.none, firstSeq: m.firstSeq, parts: [] });
+        const row = rows.get(key);
+        row.firstSeq = Math.min(row.firstSeq, m.firstSeq);
+        if (m.tp == null) missing = true;
+        row.parts.push({ product: p.name, tp: m.tp, demand, load: m.tp != null && demand != null ? m.tp * demand : null });
+      });
+    });
+    if (r.products.some((p) => p.macros && p.macros.list.some((m) => m.tp == null))) issues.push("Tolerância inválida no estudo: TP das macro-etapas indisponível");
+    const list = Array.from(rows.values()).sort((a, b) => a.none - b.none || a.firstSeq - b.firstSeq);
+    list.forEach((row) => {
+      row.load = row.parts.every((x) => x.load != null) ? row.parts.reduce((a, x) => a + x.load, 0) : null;
+      row.tcWeighted = row.load != null && D ? row.load / D : null;
+      row.occupancyPct = row.load != null && avail ? (row.load / avail) * 100 : null;
+    });
+    const loadTotal = !missing && list.length ? list.reduce((a, x) => a + x.load, 0) : null;
+    const mixLoad = r.mix ? r.mix.load : null;
+    const matchesMix = loadTotal != null && mixLoad != null ? Math.abs(loadTotal - mixLoad) < 1e-9 : null;
+    if (matchesMix === false) issues.push("Soma das macro-etapas diferente da carga do mix: confira o estudo");
+    const none = list.find((x) => x.none);
+    if (none) issues.push('Há elementos sem macro-etapa (linha "Sem macro-etapa")');
+    return {
+      rows: list,
+      loadTotal,
+      tcWeightedTotal: loadTotal != null && D ? loadTotal / D : null,
+      occupancyTotal: loadTotal != null && avail ? (loadTotal / avail) * 100 : null,
+      matchesMix,
+      issues,
+    };
   }
 
   /** Capacidade e produtividade para um TC limitante e um nº de operadores. */
@@ -733,6 +808,8 @@
     computeMfv,
     studyQuality,
     linkChecks,
+    stepOccupancy,
+    resourceOccupancy,
     serializeMfv,
   };
 });

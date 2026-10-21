@@ -514,11 +514,24 @@
   /** Barras empilhadas por estudo (classe de valor ou elemento) e linha do takt. */
   function renderChart(r) {
     const box = $("yz-chart");
-    const mode = state.doc.chartMode === "elemento" ? "elemento" : "classe";
-    $("yz-chart-sub").textContent =
-      mode === "elemento"
-        ? "TP de cada estudo empilhado por elemento (cor = classe de valor) × takt (linha tracejada)."
-        : "TP de cada estudo empilhado por classe de valor × takt (linha tracejada).";
+    const mode = state.doc.chartMode === "elemento" || state.doc.chartMode === "macro" ? state.doc.chartMode : "classe";
+    $("yz-chart-sub").textContent = {
+      elemento: "TP de cada estudo empilhado por elemento (cor = classe de valor) × takt (linha tracejada).",
+      macro: "TP de cada estudo empilhado por macro-etapa (mesma cor = mesma macro) × takt (linha tracejada). Estudo sem macro-etapas: barra única.",
+      classe: "TP de cada estudo empilhado por classe de valor × takt (linha tracejada).",
+    }[mode];
+    // Macro-etapas: a mesma macro tem a mesma cor em todos os estudos (paleta de 8 cores)
+    const macroColor = new Map();
+    const macroLabel = new Map();
+    const colorOf = (s) => {
+      if (s.cls !== "M") return `yz-${Y.CLASSES[s.cls].color}`;
+      const k = Calc.elementKey(s.label);
+      if (!macroColor.has(k)) {
+        macroColor.set(k, macroColor.size % 8);
+        macroLabel.set(k, s.label);
+      }
+      return `yz-p${macroColor.get(k)}`;
+    };
     const members = r.members.filter((m) => m.found && m.tp > 0);
     if (!members.length) {
       box.replaceChildren(el("p", { className: "chart-empty", textContent: "As barras aparecem quando o grupo tiver estudos com tempo padrão." }));
@@ -540,7 +553,7 @@
       stack.style.height = `${(m.tp / max) * 100}%`;
       Y.segments(m, mode).forEach((s) => {
         used.add(s.cls);
-        const seg = el("div", { className: `yz-seg yz-${Y.CLASSES[s.cls].color}`, title: `${s.label} (${Y.CLASSES[s.cls].label}): ${ft(s.value)} ${u}` });
+        const seg = el("div", { className: `yz-seg ${colorOf(s)}`, title: `${s.label}${s.cls === "M" ? "" : ` (${Y.CLASSES[s.cls].label})`}: ${ft(s.value)} ${u}` });
         seg.style.height = `${(s.value / m.tp) * 100}%`;
         stack.append(seg);
       });
@@ -549,7 +562,11 @@
     });
     const labels = el("div", { className: "gbo-labels" }, members.map((m) => el("span", { textContent: m.label, title: `${m.label} — ${m.processName}` })));
     box.replaceChildren(plot, labels);
+    const macroItems = Array.from(macroColor.entries()).map(([k, i]) =>
+      el("span", { className: "yz-legend-item" }, [el("span", { className: `yz-swatch yz-p${i}` }), el("span", { textContent: macroLabel.get(k) })])
+    );
     $("yz-legend").replaceChildren(
+      ...macroItems,
       ...Y.CLASS_ORDER.filter((k) => used.has(k)).map((k) =>
         el("span", { className: "yz-legend-item" }, [el("span", { className: `yz-swatch yz-${Y.CLASSES[k].color}` }), el("span", { textContent: Y.CLASSES[k].label })])
       )

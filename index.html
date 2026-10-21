@@ -19,7 +19,7 @@
         <h1>Cronoanálise &amp; MFV</h1>
         <nav class="app-nav" aria-label="Módulos">
           <a href="index.html" aria-current="page">Cronoanálise</a><a href="mfv.html">MFV</a><a href="yamazumi.html">Yamazumi</a>
-        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.12</span></nav>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.13</span></nav>
       </div>
     </div>
 
@@ -183,6 +183,9 @@
           <label class="inline-check" for="opt-multi-product" title="Mostra a coluna Produto: resumo, ciclo e tempo padrão separados por produto">
             <input type="checkbox" id="opt-multi-product"> Vários produtos
           </label>
+          <label class="inline-check" for="opt-macro" title="Mostra a coluna Macro-etapa: agrupa os elementos por recurso/etapa (masseira, laminador...). Não altera o cálculo; ocultar mantém as macros">
+            <input type="checkbox" id="opt-macro"> Macro-etapas
+          </label>
           <button type="button" id="btn-add-row" class="btn-secondary" title="Nova linha (Ctrl+Enter)">+ Nova linha</button>
           <button type="button" id="btn-to-mfv" class="btn-outline" title="Levar este estudo (ou o produto do resumo) como etapa do MFV da mesma empresa">→ MFV</button>
           <button type="button" id="btn-ai" class="btn-outline btn-ai" title="Assistente de IA (Gemini): classificação, Kaizen e constatações">✨ IA</button>
@@ -196,6 +199,7 @@
       <div class="filter-bar" id="filter-bar" role="search" aria-label="Filtrar a grade e o resumo">
         <input type="search" id="flt-text" placeholder="Filtrar elemento..." autocomplete="off" aria-label="Filtrar pelo nome do elemento">
         <select id="flt-product" aria-label="Filtrar por produto" hidden></select>
+        <select id="flt-macro" aria-label="Filtrar por macro-etapa" hidden></select>
         <select id="flt-type" aria-label="Filtrar por tipo">
           <option value="">Tipo: todos</option><option value="C">C — cíclico</option><option value="A">A — acíclico</option>
         </select>
@@ -219,7 +223,7 @@
       <div class="table-container">
         <table class="chrono-table" id="chrono-table">
           <colgroup>
-            <col class="col-num"><col class="col-product" id="col-product"><col class="col-elem" id="col-elem"><col class="col-type"><col class="col-freq">
+            <col class="col-num"><col class="col-product" id="col-product"><col class="col-macro" id="col-macro"><col class="col-elem" id="col-elem"><col class="col-type"><col class="col-freq">
             <col class="col-tfinal"><col class="col-tsub"><col class="col-pace"><col class="col-tnorm">
             <col class="col-value"><col class="col-waste"><col class="col-action"><col class="col-del">
           </colgroup>
@@ -227,6 +231,7 @@
             <tr>
               <th scope="col" title="Número do elemento. Toque no número (ou Alt+N) para marcar o início de uma nova filmagem">Nº</th>
               <th scope="col" id="th-product" class="cell-product" title="Produto em análise na linha. A nova linha repete o produto da anterior">Produto</th>
+              <th scope="col" id="th-macro" class="cell-macro" title="Macro-etapa (recurso/etapa) do elemento. Preenchida para baixo no mesmo produto; renomear troca em todas as linhas do produto">Macro-etapa</th>
               <th scope="col" title="Elementos com o MESMO NOME são agrupados no resumo (média se C, soma se A)">Elemento de trabalho (operação)</th>
               <th scope="col" title="C = cíclico (média das ocorrências) | A = acíclico (soma dos tempos). Digite C ou A">Tipo</th>
               <th scope="col" id="th-qty" title="Quantidade de unidades produzidas no trecho">Qtd.</th>
@@ -308,6 +313,38 @@
         </table>
       </div>
 
+      <!-- Resumo por macro-etapa (REV 1.13): só agrupa os elementos do resumo do produto -->
+      <div class="mix-panel macro-panel" id="macro-panel" hidden>
+        <div class="films-head">
+          <strong>Resumo por macro-etapa</strong>
+          <span class="form-hint" id="macro-hint"></span>
+        </div>
+        <div class="mix-issues" id="macro-issues" role="status" hidden></div>
+        <div class="table-container">
+          <table class="chrono-table mix-table macro-table">
+            <thead>
+              <tr>
+                <th scope="col">Macro-etapa</th>
+                <th scope="col">Elementos</th>
+                <th scope="col" title="Soma do tempo no ciclo dos elementos da macro (já com a divisão por quantidade/peças e o ritmo)">T. normal (<span class="unit-label">min</span>/pç)</th>
+                <th scope="col">% do ciclo</th>
+                <th scope="col" title="Tempo normal × (1 + tolerância)">TP (<span class="unit-label">min</span>/pç)</th>
+              </tr>
+            </thead>
+            <tbody id="macro-tbody"></tbody>
+            <tfoot>
+              <tr>
+                <td class="tfoot-label">Total</td>
+                <td class="cell-total mono" id="macro-count">--</td>
+                <td class="cell-total mono" id="macro-tn">--</td>
+                <td class="cell-total mono" id="macro-share">--</td>
+                <td class="cell-total mono" id="macro-tp">--</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
       <!-- Carga do posto com vários produtos (o posto divide o tempo entre eles) -->
       <div class="mix-panel" id="mix-panel" hidden>
         <div class="films-head">
@@ -379,6 +416,7 @@
   <!-- NOMES JÁ USADOS (autocompletar: garante o mesmo nome para o mesmo elemento) -->
   <datalist id="element-names"></datalist>
   <datalist id="product-names"></datalist>
+  <datalist id="macro-names"></datalist>
 
   <!-- MODELO DE LINHA DA GRADE -->
   <template id="row-template">
@@ -388,6 +426,8 @@
                  class="film-tag" hidden></span></button></td>
       <td class="cell-product"><input type="text" class="input-cell input-product" data-field="product" aria-label="Produto"
                  list="product-names" placeholder="Produto" autocomplete="off" enterkeyhint="next"></td>
+      <td class="cell-macro"><input type="text" class="input-cell input-macro" data-field="macroEtapa" aria-label="Macro-etapa"
+                 list="macro-names" placeholder="Macro-etapa" autocomplete="off" enterkeyhint="next"></td>
       <td><input type="text" class="input-cell input-elem" data-field="description" aria-label="Elemento de trabalho"
                  list="element-names" placeholder="Descreva a operação..." autocomplete="off" enterkeyhint="next"></td>
       <td><select class="input-cell input-type" data-field="type" aria-label="Tipo: C cíclico ou A acíclico">

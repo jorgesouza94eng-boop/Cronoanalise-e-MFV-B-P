@@ -210,6 +210,18 @@ Cada vídeo novo começa em 00:00, como as células amarelas de "Tempo (Início)
 
 A linha marcada ganha uma faixa amarela e a etiqueta **F2**, **F3**, e assim por diante. O rodapé mostra o total de filmagens.
 
+#### Macro-etapas (REV 1.13)
+
+Marque **Macro-etapas** na barra da grade para mostrar a coluna. Ela agrupa os elementos por recurso ou etapa (masseira, laminador, mesa...) **sem alterar o cálculo**.
+
+- **Preencher para baixo:** a macro é aplicada às linhas vazias abaixo, no mesmo produto.
+- **Renomear:** trocar o nome numa linha oferece renomear em todas as linhas do produto.
+- **Resumo por macro-etapa:** elementos, tempo normal por peça, % do ciclo e TP. A soma confere com o ciclo do produto.
+- **Sem macro:** os elementos ficam em "Sem macro-etapa", com aviso.
+- **Filtro:** "Macro" na barra de filtros (só exibição).
+- **No MFV:** quadro "Ocupação dos recursos", que mostra quanto cada recurso é ocupado pela demanda de cada produto. O TC do GBO não muda.
+- **No Yamazumi:** barras "Por macro-etapa".
+
 #### Nome do vídeo de cada filmagem (REV 1.12)
 
 No bloco **Filmagens do estudo**, cada filmagem tem o campo **Vídeo** (nome do arquivo, opcional). Ele aparece na etiqueta F1, F2… ao passar o mouse, no filtro de filmagem, na coluna "Vídeo" do Excel simples e do CSV, e no JSON. Não entra em nenhum cálculo.
@@ -492,7 +504,7 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 154 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA e Yamazumi (Node 18+, sem dependências)
+npm test             # 169 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA e Yamazumi (Node 18+, sem dependências)
 npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.5 e Yamazumi (REV 1.9) — requer o servidor local
 ```
 

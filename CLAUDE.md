@@ -53,7 +53,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - HTML/CSS/JS puro, **sem build e sem servidor**. Funciona por `file://`, por servidor local e pelo GitHub Pages.
 - Scripts clássicos no padrão UMD (`window.LeanX` no navegador e `module.exports` nos testes do Node). **Não usar módulos ES** (quebram no `file://`).
 - Armazenamento local-first: IndexedDB (`LeanChronoDB`) e pasta do OneDrive pela File System Access API, com debounce de 3 s e proteção contra conflito (revisão + cópia `_conflito_`).
-- Arquivos: `Crono_*.json` (estudo, versão 5), `MFV_*.json` (MFV, versão 5) e `Yamazumi_*.json` (grupo de estudos, versão 1) — REV 1.12.
+- Arquivos: `Crono_*.json` (estudo, versão 5; macro-etapa por elemento desde a REV 1.13), `MFV_*.json` (MFV, versão 5) e `Yamazumi_*.json` (grupo de estudos, versão 1) — REV 1.13.
 - A revisão aparece no cabeçalho das 3 páginas (`.app-rev`); um teste confere com a versão do `package.json`.
 
 | Arquivo | Função |
@@ -84,6 +84,7 @@ npm run test:e2e                            # todos os testes de navegador (Play
 - Filtros são só de exibição: nunca alteram a leitura contínua nem os cálculos.
 - Posto com vários produtos: o gargalo é avaliado pela **carga do mix** (Σ TP × demanda ÷ tempo líquido), não pelo takt de cada produto isolado.
 - Desde a REV 1.12 (decisão D1 do consultor), no mix só entra a **demanda própria** de cada produto: a demanda geral é a do posto e, repetida em cada produto, contava a demanda várias vezes. Sem demanda própria, o mix fica "--". "Considerar no mix" tira o produto da carga (mix parcial, com aviso).
+- **Macro-etapas (REV 1.13)** só agrupam elementos (Σ macros = ciclo). No MFV, o **TC do GBO continua por operador** (Módulo 6); a ocupação de cada recurso pela demanda do produto fica no quadro "Ocupação dos recursos" (carga = Σ TP × demanda própria; a mesma macro em produtos diferentes soma). Decisão do consultor: opção B2.
 - Um MFV em que a demanda é igual à capacidade declarada fica **circular** (operadores ideais ≈ atuais e capacidade = demanda). Registre essa premissa nas observações.
 
 ## Regras do B+P confirmadas na base do consultor (formação de consultores)

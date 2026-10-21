@@ -45,6 +45,7 @@
     pendingStudyKey: null, // estudo trazido pelo botão "→ MFV" da cronoanálise, ainda sem MFV escolhido
     pendingGroupId: null, // grupo trazido pelo botão "→ MFV" do Yamazumi
     studyDocs: new Map(), // id → estudo (para calcular os grupos)
+    studyResults: new Map(), // id → Calc.computeStudy (ocupação das macro-etapas, REV 1.13)
     groups: [], // grupos do Yamazumi: { id, name, kind, situation, clientName, fileName, cycle, content, n, members }
     tcChanges: [], // últimas atualizações de TC (para o "Desfazer")
     docsCache: [], // MFVs salvos (para sugerir famílias da empresa)
@@ -308,6 +309,7 @@
   async function loadStudies() {
     const map = new Map();
     const docs = new Map();
+    const results = new Map();
     const add = (study, fileName) => {
       const prev = map.get(study.id);
       if (prev && String(prev.updatedAt) >= String(study.updatedAt)) return;
@@ -315,7 +317,9 @@
       // Estudo com vários produtos: uma opção por produto (cada um com o seu tempo padrão)
       const r = Calc.computeStudy(study);
       const tc = (k) => (k.standardTime > 0 ? k.standardTime : k.sumNormal > 0 ? k.sumNormal : null);
+      results.set(study.id, r);
       const quality = (k) => M.studyQuality(r, k); // avisos levados à etapa do MFV (REV 1.11)
+      const own = (p) => (p.demandOwn && p.demand > 0 ? p.demand : null); // demanda própria (sem herdar a geral)
       const q0 = quality("");
       map.set(study.id, {
         id: study.id,
@@ -330,8 +334,8 @@
         mixProblem: r.mix && r.mix.weightedTP == null ? r.mix.issues[0] || "mix incompleto" : "",
         products: r.multiProduct
           ? r.products
-              .map((p) => Object.assign({ key: p.key, name: p.name, tcMin: tc(p.kpis) }, quality(p.key)))
-              .concat(r.mix && r.mix.weightedTP != null ? [Object.assign({ key: MIX_KEY, name: "Mix (TC ponderado)", tcMin: r.mix.weightedTP }, quality(MIX_KEY))] : [])
+              .map((p) => Object.assign({ key: p.key, name: p.name, tcMin: tc(p.kpis), ownDemand: own(p) }, quality(p.key)))
+              .concat(r.mix && r.mix.weightedTP != null ? [Object.assign({ key: MIX_KEY, name: "Mix (TC ponderado)", tcMin: r.mix.weightedTP, ownDemand: r.mix.demand }, quality(MIX_KEY))] : [])
           : [],
       });
     };
@@ -350,10 +354,13 @@
       if (!st.products.length) state.studies.push(Object.assign({ key: st.id, product: "", productName: "" }, st));
       else
         st.products.forEach((p) =>
-          state.studies.push(Object.assign({}, st, { key: `${st.id}::${p.key}`, product: p.key, productName: p.name, tcMin: p.tcMin, warnings: p.warnings, demand: p.demand }))
+          state.studies.push(
+            Object.assign({}, st, { key: `${st.id}::${p.key}`, product: p.key, productName: p.name, tcMin: p.tcMin, warnings: p.warnings, demand: p.demand, ownDemand: p.ownDemand })
+          )
         );
     });
     state.studyDocs = docs;
+    state.studyResults = results;
     await loadGroups();
     renderStudyPicker();
   }
@@ -821,7 +828,7 @@
     $("steps-tbody").replaceChildren(...d.steps.map((s, i) => stepRow(s, i)));
     if (!d.steps.length) {
       const td = el("td", { className: "cell-text text-muted", textContent: "Adicione as etapas: escolha um estudo de cronoanálise e clique em '+ Etapa do estudo', ou use '+ Etapa manual'." });
-      td.colSpan = 10;
+      td.colSpan = 11;
       $("steps-tbody").append(el("tr", {}, [td]));
     }
 
@@ -1029,10 +1036,12 @@
       el("td", {}, [mk("uptimePct", s.uptimePct, "mono")]),
       el("td", { className: "cell-readonly mono" }),
       el("td", { className: "cell-readonly mono" }),
+      el("td", { className: "cell-readonly mono" }),
       actions
     );
     tr.children[7].dataset.out = "opsEff";
     tr.children[8].dataset.out = "takt";
+    tr.children[9].dataset.out = "occ";
     return tr;
   }
 
@@ -1097,11 +1106,25 @@
       }
       tr.querySelector('[data-out="opsEff"]').textContent = fmt(s.opsEff, 2);
       tr.querySelector('[data-out="takt"]').textContent = s.taktPct != null ? `${fmt(s.taktPct, 1)}%` : "--";
+      // Ocupação (REV 1.13): etapa de um produto usa a demanda própria dele; da família, = % do takt
+      const st = src.studyId && !src.groupId ? findStudy(src) : null;
+      const own = st && st.product ? st.ownDemand : undefined;
+      const occ = M.stepOccupancy(r, s, own);
+      const occCell = tr.querySelector('[data-out="occ"]');
+      occCell.textContent = occ != null ? `${fmt(occ, 1)}%` : "--";
+      occCell.title =
+        own === undefined
+          ? "Etapa da família: TC × demanda diária da família ÷ tempo disponível (= % do takt)"
+          : own == null
+            ? "Informe a demanda própria do produto na Cronoanálise (a demanda geral não é usada)"
+            : `TC × ${fmt(own, 0)} (demanda ${st.product === MIX_KEY ? "do mix" : "do produto"}) ÷ tempo disponível`;
+      occCell.classList.toggle("is-over", occ != null && occ > 100);
       tr.classList.toggle("row-error", s.errors.length > 0);
       tr.classList.toggle("row-over-takt", s.overTakt);
       tr.title = s.errors.concat(s.warnings).join(" • ") || (s.overTakt ? "TC acima do takt (gargalo)" : "");
     });
     renderLinkChecks(M.linkChecks(d, r, linkInfo));
+    renderResources(r);
     $("tc-total").textContent = r.tcTotal ? ft(r.tcTotal) : "--";
     $("ops-total").textContent = fmt(r.opsTotal, 2);
     renderGbo(r);
@@ -1143,6 +1166,52 @@
       : "Dias = quantidade em estoque ÷ demanda diária.";
 
     updateProductivity(r);
+  }
+
+  /** Ocupação dos recursos pelas macro-etapas dos estudos ligados às etapas (REV 1.13). */
+  function renderResources(r) {
+    const ids = [];
+    state.doc.steps.forEach((s) => s.studyId && !ids.includes(s.studyId) && ids.push(s.studyId));
+    const rows = [];
+    const notes = [];
+    ids.forEach((id) => {
+      const res = state.studyResults.get(id);
+      const occ = M.resourceOccupancy(res, { availDayMin: r.availDayMin, demandDaily: r.demandDaily });
+      if (!occ) return;
+      const study = state.studyDocs.get(id);
+      const label = (study && study.processName) || "Estudo";
+      occ.rows.forEach((x, i) =>
+        rows.push(
+          el("tr", { className: x.none ? "macro-none" : "" }, [
+            el("td", { className: "cell-text", textContent: i === 0 ? label : "" }),
+            el("td", { className: "cell-text", textContent: x.none ? "⚠ Sem macro-etapa" : x.name }),
+            el("td", {
+              className: "cell-text resource-parts",
+              textContent: x.parts.map((p) => `${p.product ? p.product + ": " : ""}${p.tp != null ? ft(p.tp) : "--"} × ${p.demand != null ? fmt(p.demand, 0) : "--"}`).join(" + "),
+            }),
+            el("td", { className: "cell-readonly mono", textContent: x.load != null ? fmt(x.load, 1) : "--" }),
+            el("td", { className: "cell-readonly mono", textContent: x.tcWeighted != null ? ft(x.tcWeighted) : "--" }),
+            el("td", { className: "cell-readonly mono" + (x.occupancyPct > 100 ? " is-over" : ""), textContent: x.occupancyPct != null ? `${fmt(x.occupancyPct, 1)}%` : "--" }),
+          ])
+        )
+      );
+      rows.push(
+        el("tr", { className: "resource-total" }, [
+          el("td", { className: "cell-text", textContent: "" }),
+          el("td", { className: "cell-text", textContent: `Total do operador${occ.matchesMix ? " (= carga do mix ✔)" : ""}` }),
+          el("td", { className: "cell-text", textContent: "" }),
+          el("td", { className: "cell-readonly mono", textContent: occ.loadTotal != null ? fmt(occ.loadTotal, 1) : "--" }),
+          el("td", { className: "cell-readonly mono", textContent: occ.tcWeightedTotal != null ? ft(occ.tcWeightedTotal) : "--" }),
+          el("td", { className: "cell-readonly mono", textContent: occ.occupancyTotal != null ? `${fmt(occ.occupancyTotal, 1)}%` : "--" }),
+        ])
+      );
+      occ.issues.forEach((t) => notes.push(`${label}: ${t}`));
+    });
+    if (!r.demandDaily) notes.push("Informe a demanda mensal e os dias úteis do MFV para o TC ponderado.");
+    $("resource-tbody").replaceChildren(...rows);
+    $("resource-issues").replaceChildren(...notes.map((t) => el("div", { textContent: `⚠ ${t}` })));
+    $("resource-issues").hidden = !notes.length;
+    $("resource-panel").hidden = !rows.length;
   }
 
   /** Avisos dos vínculos: contagem dupla, qualidade dos estudos e demanda da família. */
