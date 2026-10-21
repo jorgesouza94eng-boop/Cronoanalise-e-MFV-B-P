@@ -134,7 +134,8 @@ Num posto que faz vários produtos, o tempo é dividido entre eles. Por isso, o 
 
 | Coluna / total | Fórmula |
 |---|---|
-| Demanda (pçs/dia) | Demanda **própria** de cada produto. Vazio = demanda geral dos parâmetros |
+| Considerar no mix (REV 1.12) | Marcado por padrão. Desmarcado = o produto sai da carga, da ocupação, do takt misto e do TC ponderado (linha em cinza, "fora do mix"). O TP, o resumo e a capacidade dele continuam |
+| Demanda (pçs/dia) | Demanda **própria** de cada produto. Desde a REV 1.12, sem ela o produto **não herda** a demanda geral no mix (a demanda geral é a do posto e seria contada uma vez por produto) |
 | Carga (min/dia) | TP do produto × demanda |
 | % do tempo | Carga ÷ tempo líquido disponível |
 | Ocupação do posto | Σ cargas ÷ tempo líquido: 🟢 até 100% (atende o mix) · 🔴 acima de 100% (sobrecarga) |
@@ -143,7 +144,8 @@ Num posto que faz vários produtos, o tempo é dividido entre eles. Por isso, o 
 
 - Jornada, paradas e tolerância continuam **uma vez por estudo** (são do posto).
 - Com vários produtos, o cartão **Status / gargalo** mostra o resultado do mix ("ATENDE O MIX" ou "SOBRECARGA"). O cartão do takt mostra o takt do produto exibido (com a demanda dele) e o takt misto.
-- Produto sem demanda ou sem tempo padrão deixa o quadro **incompleto** (⚠), com a ocupação parcial.
+- Produto incluído sem demanda própria (ou sem tempo padrão) deixa o mix **incompleto**: carga, ocupação, takt misto e TC ponderado ficam em "--", com o aviso "informe a demanda ou desmarque 'Considerar no mix'".
+- Com produto fora do mix, aparece o aviso **"Mix parcial: ocupação do posto subestimada"** e o status ganha "(mix parcial)". Sem nenhum produto no mix: "Informe a demanda ou inclua um produto no mix".
 - O **TC ponderado** também pode ir para o MFV como a etapa "Posto • Mix (TC ponderado)".
 
 ### Filtros da grade e do resumo (REV 1.3)
@@ -207,6 +209,10 @@ Cada vídeo novo começa em 00:00, como as células amarelas de "Tempo (Início)
 3. **Toque no número da linha**, no celular.
 
 A linha marcada ganha uma faixa amarela e a etiqueta **F2**, **F3**, e assim por diante. O rodapé mostra o total de filmagens.
+
+#### Nome do vídeo de cada filmagem (REV 1.12)
+
+No bloco **Filmagens do estudo**, cada filmagem tem o campo **Vídeo** (nome do arquivo, opcional). Ele aparece na etiqueta F1, F2… ao passar o mouse, no filtro de filmagem, na coluna "Vídeo" do Excel simples e do CSV, e no JSON. Não entra em nenhum cálculo.
 
 #### Início da análise em cada filmagem (REV 1.3)
 
@@ -486,7 +492,7 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 143 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA e Yamazumi (Node 18+, sem dependências)
+npm test             # 154 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA e Yamazumi (Node 18+, sem dependências)
 npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.5 e Yamazumi (REV 1.9) — requer o servidor local
 ```
 

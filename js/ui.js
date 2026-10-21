@@ -90,6 +90,7 @@
       mixWeighted: $("mix-weighted"),
       mixLoad: $("mix-load"),
       mixOccupancy: $("mix-occupancy"),
+      mixIssues: $("mix-issues"),
       multiProduct: $("opt-multi-product"),
       thProduct: $("th-product"),
       colProduct: $("col-product"),
@@ -144,6 +145,8 @@
     els.filmsList.addEventListener("input", (e) => {
       const key = e.target.dataset && e.target.dataset.filmKey;
       if (key) h.onFilmPiecesChange(key, e.target.value);
+      const vkey = e.target.dataset && e.target.dataset.filmVideo;
+      if (vkey) h.onFilmVideoChange(vkey, e.target.value);
     });
     const commitStart = (input) => {
       const res = h.onFilmStartCommit(input.dataset.filmStart, input.value);
@@ -176,6 +179,11 @@
         const ok = h.onProductDemandChange(key, e.target.value);
         e.target.classList.toggle("input-invalid", !ok);
       }
+    });
+    // Considerar no mix (REV 1.12): produto fora da carga do posto
+    els.mixTbody.addEventListener("change", (e) => {
+      const key = e.target.dataset && e.target.dataset.mixInclude;
+      if (key != null) h.onProductInMixChange(key, e.target.checked);
     });
 
     // Cronoanálise → MFV
@@ -626,8 +634,10 @@
       filmTag.hidden = !showFilm;
       filmTag.textContent = showFilm ? `F${row.film}` : "";
       tr.classList.toggle("row-new-video", row.newVideo);
+      const vname = computed.filmList[row.film - 1] ? computed.filmList[row.film - 1].video : "";
+      filmTag.title = vname ? `Vídeo: ${vname}` : "";
       tr.querySelector(".btn-seq").title = row.newVideo
-        ? `Início da filmagem ${row.film}. Clique (ou Alt+N) para desmarcar.`
+        ? `Início da filmagem ${row.film}${vname ? ` (${vname})` : ""}. Clique (ou Alt+N) para desmarcar.`
         : "Marcar o início de uma nova filmagem (Alt+N)";
       tr.querySelector(".input-type").classList.toggle("is-acyclic", row.type === "A");
       tr.querySelector('[data-out="tsub"]').textContent = ft(row.subtractedTime);
@@ -682,43 +692,68 @@
           input.autocomplete = "off";
           input.dataset.mixDemand = i.key;
           input.setAttribute("aria-label", `Demanda diária de ${i.name}`);
-          const cells = ["cell-text", "", "cell-readonly mono", "cell-readonly mono", "cell-readonly mono"].map((c) => {
+          const check = document.createElement("input");
+          check.type = "checkbox";
+          check.className = "mix-include";
+          check.dataset.mixInclude = i.key;
+          check.setAttribute("aria-label", `Considerar ${i.name} no mix`);
+          const cells = ["cell-text", "cell-center", "", "cell-readonly mono", "cell-readonly mono", "cell-readonly mono"].map((c) => {
             const td = document.createElement("td");
             if (c) td.className = c;
             return td;
           });
-          cells[0].textContent = i.name;
-          cells[1].append(input);
+          cells[0].append(Object.assign(document.createElement("span"), { textContent: i.name }), Object.assign(document.createElement("span"), { className: "mix-out-tag", textContent: "fora do mix" }));
+          cells[1].append(check);
+          cells[2].append(input);
           tr.append(...cells);
           return tr;
         })
       );
     }
-    const general = lastComputed && lastComputed.products.find((p) => !p.demandOwn);
     Array.from(els.mixTbody.rows).forEach((tr, n) => {
       const i = mix.items[n];
       const p = computed.products[n];
       if (!i || !p) return;
-      const input = tr.querySelector("input");
+      const input = tr.querySelector(".mix-demand");
       if (document.activeElement !== input && input.value !== p.demandRaw) input.value = p.demandRaw;
-      input.placeholder = p.demandOwn ? "" : general && general.demand != null ? `geral: ${fmt(general.demand, 0)}` : "informe";
-      tr.cells[2].textContent = ft(i.tp);
-      tr.cells[3].textContent = i.load == null ? "--" : fmt(i.load, 1);
-      tr.cells[4].textContent = i.load == null || !(mix.netTime > 0) ? "--" : `${fmt((i.load / mix.netTime) * 100, 1)}%`;
-      tr.title = i.load == null ? (i.tp == null ? "Produto sem tempo padrão" : "Informe a demanda") : "";
+      // Sem demanda própria o produto não entra na carga (a demanda geral é a do posto, REV 1.12)
+      input.placeholder = !i.inMix ? "--" : p.demandOwn ? "" : "informe";
+      input.disabled = !i.inMix;
+      // Fora do mix a demanda não é usada: mostra "--" (o valor digitado fica guardado)
+      if (!i.inMix && document.activeElement !== input) input.value = "";
+      tr.querySelector(".mix-include").checked = i.inMix;
+      tr.classList.toggle("mix-out", !i.inMix);
+      tr.cells[3].textContent = ft(i.tp);
+      tr.cells[4].textContent = i.load == null ? "--" : fmt(i.load, 1);
+      tr.cells[5].textContent = i.load == null || !(mix.netTime > 0) ? "--" : `${fmt((i.load / mix.netTime) * 100, 1)}%`;
+      tr.title = !i.inMix
+        ? "Fora do mix: não entra na carga do posto (o tempo padrão e o resumo continuam)"
+        : i.load == null
+          ? i.demand == null
+            ? "Informe a demanda própria ou desmarque 'Considerar no mix'"
+            : "Produto sem tempo padrão"
+          : "";
     });
     els.mixDemand.textContent = mix.demand == null ? "--" : fmt(mix.demand, mix.demand % 1 ? 2 : 0);
     els.mixWeighted.textContent = mix.weightedTP == null ? "--" : `${ft(mix.weightedTP)} (ponderado)`;
     els.mixLoad.textContent = mix.load == null ? "--" : fmt(mix.load, 1);
-    els.mixOccupancy.textContent = mix.occupancyPct == null ? "--" : `${mix.status === "sobrecarga" ? "🔴" : mix.status === "atende" ? "🟢" : "⚠"} ${fmt(mix.occupancyPct, 1)}%`;
+    els.mixOccupancy.textContent = mix.occupancyPct == null ? "--" : `${mix.status === "sobrecarga" ? "🔴" : mix.status === "atende" ? "🟢" : "⚠"} ${fmt(mix.occupancyPct, 1)}%${mix.partial ? " (parcial)" : ""}`;
     els.mixOccupancy.classList.toggle("is-over", mix.status === "sobrecarga");
     els.mixOccupancy.classList.toggle("is-ok", mix.status === "atende");
     const u = Calc.TIME_UNITS[unit].label;
     const base = `Tempo líquido: ${fmt(mix.netTime, 1)} min/dia` + (mix.taktMix != null ? ` • Takt misto = ${ft(mix.taktMix)} ${u}/pç (tempo líquido ÷ Σ demandas)` : "");
-    els.mixHint.textContent =
-      mix.status === "incompleto"
-        ? `${base} • ⚠ ${mix.missing} produto(s) sem demanda ou sem tempo padrão: ocupação parcial.`
-        : `${base} • ${mix.status === "sobrecarga" ? "O posto NÃO atende o mix (ocupação acima de 100%)." : "O posto atende o mix."}`;
+    const partial = mix.partial ? " (mix parcial)" : "";
+    els.mixHint.textContent = {
+      vazio: `${base} • Nenhum produto no mix.`,
+      incompleto: `${base} • Mix incompleto: indicadores do posto em "--".`,
+      sobrecarga: `${base} • O posto NÃO atende o mix (ocupação acima de 100%)${partial}.`,
+      atende: `${base} • O posto atende o mix${partial}.`,
+    }[mix.status];
+    // Avisos: demanda ausente, mix parcial, nenhum produto no mix
+    const notes = mix.issues.slice();
+    if (mix.items.some((i) => i.inMix && !i.demandOwn)) notes.push("Desde a REV 1.12 a demanda geral não é repetida em cada produto (contava a demanda do posto uma vez por produto).");
+    els.mixIssues.replaceChildren(...notes.map((t) => Object.assign(document.createElement("div"), { textContent: `⚠ ${t}` })));
+    els.mixIssues.hidden = !notes.length;
   }
 
   /** Lista de produtos: autocompletar, seletor do resumo e filtro. */
@@ -745,7 +780,7 @@
     if (multi) els.summaryProduct.value = computed.product.key;
     options(els.fltProduct, computed.multiProduct ? computed.products : [], [["", "Produto: todos"]]);
     filter.product = els.fltProduct.value;
-    const films = [["", "Filmagem: todas"]].concat(computed.filmList.map((f) => [String(f.film), `F${f.film}`]));
+    const films = [["", "Filmagem: todas"]].concat(computed.filmList.map((f) => [String(f.film), f.video ? `F${f.film} — ${f.video}` : `F${f.film}`]));
     const curFilms = Array.from(els.fltFilm.options).map((o) => [o.value, o.textContent]);
     if (JSON.stringify(curFilms) !== JSON.stringify(films)) {
       const keep = els.fltFilm.value;
@@ -933,7 +968,17 @@
           start.placeholder = "00:00";
           start.dataset.filmStart = f.key;
           start.setAttribute("aria-label", `Início da análise na filmagem ${f.film}`);
-          box.append(tag, lbl, start);
+          const vlbl = document.createElement("span");
+          vlbl.className = "film-label";
+          vlbl.textContent = "Vídeo";
+          const video = document.createElement("input");
+          video.type = "text";
+          video.className = "input-cell film-video";
+          video.autocomplete = "off";
+          video.placeholder = "nome do arquivo";
+          video.dataset.filmVideo = f.key;
+          video.setAttribute("aria-label", `Nome do vídeo da filmagem ${f.film}`);
+          box.append(tag, vlbl, video, lbl, start);
           if (qty) {
             f.segments.forEach((sg) => {
               const wrap = document.createElement("span");
@@ -970,6 +1015,9 @@
         start.classList.toggle("input-invalid", !!f.startError);
       }
       start.title = f.startError || `Instante do vídeo em que a análise começa (linha ${f.startSeq}). Vazio = 00:00`;
+      const video = box.querySelector(".film-video");
+      if (document.activeElement !== video && video.value !== f.video) video.value = f.video;
+      video.title = f.video || "Nome do arquivo de vídeo desta filmagem (opcional, só para identificação)";
       const perPiece = [];
       box.querySelectorAll(".film-pieces").forEach((input) => {
         const x = seg.get(input.dataset.filmKey);
@@ -1088,11 +1136,13 @@
     const errNote = computed.errorCount ? ` • ⚠ ${computed.errorCount} linha(s) com erro` : "";
     // Vários produtos: o gargalo do posto é avaliado pela carga do mix (o tempo é dividido)
     const mix = computed.mix;
-    if (mix && mix.status !== "incompleto") {
+    if (mix && (mix.status === "atende" || mix.status === "sobrecarga")) {
       const over = mix.status === "sobrecarga";
       els.kpiCard.classList.add(over ? "is-bottleneck" : "is-balanced");
-      els.kpiStatus.textContent = over ? "SOBRECARGA" : "ATENDE O MIX";
-      els.kpiDetail.textContent = `Ocupação do posto: ${fmt(mix.occupancyPct, 1)}% (${computed.products.length} produtos)` + errNote;
+      els.kpiStatus.textContent = (over ? "SOBRECARGA" : "ATENDE O MIX") + (mix.partial ? " (mix parcial)" : "");
+      const inMix = mix.items.filter((i) => i.inMix).length;
+      els.kpiDetail.textContent =
+        `Ocupação do posto: ${fmt(mix.occupancyPct, 1)}% (${inMix} de ${computed.products.length} produtos no mix)` + errNote;
       if (k.taktTime != null) els.kpiTaktSec.textContent = `Takt de ${computed.product.name}${computed.product.demandOwn ? "" : " (demanda geral)"} • misto: ${Calc.formatTime(mix.taktMix, unit, kd)} ${u}`;
       return;
     }

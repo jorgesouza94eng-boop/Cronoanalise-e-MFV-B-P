@@ -210,6 +210,26 @@
       return valid;
     },
 
+    /** Considerar no mix (REV 1.12): false = produto fora da carga do posto. */
+    onProductInMixChange(key, included) {
+      if (!state.study) return;
+      const map = state.study.produtoNoMix || (state.study.produtoNoMix = {});
+      if (included) delete map[key];
+      else map[key] = false;
+      markChanged();
+    },
+
+    /** Nome do vídeo de uma filmagem (texto livre, só identificação). */
+    onFilmVideoChange(key, raw) {
+      if (!state.study) return;
+      const map = state.study.filmVideos || (state.study.filmVideos = {});
+      const value = String(raw == null ? "" : raw).trim();
+      if ((map[key] || "") === value) return;
+      if (value) map[key] = value;
+      else delete map[key];
+      markChanged();
+    },
+
     /** Grava o estudo e abre o MFV da mesma empresa com este estudo (e o produto do resumo). */
     async onGoToMfv() {
       if (!state.study) return;

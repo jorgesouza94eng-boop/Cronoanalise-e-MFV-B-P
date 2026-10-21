@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.12** | 21/10/2026 | "Considerar no mix" por produto, demanda geral não repetida no mix e nome do vídeo por filmagem |
 | **REV 1.11** | 21/10/2026 | Conferência dos vínculos do MFV (contagem dupla, mix, avisos e demanda) |
 | **REV 1.10** | 20/10/2026 | Sair da janela inicial sem abrir um documento |
 | **REV 1.9** | 20/10/2026 | Yamazumi (grupos de estudos), grupo Posto no MFV e comparação T1 × T3 |
@@ -16,6 +17,44 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.12 — 21/10/2026 (considerar no mix e nome do vídeo)
+
+### Novidades
+- **"Considerar no mix"** por produto, no quadro **Carga do posto**. Vem marcado por padrão.
+  - O produto desmarcado sai da carga, da ocupação, do takt misto e do TC ponderado.
+  - Ele continua com TP, resumo, gráficos, capacidade e takt próprios.
+  - A linha fica em cinza, com a etiqueta "fora do mix" e "--" em demanda, carga e % do tempo.
+- **Avisos do mix:**
+  - "Mix parcial: ocupação do posto subestimada, produto(s) X fora da carga". O status ganha "(mix parcial)";
+  - "Informe a demanda ou inclua um produto no mix" quando nenhum produto está incluído.
+- **Nome do vídeo** por filmagem, no bloco "Filmagens do estudo". Aparece:
+  - na etiqueta F1, F2… e no filtro de filmagem;
+  - na coluna "Vídeo" do Excel simples e do CSV;
+  - no JSON.
+- **MFV:**
+  - a opção "Mix (TC ponderado)" usa só os produtos incluídos;
+  - o produto fora do mix continua selecionável, com o aviso "produto fora do mix na Cronoanálise";
+  - a etapa Mix avisa quando o mix é parcial;
+  - uma etapa Mix cujo mix ficou incompleto mantém o último TC e avisa.
+- **Exportações:** coluna "Considerar no mix" no Excel simples e no CSV; `considerarNoMix` por produto e a nota de mix parcial no resumo do JSON.
+- **Revisão no cabeçalho** das três páginas (REV 1.12). Se não aparecer, recarregue com Ctrl+F5.
+
+### Mudança de regra (decisão D1 do consultor)
+- Com vários produtos, o produto **sem demanda própria não herda mais a demanda geral** no mix. A demanda geral é a do posto e, repetida em cada produto, contava a demanda uma vez por produto (exemplo: 594/dia virava 1.188/dia com 2 produtos).
+- Sem demanda própria, carga, ocupação, takt misto e TC ponderado ficam em "--", com o aviso "informe a demanda ou desmarque 'Considerar no mix'".
+- **Estudos já salvos afetados:** só os com vários produtos e sem a demanda de algum produto. O quadro do mix passa a "--", e o TP, o resumo e o takt de cada produto não mudam. A tela explica a mudança.
+
+### Sem mudança
+- Estudos de um produto só; estudos com a demanda de todos os produtos; Yamazumi (não usa o mix); modelo B+P da cronoanálise (um arquivo por produto).
+
+### Compatibilidade
+- Estudo no formato versão 5. Arquivos anteriores abrem com todos os produtos no mix e sem nome de vídeo.
+
+### Testes
+- 154 testes de unidade (11 novos em `tests/mix-rev112.test.js`, incluindo T1 a T7 e o rótulo da revisão). Novo teste de navegador `tests/e2e.rev112.js`. Os testes da REV 1.4 e 1.11 foram ajustados à decisão D1.
 
 ---
 

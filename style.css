@@ -1473,3 +1473,12 @@ body.no-doc .app-workspace, body.no-doc .client-context { display: none !importa
 .form-warning { color: var(--status-danger-text); font-weight: 600; }
 .study-check-order { min-width: 22px; font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--primary-700); }
 .study-check-warn { color: var(--status-warn-text); cursor: help; }
+
+/* Considerar no mix e nome do vídeo (REV 1.12) */
+.mix-table tr.mix-out td { color: var(--text-muted); background: var(--bg-subtle); }
+.mix-table .mix-out-tag { display: none; margin-left: 8px; font-size: 11px; font-weight: 700; color: var(--text-muted); border: 1px solid var(--slate-300); border-radius: 10px; padding: 0 6px; }
+.mix-table tr.mix-out .mix-out-tag { display: inline-block; }
+.mix-table .mix-demand:disabled { background: var(--bg-subtle); color: var(--text-muted); }
+.mix-issues { display: flex; flex-direction: column; gap: 2px; margin: 6px 0; font-size: 12px; color: var(--status-warn-text); }
+.film-box .film-video { width: 150px; }
+.app-rev { margin-left: 6px; font-size: 11px; color: var(--text-on-dark-muted); align-self: center; }

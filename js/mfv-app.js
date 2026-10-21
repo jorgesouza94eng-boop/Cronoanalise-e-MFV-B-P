@@ -326,10 +326,12 @@
         tcMin: tc(r.kpis),
         warnings: q0.warnings,
         demand: q0.demand,
+        // Mix sem TC (incompleto ou sem produto no mix): a etapa Mix já existente mantém o último TC e avisa
+        mixProblem: r.mix && r.mix.weightedTP == null ? r.mix.issues[0] || "mix incompleto" : "",
         products: r.multiProduct
           ? r.products
               .map((p) => Object.assign({ key: p.key, name: p.name, tcMin: tc(p.kpis) }, quality(p.key)))
-              .concat(r.mix && r.mix.status !== "incompleto" ? [Object.assign({ key: MIX_KEY, name: "Mix (TC ponderado)", tcMin: r.mix.weightedTP }, quality(MIX_KEY))] : [])
+              .concat(r.mix && r.mix.weightedTP != null ? [Object.assign({ key: MIX_KEY, name: "Mix (TC ponderado)", tcMin: r.mix.weightedTP }, quality(MIX_KEY))] : [])
           : [],
       });
     };
@@ -400,6 +402,10 @@
     }
     if (!step.studyId) return null;
     const st = findStudy(step);
+    if (!st && step.studyProduct === MIX_KEY) {
+      const any = state.studies.find((x) => x.id === step.studyId);
+      if (any && any.mixProblem) return { warnings: [`mix incompleto na Cronoanálise (${any.mixProblem}); TC mantido do último cálculo`], demand: null };
+    }
     return st ? { warnings: st.warnings || [], demand: st.demand } : null;
   }
 

@@ -55,7 +55,8 @@ function prensa() {
 
   // ---- 1. Demanda por produto e carga do posto
   check(await p.isVisible("#mix-panel"), "quadro 'Carga do posto' com vários produtos");
-  check(await txt("#mix-occupancy") === "🟢 21,5%", "sem demanda própria: demanda geral 100/dia → (20 + 83,3) ÷ 480 = 21,5%");
+  // REV 1.12 (D1): sem demanda própria o produto não herda a demanda geral no mix
+  check(await txt("#mix-occupancy") === "--" && (await txt("#mix-issues")).includes("sem demanda própria"), "sem demanda própria: mix em '--' com aviso (REV 1.12)");
   await p.fill("#mix-tbody tr:nth-child(1) .mix-demand", "600");
   await p.fill("#mix-tbody tr:nth-child(2) .mix-demand", "300");
   check(await txt("#mix-load") === "370,0" && (await txt("#mix-occupancy")) === "🟢 77,1%", "carga = 0,2×600 + 0,833×300 = 370 min (77,1% de 480)");

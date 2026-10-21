@@ -23,7 +23,7 @@ function study(processName, elements, extra) {
 const STUDIES = [
   study("Corte", [{ description: "Cortar", videoTime: "30" }]),
   study("Solda", [{ description: "Soldar", videoTime: "52" }, { description: "Buscar arame", type: "A", videoTime: "1:10" }]),
-  study("Forno", [{ product: "Pão", description: "Moldar", videoTime: "10" }, { product: "Rosca", description: "Rechear", videoTime: "40" }]),
+  study("Forno", [{ product: "Pão", description: "Moldar", videoTime: "10" }, { product: "Rosca", description: "Rechear", videoTime: "40" }], { productDemand: { "pão": "640", rosca: "640" } }),
 ];
 
 (async () => {
@@ -75,7 +75,7 @@ const STUDIES = [
   // ---- Avisos das etapas
   const warn = await txt("#steps-warnings");
   check(warn.includes("1. Solda") && warn.includes("tipo A"), "etapa 1 (Solda): aviso de acíclico sem peças");
-  check(warn.includes("2. Forno • Mix") && warn.includes("pesos iguais"), "etapa 2 (Mix): aviso de pesos iguais");
+  check(!warn.includes("2. Forno • Mix (TC ponderado):"), "etapa 2 (Mix completo, com demanda por produto): sem aviso");
   check(!warn.includes("Demanda diária do MFV"), "sem demanda no MFV: nenhum aviso de demanda");
   await p.fill("#demand-monthly", String(640 * 22));
   await p.fill("#work-days", "22");

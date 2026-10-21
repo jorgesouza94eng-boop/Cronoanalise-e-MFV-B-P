@@ -95,7 +95,7 @@ test("Excel simples: filtro automático nos cabeçalhos da GERAL e da Listagem (
   const s = C.createStudy({ clientName: "A", processName: "B" });
   s.elements = [C.createElement({ description: "x", videoTime: "10" }), C.createElement({ description: "y", videoTime: "30" })];
   const sheets = X.buildBPSheets(s);
-  assert.equal(sheets[0].autoFilter, "A6:O8");
+  assert.equal(sheets[0].autoFilter, "A6:P8");
   assert.equal(sheets[1].autoFilter, "A7:L9");
 });
 
@@ -109,14 +109,14 @@ test("Excel simples e CSV com vários produtos: coluna Produto e indicadores por
   const geral = sheets[0].rows;
   assert.equal(geral[5][1].v, "Produto");
   assert.equal(geral[6][1].v, "P1");
-  assert.equal(sheets[0].autoFilter, "A6:P8");
+  assert.equal(sheets[0].autoFilter, "A6:Q8");
   const list = sheets[1].rows.filter((r) => r && r[1] && (r[1].v === "P1" || r[1].v === "P2"));
   assert.equal(list.length, 2, "a listagem traz os dois produtos");
   const analise = sheets[3].rows.map((r) => (r && r[0] ? r[0].v : ""));
   assert.ok(analise.includes("Por produto"));
   const csv = C.buildCSV(s);
-  assert.match(csv, /Nº;Filmagem;Produto;Elemento/);
-  assert.match(csv, /\n1;1;"P1";"x"/);
+  assert.match(csv, /Nº;Filmagem;Vídeo;Produto;Elemento/);
+  assert.match(csv, /\n1;1;"";"P1";"x"/);
   assert.match(csv, /Produto;Tempo normal do ciclo/);
 });
 
@@ -127,7 +127,11 @@ test("Excel simples e CSV: carga do posto (mix) com demanda por produto (REV 1.4
     C.createElement({ product: "P1", description: "x", videoTime: "12" }),
     C.createElement({ product: "P2", description: "y", videoTime: "42" }),
   ];
+  // REV 1.12: sem demanda própria, P1 não herda a demanda geral no mix (mix incompleto)
   s.productDemand = { [C.elementKey("P2")]: "300" };
+  const incompleto = X.buildBPSheets(s)[3].rows.find((r) => r && r[0] && r[0].v === "Ocupação do posto");
+  assert.equal(incompleto[1].v, "");
+  s.productDemand[C.elementKey("P1")] = "100";
   const analise = X.buildBPSheets(s)[3].rows.map((r) => (r && r[0] ? r[0].v : ""));
   assert.ok(analise.includes("Carga do posto (mix)"));
   const occ = X.buildBPSheets(s)[3].rows.find((r) => r && r[0] && r[0].v === "Ocupação do posto");

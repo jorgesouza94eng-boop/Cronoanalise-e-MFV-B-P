@@ -19,7 +19,7 @@
         <h1>Cronoanálise &amp; MFV</h1>
         <nav class="app-nav" aria-label="Módulos">
           <a href="index.html" aria-current="page">Cronoanálise</a><a href="mfv.html">MFV</a><a href="yamazumi.html">Yamazumi</a>
-        </nav>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.12</span></nav>
       </div>
     </div>
 
@@ -314,12 +314,14 @@
           <strong>Carga do posto (mix de produtos)</strong>
           <span class="form-hint" id="mix-hint"></span>
         </div>
+        <div class="mix-issues" id="mix-issues" role="status" hidden></div>
         <div class="table-container">
           <table class="chrono-table mix-table">
             <thead>
               <tr>
                 <th scope="col">Produto</th>
-                <th scope="col" title="Vazio = demanda geral dos parâmetros">Demanda (pçs/dia)</th>
+                <th scope="col" title="Desmarque para deixar o produto fora da carga do posto (o tempo padrão, o resumo e a capacidade dele continuam)">Considerar no mix</th>
+                <th scope="col" title="Demanda diária própria do produto. Sem ela, o produto não entra na carga (a demanda geral é a do posto)">Demanda (pçs/dia)</th>
                 <th scope="col">TP (<span class="unit-label">min</span>/pç)</th>
                 <th scope="col" title="TP × demanda">Carga (min/dia)</th>
                 <th scope="col" title="Carga ÷ tempo líquido disponível">% do tempo</th>
@@ -329,6 +331,7 @@
             <tfoot>
               <tr>
                 <td class="tfoot-label">Total</td>
+                <td></td>
                 <td class="cell-total mono" id="mix-demand">--</td>
                 <td class="cell-total mono" id="mix-weighted" title="TC ponderado pelo mix = Σ (TP × demanda) ÷ Σ demandas">--</td>
                 <td class="cell-total mono" id="mix-load">--</td>

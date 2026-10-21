@@ -17,7 +17,7 @@
   "use strict";
 
   const SCHEMA_ID = "lean-chrono-estudo";
-  const SCHEMA_VERSION = 4; // v2: peças por filmagem • v3: início por filmagem e produto • v4: demanda por produto
+  const SCHEMA_VERSION = 5; // v2: peças por filmagem • v3: início por filmagem e produto • v4: demanda por produto • v5: produto no mix e nome do vídeo
 
   /** Faixa aceita para o fator de ritmo (%). */
   const PACE_MIN = 50;
@@ -247,13 +247,15 @@
     const multi = elements.some((e) => String(e.product || "").trim());
     const starts = (study && study.filmStarts) || {};
     const demands = (study && study.productDemand) || {};
+    const inMix = (study && study.produtoNoMix) || {}; // { chave: false } = fora da carga do posto
+    const videos = (study && study.filmVideos) || {}; // { chave da filmagem: nome do vídeo }
     const start = parseTimeInput(study && study.videoStart);
     let previous = start.minutes != null ? start.minutes : 0;
     let film = 1;
     // Filmagens: chave estável = "inicio" (1ª) ou id da linha que marca a nova filmagem.
     // Início da 1ª = Leitura inicial; das demais = study.filmStarts[id] (vazio = 00:00).
     const films = [
-      { film: 1, key: FIRST_FILM_KEY, startSeq: 1, startRaw: String((study && study.videoStart) || ""), start: start.minutes || 0, startError: start.error, observed: 0 },
+      { film: 1, key: FIRST_FILM_KEY, startSeq: 1, startRaw: String((study && study.videoStart) || ""), start: start.minutes || 0, startError: start.error, observed: 0, video: String(videos[FIRST_FILM_KEY] || "") },
     ];
 
     let sumSubtracted = 0;
@@ -269,7 +271,7 @@
         const raw = String(starts[el.id] == null ? "" : starts[el.id]).trim();
         const st = parseTimeInput(raw);
         previous = st.minutes != null ? st.minutes : 0;
-        films.push({ film, key: el.id, startSeq: index + 1, startRaw: raw, start: previous, startError: st.error, observed: 0 });
+        films.push({ film, key: el.id, startSeq: index + 1, startRaw: raw, start: previous, startError: st.error, observed: 0, video: String(videos[el.id] || "") });
       }
       const time = parseTimeInput(el.videoTime);
       const freq = parseFrequency(el.frequency);
@@ -376,6 +378,7 @@
         demand: toFiniteOrNull(pParams.dailyDemandPcs),
         demandRaw: multi && demands[p.key] != null ? String(demands[p.key]) : "",
         demandOwn: own != null,
+        inMix: !multi || inMix[p.key] !== false,
         kpis: computeKpis(pParams, summary.cycleNormal),
       });
     });
@@ -405,35 +408,57 @@
 
   /**
    * Carga do posto com vários produtos (o posto divide o tempo entre eles):
-   *  - Carga do produto = TP × demanda diária (min/dia).
+   *  - Carga do produto = TP × demanda diária PRÓPRIA do produto (min/dia).
    *  - Ocupação = Σ cargas ÷ tempo líquido disponível. Acima de 100% o posto não atende o mix.
    *  - Takt misto = tempo líquido ÷ Σ demandas.
    *  - TC ponderado pelo mix = Σ (TP × demanda) ÷ Σ demandas.
-   * Produto sem TP ou sem demanda fica fora dos totais e deixa o status "incompleto".
-   * status: "atende" | "sobrecarga" | "incompleto"
+   * Só entram os produtos com "Considerar no mix" marcado (REV 1.12). Desde a REV 1.12 o produto
+   * sem demanda própria NÃO herda a demanda geral no mix: a demanda geral é a do posto e seria
+   * contada uma vez por produto. Produto incluído sem demanda própria (ou sem TP) deixa o mix
+   * "incompleto", com os indicadores em "--" (o app não estima a demanda ausente).
+   * status: "atende" | "sobrecarga" | "incompleto" | "vazio" (nenhum produto no mix)
+   * partial: há produto fora do mix (ocupação subestimada).
    */
   function computeMix(products, netTime) {
     const items = products.map((p) => {
       const tp = p.kpis.standardTime > EPS ? p.kpis.standardTime : null;
-      const demand = p.demand > 0 ? p.demand : null;
-      return { key: p.key, name: p.name, tp, demand, demandOwn: p.demandOwn, load: tp != null && demand != null ? tp * demand : null };
+      const included = p.inMix !== false;
+      const demand = included && p.demandOwn && p.demand > 0 ? p.demand : null;
+      return { key: p.key, name: p.name, tp, demand, demandOwn: p.demandOwn, inMix: included, load: tp != null && demand != null ? tp * demand : null };
     });
-    const ok = items.filter((i) => i.load != null);
-    const load = ok.reduce((a, i) => a + i.load, 0);
-    const demand = ok.reduce((a, i) => a + i.demand, 0);
-    const missing = items.length - ok.length;
-    const occupancyPct = netTime > 0 && ok.length ? (load / netTime) * 100 : null;
-    let status = "incompleto";
-    if (!missing && occupancyPct != null) status = occupancyPct > 100 + EPS ? "sobrecarga" : "atende";
+    const included = items.filter((i) => i.inMix);
+    const excluded = items.filter((i) => !i.inMix);
+    const noDemand = included.filter((i) => i.demand == null);
+    const noTp = included.filter((i) => i.demand != null && i.tp == null);
+    const missing = noDemand.length + noTp.length;
+    const names = (list) => list.map((i) => i.name).join(", ");
+    const issues = [];
+    let status;
+    if (!included.length) {
+      status = "vazio";
+      issues.push("Informe a demanda ou inclua um produto no mix");
+    } else {
+      if (noDemand.length) issues.push(`${noDemand.length > 1 ? "Produtos" : "Produto"} ${names(noDemand)} sem demanda própria: informe a demanda ou desmarque "Considerar no mix"`);
+      if (noTp.length) issues.push(`${noTp.length > 1 ? "Produtos" : "Produto"} ${names(noTp)} sem tempo padrão`);
+    }
+    if (excluded.length && included.length) issues.push(`Mix parcial: ocupação do posto subestimada, ${excluded.length > 1 ? "produtos" : "produto"} ${names(excluded)} fora da carga`);
+    const complete = included.length > 0 && !missing;
+    const load = complete ? included.reduce((a, i) => a + i.load, 0) : null;
+    const demand = complete ? included.reduce((a, i) => a + i.demand, 0) : null;
+    const occupancyPct = complete && netTime > 0 ? (load / netTime) * 100 : null;
+    if (status !== "vazio") status = !complete || occupancyPct == null ? "incompleto" : occupancyPct > 100 + EPS ? "sobrecarga" : "atende";
     return {
       items,
       netTime,
-      load: ok.length ? load : null,
-      demand: ok.length ? demand : null,
+      load,
+      demand,
       occupancyPct,
-      taktMix: netTime > 0 && demand > 0 ? netTime / demand : null,
-      weightedTP: demand > 0 ? load / demand : null,
+      taktMix: complete && netTime > 0 && demand > 0 ? netTime / demand : null,
+      weightedTP: complete && demand > 0 ? load / demand : null,
       missing,
+      excluded: excluded.map((i) => i.name),
+      partial: excluded.length > 0 && included.length > 0,
+      issues,
       status,
     };
   }
@@ -764,6 +789,8 @@
       filmStarts: {},
       filmPieces: {},
       productDemand: {},
+      produtoNoMix: {},
+      filmVideos: {},
       notes: "",
       // Novos estudos seguem a planilha REV2: lançamento por quantidade e tempos em segundos.
       settings: Object.assign({ entryMode: "quantidade", timeUnit: "s" }, o.settings || {}),
@@ -822,6 +849,8 @@
       videoStart: str(raw.videoStart),
       filmStarts: normalizeFilmPieces(raw.filmStarts),
       productDemand: normalizeFilmPieces(raw.productDemand),
+      produtoNoMix: normalizeInMix(raw.produtoNoMix), // ausente = todos no mix (REV 1.11 e anteriores)
+      filmVideos: normalizeFilmPieces(raw.filmVideos),
       filmPieces: normalizeFilmPieces(raw.filmPieces),
       notes: str(raw.notes),
       // Arquivos anteriores a esta versão não têm "settings": mantêm frequência e minutos.
@@ -861,6 +890,16 @@
     return { ok: true, study };
   }
 
+  /** Só "false" é guardado: o produto fora da carga do posto. */
+  function normalizeInMix(raw) {
+    const out = {};
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+    Object.keys(raw).forEach((k) => {
+      if (raw[k] === false) out[k] = false;
+    });
+    return out;
+  }
+
   function normalizeFilmPieces(raw) {
     const out = {};
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
@@ -893,6 +932,7 @@
         filmCount: r.filmCount,
         films: r.filmList.map((f) => ({
           film: f.film,
+          video: f.video || "",
           startMin: round(f.start, 4),
           observedTimeMin: round(f.observed, 4),
           segments: f.segments.map((sg) => {
@@ -908,6 +948,7 @@
               capacityPcsDay: p.kpis.capacity,
               status: p.kpis.status,
               demandPcsDay: p.demand,
+              considerarNoMix: p.inMix,
               acyclicTime: p.summary.acyclic,
               elements: p.summary.elements.length,
             }))
@@ -921,7 +962,16 @@
               taktMixMin: round(r.mix.taktMix, 4),
               weightedStandardTimeMin: round(r.mix.weightedTP, 4),
               status: r.mix.status,
-              products: r.mix.items.map((i) => ({ product: i.name, demandPcsDay: i.demand, standardTimeMin: round(i.tp, 4), loadMin: round(i.load, 4) })),
+              partial: r.mix.partial,
+              note: r.mix.partial ? `Mix parcial: ${r.mix.excluded.join(", ")} fora da carga (ocupação subestimada)` : "",
+              issues: r.mix.issues,
+              products: r.mix.items.map((i) => ({
+                product: i.name,
+                considerarNoMix: i.inMix,
+                demandPcsDay: i.demand,
+                standardTimeMin: round(i.tp, 4),
+                loadMin: round(i.load, 4),
+              })),
             }
           : undefined,
         acyclicTime: r.summary.acyclic,
@@ -964,6 +1014,8 @@
      EXPORTAÇÃO CSV (EXCEL pt-BR: separador ";" e vírgula decimal)
      ========================================================================== */
 
+  const MIX_STATUS = { atende: "Atende o mix", sobrecarga: "Sobrecarga", incompleto: "Incompleto", vazio: "Nenhum produto no mix" };
+
   const STATUS_LABELS = {
     "parametros-invalidos": "Parâmetros inválidos",
     aguardando: "Aguardando apontamentos",
@@ -993,6 +1045,7 @@
       [
         "Nº",
         "Filmagem",
+        "Vídeo",
         ...P("Produto"),
         "Elemento",
         "Tipo",
@@ -1015,6 +1068,7 @@
         [
           row.seq,
           row.film,
+          q(r.filmList[row.film - 1].video),
           ...P(q(row.product || "(sem produto)")),
           q(el.description),
           row.type === "A" ? "Acíclico" : "Cíclico",
@@ -1072,9 +1126,9 @@
     lines.push(["Status", q(STATUS_LABELS[k.status])].join(";"));
     if (multi) {
       lines.push("");
-      lines.push(["Produto", `Tempo normal do ciclo (${u})`, `Tempo padrão (${u}/pç)`, "Demanda (pçs/dia)", "Carga (min/dia)"].join(";"));
+      lines.push(["Produto", `Tempo normal do ciclo (${u})`, `Tempo padrão (${u}/pç)`, "Considerar no mix", "Demanda no mix (pçs/dia)", "Carga (min/dia)"].join(";"));
       r.products.forEach((pr, i) =>
-        lines.push([q(pr.name), nt(pr.kpis.sumNormal), nt(pr.kpis.standardTime), n4(pr.demand), n4(r.mix.items[i].load)].join(";"))
+        lines.push([q(pr.name), nt(pr.kpis.sumNormal), nt(pr.kpis.standardTime), pr.inMix ? "Sim" : "Não", n4(r.mix.items[i].demand), n4(r.mix.items[i].load)].join(";"))
       );
       lines.push("");
       lines.push("CARGA DO POSTO (MIX)");
@@ -1082,7 +1136,8 @@
       lines.push(["Ocupação do posto (%)", r.mix.occupancyPct == null ? "" : formatNumber(r.mix.occupancyPct, 1)].join(";"));
       lines.push([`Takt misto (${u}/pç)`, nt(r.mix.taktMix)].join(";"));
       lines.push([`TC ponderado pelo mix (${u}/pç)`, nt(r.mix.weightedTP)].join(";"));
-      lines.push(["Status do mix", q({ atende: "Atende o mix", sobrecarga: "Sobrecarga", incompleto: "Incompleto" }[r.mix.status])].join(";"));
+      lines.push(["Status do mix", q(MIX_STATUS[r.mix.status] + (r.mix.partial ? " (mix parcial)" : ""))].join(";"));
+      r.mix.issues.forEach((t) => lines.push(["Aviso", q(t)].join(";")));
     }
     return "\uFEFF" + lines.join("\r\n");
   }
@@ -1125,6 +1180,7 @@
     PACE_MIN,
     PACE_MAX,
     STATUS_LABELS,
+    MIX_STATUS,
     VALUES,
     WASTES,
     TIME_UNITS,

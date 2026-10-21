@@ -20,16 +20,21 @@ function twoProducts(demands) {
   return s;
 }
 
-test("studyQuality: mix sem demanda por produto avisa pesos iguais", () => {
-  const r = C.computeStudy(twoProducts());
-  const q = M.studyQuality(r, M.MIX_KEY);
-  assert.ok(q.warnings.some((w) => /pesos iguais/.test(w)));
-  assert.equal(q.demand, 200, "Σ demandas do mix (100 + 100)");
-  const q2 = M.studyQuality(C.computeStudy(twoProducts({ a: "900" })), M.MIX_KEY);
-  assert.ok(q2.warnings.some((w) => /B sem demanda própria/.test(w)));
-  const q3 = M.studyQuality(C.computeStudy(twoProducts({ a: "900", b: "100" })), M.MIX_KEY);
-  assert.deepEqual(q3.warnings, []);
-  assert.equal(q3.demand, 1000);
+test("studyQuality: mix parcial e produto fora do mix (REV 1.12)", () => {
+  const s = twoProducts({ a: "900", b: "100" });
+  let r = C.computeStudy(s);
+  let q = M.studyQuality(r, M.MIX_KEY);
+  assert.deepEqual(q.warnings, []);
+  assert.equal(q.demand, 1000);
+  s.produtoNoMix = { b: false };
+  r = C.computeStudy(s);
+  q = M.studyQuality(r, M.MIX_KEY);
+  assert.ok(q.warnings.some((w) => /mix parcial: B fora da carga/.test(w)));
+  assert.equal(q.demand, 900, "só A no mix");
+  assert.ok(M.studyQuality(r, "b").warnings.includes("produto fora do mix na Cronoanálise"));
+  assert.deepEqual(M.studyQuality(r, "a").warnings, [], "produto incluído: sem aviso");
+  // Sem demanda própria: o mix fica sem TC (não herda a demanda geral)
+  assert.equal(C.computeStudy(twoProducts()).mix.weightedTP, null);
 });
 
 test("studyQuality: acíclico sem peças, elemento sem classe e linha com erro", () => {

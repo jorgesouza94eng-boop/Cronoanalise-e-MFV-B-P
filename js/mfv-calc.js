@@ -599,14 +599,9 @@
       if (p.summary.conflictCount) warnings.push(`${tag}${p.summary.conflictCount} elemento(s) com tipo ou valor divergente`);
     });
     if (r.errorCount) warnings.push(`${r.errorCount} linha(s) com erro, fora do cálculo`);
-    if (isMix && r.mix) {
-      const without = r.mix.items.filter((i) => !i.demandOwn);
-      if (without.length === r.mix.items.length) {
-        warnings.push("mix sem a demanda de cada produto: pesos iguais (média simples) — preencha a demanda por produto no estudo");
-      } else if (without.length) {
-        warnings.push(`mix: ${without.map((i) => i.name).join(", ")} sem demanda própria (usa a demanda geral)`);
-      }
-    }
+    // REV 1.12: produto fora do mix e mix parcial (o produto sem demanda própria não herda mais a geral)
+    if (isMix && r.mix && r.mix.partial) warnings.push(`mix parcial: ${r.mix.excluded.join(", ")} fora da carga na Cronoanálise (ocupação subestimada)`);
+    if (!isMix && r.multiProduct && one && one.inMix === false) warnings.push("produto fora do mix na Cronoanálise");
     const demand = isMix ? (r.mix && r.mix.demand > 0 ? r.mix.demand : null) : one && one.demand > 0 ? one.demand : null;
     return { warnings, demand };
   }

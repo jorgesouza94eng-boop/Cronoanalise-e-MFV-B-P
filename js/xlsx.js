@@ -278,7 +278,7 @@
     geral.push([
       H("Nº"), ...(multi ? [H("Produto")] : []), H("Elemento"), H("Tempo (Início)"), H("Tempo (Fim)"), H("Filmagem"),
       H(qtyMode ? "Quantidade" : "Frequência"), H("Valor"), H("Tipo"), H("Tempo/un (s)"), H("Tempo (s)"),
-      H("Ritmo (%)"), H("Tempo normal (s)"), H("Desperdício"), H("Ação Kaizen (ECRS)"), H("Erros"),
+      H("Ritmo (%)"), H("Tempo normal (s)"), H("Desperdício"), H("Ação Kaizen (ECRS)"), H("Erros"), H("Vídeo"),
     ]);
     study.elements.forEach((el, i) => {
       const row = r.rows[i];
@@ -288,6 +288,7 @@
         N(row.film, "int"), qtyMode ? N(row.quantity == null ? "" : row.quantity) : T(el.frequency), T(valueLabel(el.value)), T(row.type),
         N(row.hasReading ? sec(row.unitTime) : ""), N(row.hasReading ? sec(row.subtractedTime) : ""), N(Calc.parsePace(el.pace).value || "", "int"),
         N(row.hasReading ? sec(row.normalTime) : ""), T(Calc.WASTES[el.waste] || ""), T(el.kaizen), T(row.errors.join(" | ")),
+        T(r.filmList[row.film - 1].video),
       ]);
     });
     const geralLast = geral.length;
@@ -367,12 +368,12 @@
     if (multi) {
       analise.splice(6, 0, [T("Produto (indicadores acima)"), T(r.product.name), T("")]);
       analise.push(null, [{ v: "Por produto", s: "subtitle" }]);
-      analise.push([H("Produto"), H("Tempo normal (s/pç)"), H("Tempo padrão (s/pç)"), H("Demanda (pçs/dia)"), H("Carga (min/dia)")]);
+      analise.push([H("Produto"), H("Tempo normal (s/pç)"), H("Tempo padrão (s/pç)"), H("Considerar no mix"), H("Demanda no mix (pçs/dia)"), H("Carga (min/dia)")]);
       const mix = r.mix;
       r.products.forEach((pr, i) =>
         analise.push([
-          T(pr.name), N(sec(pr.kpis.sumNormal)), N(sec(pr.kpis.standardTime)),
-          pr.demand == null ? T("") : N(pr.demand), mix.items[i].load == null ? T("") : N(Math.round(mix.items[i].load * 100) / 100),
+          T(pr.name), N(sec(pr.kpis.sumNormal)), N(sec(pr.kpis.standardTime)), T(pr.inMix ? "Sim" : "Não (fora do mix)"),
+          mix.items[i].demand == null ? T("") : N(mix.items[i].demand), mix.items[i].load == null ? T("") : N(Math.round(mix.items[i].load * 100) / 100),
         ])
       );
       analise.push(null, [{ v: "Carga do posto (mix)", s: "subtitle" }]);
@@ -382,8 +383,14 @@
         ["Ocupação do posto", mix.occupancyPct == null ? "" : Math.round(mix.occupancyPct * 10) / 10, "%"],
         ["Takt misto (tempo líquido ÷ Σ demandas)", sec(mix.taktMix), "s/pç"],
         ["TC ponderado pelo mix", sec(mix.weightedTP), "s/pç"],
-        ["Status", { atende: "Atende o mix", sobrecarga: "Sobrecarga (acima de 100%)", incompleto: "Incompleto (falta demanda ou tempo)" }[mix.status], ""],
+        [
+          "Status",
+          { atende: "Atende o mix", sobrecarga: "Sobrecarga (acima de 100%)", incompleto: "Incompleto (falta demanda ou tempo)", vazio: "Nenhum produto no mix" }[mix.status] +
+            (mix.partial ? " (mix parcial)" : ""),
+          "",
+        ],
       ].forEach(([a, b, c]) => analise.push([T(a), typeof b === "number" ? N(b) : T(b == null ? "" : b), T(c)]));
+      mix.issues.forEach((t) => analise.push([T("Aviso"), T(t), T("")]));
     }
     const lastCol = (n) => colName(n - 1);
 
@@ -391,9 +398,9 @@
       {
         name: "GERAL",
         rows: geral,
-        cols: multi ? [6, 18, 42, 13, 13, 10, 11, 13, 7, 13, 11, 10, 15, 24, 32, 30] : [6, 42, 13, 13, 10, 11, 13, 7, 13, 11, 10, 15, 24, 32, 30],
+        cols: multi ? [6, 18, 42, 13, 13, 10, 11, 13, 7, 13, 11, 10, 15, 24, 32, 30, 24] : [6, 42, 13, 13, 10, 11, 13, 7, 13, 11, 10, 15, 24, 32, 30, 24],
         merges: ["A1:H1"],
-        autoFilter: `A${geralHeader}:${lastCol(multi ? 16 : 15)}${Math.max(geralLast, geralHeader + 1)}`,
+        autoFilter: `A${geralHeader}:${lastCol(multi ? 17 : 16)}${Math.max(geralLast, geralHeader + 1)}`,
       },
       {
         name: "Listagem de Elementos",
@@ -409,7 +416,7 @@
         merges: ["A1:D1", `A${notesRow}:D${notesRow}`],
         height: { [notesRow]: Math.min(400, notesLines * 15) },
       },
-      { name: "Análise", rows: analise, cols: multi ? [38, 18, 18, 18, 14] : [38, 16, 12], merges: ["A1:C1"] },
+      { name: "Análise", rows: analise, cols: multi ? [38, 18, 18, 18, 18, 14] : [38, 16, 12], merges: ["A1:C1"] },
     ];
   }
 
