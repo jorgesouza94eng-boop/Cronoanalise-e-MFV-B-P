@@ -27,6 +27,7 @@
 
   const FILE_PATTERN = /^Crono_.+\.json$/i;
   const CONFLICT_MARK = "_conflito_";
+  const ARCHIVE_DIR = "_Arquivo"; // REV 1.16: subpasta dos arquivos arquivados (fora das listas)
 
   let dbPromise = null;
   let backend = null; // "idb" | "localStorage" | "memory"
@@ -357,6 +358,62 @@
     return out.sort((a, b) => b.lastModified - a.lastModified);
   }
 
+  /**
+   * Arquiva um arquivo da pasta (REV 1.16): grava o conteúdo na subpasta "_Arquivo" e tira o
+   * arquivo da pasta principal, para ele sair das listas do app. Nada é apagado: para voltar,
+   * basta mover o arquivo de volta (Explorer/OneDrive). Se já houver um arquivo com o mesmo nome
+   * no _Arquivo, o novo recebe a data no nome. text = conteúdo a gravar (versão mais recente).
+   * Retorna { status: "ok", archived } | { status: "no-folder" } | { status: "no-permission" }.
+   */
+  async function archiveFile(fileName, text) {
+    if (!dirHandle) return { status: "no-folder" };
+    if ((await queryPermission()) !== "granted") return { status: "no-permission" };
+    const dir = await dirHandle.getDirectoryHandle(ARCHIVE_DIR, { create: true });
+    let name = fileName;
+    try {
+      await dir.getFileHandle(name);
+      const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+      name = fileName.replace(/\.json$/i, `_arquivado-${stamp}.json`);
+    } catch (err) {
+      if (!err || err.name !== "NotFoundError") throw err;
+    }
+    const fh = await dir.getFileHandle(name, { create: true });
+    const w = await fh.createWritable();
+    await w.write(text);
+    await w.close();
+    try {
+      await dirHandle.removeEntry(fileName);
+    } catch (err) {
+      if (!err || err.name !== "NotFoundError") throw err; // só no navegador: não havia arquivo na pasta
+    }
+    return { status: "ok", archived: `${ARCHIVE_DIR}/${name}` };
+  }
+
+  /**
+   * Arquivar um item da lista (estudo, MFV ou grupo; REV 1.16). Com a pasta conectada: vai para
+   * "_Arquivo" e sai do navegador. Sem pasta: baixa o .json (backup para "Importar JSON") e sai do
+   * navegador. text = conteúdo da versão mais recente; store = store do IndexedDB (vazio = estudos).
+   */
+  async function archiveRecord(id, fileName, text, store) {
+    if (await folderReady()) {
+      const res = await archiveFile(fileName, text);
+      if (res.status !== "ok") return res;
+      await deleteLocal(id, store);
+      return Object.assign(res, { mode: "pasta" });
+    }
+    downloadText(fileName, text, "application/json");
+    await deleteLocal(id, store);
+    return { status: "ok", mode: "download", archived: fileName };
+  }
+
+  /** Texto da confirmação de "Arquivar", igual nos três módulos. */
+  function archivePrompt(label, kind, folder) {
+    return folder
+      ? `Arquivar ${kind} "${label}"?\n\nO arquivo vai para a subpasta ${ARCHIVE_DIR} da pasta conectada e sai desta lista (nada é apagado). ` +
+          `Para trazer de volta, mova o arquivo de ${ARCHIVE_DIR} para a pasta.`
+      : `Arquivar ${kind} "${label}"?\n\nO app baixa uma cópia .json (guarde-a) e tira o item deste navegador. ` + 'Para trazer de volta, use "Importar JSON".';
+  }
+
   function conflictFileName(fileName) {
     const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
     return fileName.replace(/\.json$/i, `${CONFLICT_MARK}${stamp}.json`);
@@ -443,6 +500,10 @@
     getLocal,
     putLocal,
     deleteLocal,
+    archiveFile,
+    archiveRecord,
+    archivePrompt,
+    ARCHIVE_DIR,
     getDirHandle,
     useDirectoryHandle,
     restoreDirHandle,

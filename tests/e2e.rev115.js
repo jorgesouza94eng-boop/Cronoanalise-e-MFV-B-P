@@ -42,7 +42,7 @@ function study(name) {
 
   await p.goto(base + "index.html");
   await p.waitForSelector("#study-dialog[open]");
-  check(await txt(".app-header .app-rev") === "REV 1.15", "rótulo da revisão REV 1.15");
+  check(/^REV 1\.1[5-9]$/.test(await txt(".app-header .app-rev")), "rótulo da revisão (REV 1.15 ou posterior)");
   await p.setInputFiles("#input-import-json", { name: "e.json", mimeType: "application/json", buffer: Buffer.from(C.serializeStudy(study("Enroladinho"))) });
   await p.waitForFunction(() => window.LeanApp && LeanApp.state.study && LeanApp.state.study.processName === "Enroladinho");
   const heads = async () => p.$$eval("#chrono-table thead th", (t) => t.filter((x) => !x.hidden).map((x) => x.textContent.trim()));

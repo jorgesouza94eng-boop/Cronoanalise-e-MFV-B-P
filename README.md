@@ -431,6 +431,14 @@ O botão **✨ IA** na barra da grade abre o assistente. Ele precisa de **intern
 
 ---
 
+## 3.1 Arquivar (REV 1.16)
+
+Em **Estudos**, **MFVs** e **Grupos**, o botão **Arquivar** tira o item da lista sem apagar:
+- **Com a pasta conectada:** o arquivo vai para a subpasta `_Arquivo`. Para trazer de volta, mova o arquivo para a pasta.
+- **Sem pasta:** o app baixa o `.json` e tira o item do navegador. Para trazer de volta, use "Importar JSON".
+
+O documento aberto não pode ser arquivado.
+
 ## 4. Armazenamento e sincronização
 
 ### Notebook (Chrome/Edge): pasta do OneDrive

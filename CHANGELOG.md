@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.16** | 22/10/2026 | Arquivar estudos, MFVs e grupos (tirar da lista sem apagar) |
 | **REV 1.15** | 22/10/2026 | Coluna Etapa na cronoanálise: TP por etapa do processo, que vira etapa do MFV já ponderada |
 | **REV 1.14** | 22/10/2026 | Vários operadores no mesmo estudo, MFV com produto estratificado e avisos de consistência |
 | *REV 1.13 (revertida)* | 22/10/2026 | Desfeita a pedido do consultor; o app voltou à REV 1.12 |
@@ -20,6 +21,19 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.16 — 22/10/2026
+
+Opção **A** do consultor: **Arquivar**, sem exclusão definitiva.
+
+- Botão **"Arquivar"** em cada item das listas de **Estudos** (Cronoanálise), **MFVs** e **Grupos** (Yamazumi). O documento aberto não pode ser arquivado.
+- **Com a pasta conectada:** o arquivo vai para a subpasta **`_Arquivo`** da pasta (o OneDrive sincroniza) e sai da lista e do navegador. Nada é apagado. Para trazer de volta, mova o arquivo de `_Arquivo` para a pasta. Se já houver um arquivado com o mesmo nome, o novo recebe a data no nome. Vai a versão mais recente (navegador ou pasta).
+- **Sem pasta (celular ou navegador sem pasta):** o app baixa o `.json` (backup) e tira o item do navegador. Para trazer de volta: "Importar JSON".
+- Na Cronoanálise, o botão **"Remover"** fica só para o estudo que existe apenas no navegador. Antes ele também aparecia para estudos da pasta, mas só tirava a cópia do navegador e o estudo continuava na lista.
+- Arquivar não altera os outros documentos. Um MFV com etapa de um estudo arquivado mantém o último TC. Um grupo do Yamazumi com estudo arquivado mostra "estudo não encontrado".
+- Service worker v24. Teste: `tests/e2e.rev116.js`, com a pasta simulada.
 
 ---
 

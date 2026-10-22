@@ -779,6 +779,7 @@
         await flushSave();
         if (await openDoc(li.dataset.id, li.dataset.fileName)) dlg.close();
       }
+      if (btn.dataset.action === "archive") await archiveDoc(li.dataset.id);
     });
     $("input-import").addEventListener("change", async (e) => {
       const file = e.target.files && e.target.files[0];
@@ -833,6 +834,22 @@
         : "Nenhum estudo de cronoanálise com esta empresa. Os estudos podem ser incluídos depois.";
   }
 
+  /** Arquivar um grupo da lista (REV 1.16): vai para _Arquivo (ou baixa o .json) e sai da lista. */
+  async function archiveDoc(id) {
+    const item = (state.groupsCache || []).find((x) => x.doc.id === id);
+    if (!item || (state.doc && state.doc.id === id)) return;
+    const d = item.doc;
+    if (!root.confirm(Store.archivePrompt(`${d.clientName || "Sem cliente"} — ${d.name || "Sem nome"} (${d.situation})`, "o grupo", await Store.folderReady()))) return;
+    try {
+      const res = await Store.archiveRecord(d.id, d.fileName, IO.serialize(d), STORE);
+      if (res.status !== "ok") return toast(res.status === "no-permission" ? "Autorize a pasta antes de arquivar." : "Não foi possível arquivar.", "error");
+      toast(res.mode === "pasta" ? `Grupo arquivado em ${res.archived}.` : `Grupo tirado do navegador; cópia baixada: ${res.archived}.`, "ok", 6000);
+    } catch (err) {
+      toast(`Erro ao arquivar: ${err.message || err}`, "error");
+    }
+    showDocs();
+  }
+
   async function showDocs() {
     const { list, source } = await listGroups();
     $("doc-source").textContent = source;
@@ -852,6 +869,12 @@
             ]);
             btn.dataset.action = "open";
             li.append(btn);
+            // REV 1.16: arquivar (o grupo aberto não pode ser arquivado)
+            if (!(state.doc && state.doc.id === doc.id)) {
+              const arc = el("button", { type: "button", className: "btn-outline", textContent: "Arquivar", title: "Tira da lista sem apagar: o arquivo vai para a subpasta _Arquivo (sem pasta: baixa o .json)" });
+              arc.dataset.action = "archive";
+              li.append(el("div", { className: "study-actions" }, [arc]));
+            }
             return li;
           })
         : [el("li", { className: "empty", textContent: "Nenhum grupo salvo ainda. Crie o primeiro acima." })])

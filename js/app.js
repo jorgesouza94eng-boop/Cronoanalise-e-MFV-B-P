@@ -598,6 +598,27 @@
       }
     },
 
+    /** Arquivar um estudo da lista (REV 1.16): vai para _Arquivo (ou baixa o .json) e sai da lista. */
+    async onArchiveStudy(id, fileName) {
+      if (state.study && state.study.id === id) return;
+      const local = await Store.getLocal(id);
+      let study = local ? local.study : null;
+      if (state.folder === "granted" && fileName) {
+        const disk = await Store.readStudyFile(fileName);
+        if (disk && !disk.invalid && (!study || String(disk.updatedAt) > String(study.updatedAt))) study = disk; // a versão mais recente
+      }
+      if (!study) return UI.toast("Não foi possível ler o estudo.", "error");
+      if (!root.confirm(Store.archivePrompt(`${study.clientName} — ${study.processName}`, "o estudo", await Store.folderReady()))) return;
+      try {
+        const res = await Store.archiveRecord(id, fileName || study.fileName, Calc.serializeStudy(study));
+        if (res.status !== "ok") return UI.toast(res.status === "no-permission" ? "Autorize a pasta antes de arquivar." : "Não foi possível arquivar.", "error");
+        UI.toast(res.mode === "pasta" ? `Estudo arquivado em ${res.archived}.` : `Estudo tirado do navegador; cópia baixada: ${res.archived}.`, "ok", 6000);
+      } catch (err) {
+        UI.toast(`Erro ao arquivar: ${err.message || err}`, "error");
+      }
+      showStudies();
+    },
+
     async onRemoveStudy(id) {
       const local = await Store.getLocal(id);
       if (!local) return;

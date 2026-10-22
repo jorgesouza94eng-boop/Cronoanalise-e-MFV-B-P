@@ -1483,7 +1483,18 @@
       exp.textContent = "Exportar";
       exp.title = "Baixar este estudo em .json";
       actions.appendChild(exp);
-      if (it.inLocal && !it.current) {
+      // REV 1.16: arquivar (tira da lista sem apagar; o estudo aberto não pode ser arquivado)
+      if (!it.current) {
+        const arc = document.createElement("button");
+        arc.type = "button";
+        arc.className = "btn-outline";
+        arc.dataset.action = "archive";
+        arc.textContent = "Arquivar";
+        arc.title = "Tira da lista sem apagar: o arquivo vai para a subpasta _Arquivo da pasta (sem pasta: baixa o .json)";
+        actions.appendChild(arc);
+      }
+      // Remover: só para o estudo que existe apenas no navegador (com a pasta, use Arquivar)
+      if (it.inLocal && !it.inFolder && !it.current) {
         const del = document.createElement("button");
         del.type = "button";
         del.className = "btn-outline";
@@ -1509,6 +1520,7 @@
     if (btn.dataset.action === "open") h.onOpenStudy(id, fileName);
     if (btn.dataset.action === "export") h.onExportStudy(id, fileName);
     if (btn.dataset.action === "remove") h.onRemoveStudy(id);
+    if (btn.dataset.action === "archive") h.onArchiveStudy(id, fileName);
   }
 
   function formatDateTime(iso) {
