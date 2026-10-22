@@ -474,7 +474,9 @@
       return Number.isFinite(n) ? n : null;
     };
     const maxSteps = MFV.stepsLast - MFV.stepsFirst + 1;
-    if (doc.steps.length > maxSteps) throw new Error(`O MFV tem ${doc.steps.length} etapas; a planilha comporta ${maxSteps} (linhas ${MFV.stepsFirst}–${MFV.stepsLast}).`);
+    // REV 1.14: etapa não medida não vai para a tabela de processos (fica nas premissas)
+    const measured = doc.steps.map((st, i) => ({ st, calc: r.steps[i] })).filter((x) => !x.st.unmeasured);
+    if (measured.length > maxSteps) throw new Error(`O MFV tem ${measured.length} etapas; a planilha comporta ${maxSteps} (linhas ${MFV.stepsFirst}–${MFV.stepsLast}).`);
     const maxStock = MFV.stockLast - MFV.stockFirst + 1;
     if (doc.inventories.length > maxStock) throw new Error(`O MFV tem ${doc.inventories.length} estoques; a planilha comporta ${maxStock}.`);
 
@@ -518,13 +520,20 @@
 
     // ---- EP (estado presente)
     const ep = general();
+    // Operador compartilhado (REV 1.14): nº de pessoas da etapa = TC ÷ carga do operador (Σ = 1 por operador)
+    const sharedOf = (calc) =>
+      calc && calc.operatorTag ? (r.sharedOperators || []).find((o) => o.label.toLowerCase() === calc.operatorTag.toLowerCase() && o.seqs.length > 1) : null;
+    const epRow = new Map(); // nº da etapa no app → linha da tabela da EP (1, 2, …)
+    measured.forEach((x, i) => epRow.set(x.calc.seq, i + 1));
     for (let n = MFV.stepsFirst; n <= MFV.stepsLast; n++) {
-      const st = doc.steps[n - MFV.stepsFirst];
-      const calc = r.steps[n - MFV.stepsFirst];
+      const x = measured[n - MFV.stepsFirst];
+      const st = x && x.st;
+      const calc = x && x.calc;
+      const shared = sharedOf(calc);
       ep.set(`B${n}`, st && st.kaizen ? "X" : null);
       ep.set(`C${n}`, st ? st.name || calc.name : null);
       ep.set(`E${n}`, st && calc.tc != null ? Math.round((calc.tc / 60) * 1e7) / 1e7 : null);
-      ep.set(`F${n}`, st ? num(st.operators) : null);
+      ep.set(`F${n}`, st ? (shared && shared.load > 0 && calc.tc != null ? Math.round((calc.tc / shared.load) * 1e6) / 1e6 : num(st.operators)) : null);
       ep.set(`G${n}`, st && num(st.uptimePct) ? num(st.uptimePct) / 100 : null);
       if (st && calc.tc == null) warnings.push(`Etapa "${calc.name}" sem TC: exportada sem tempo.`);
     }
@@ -541,6 +550,36 @@
       ep.set(`D${n}`, inv ? num(inv.quantity) : null);
     }
     const notes = String(doc.notes || "").split(/\r?\n/).filter((l, i, arr) => l.trim() || i < arr.length - 1);
+    // Premissas acrescentadas pelo app (REV 1.14): operadores compartilhados, ponderação e etapas não medidas
+    const tu = Calc.TIME_UNITS[doc.timeUnit] ? doc.timeUnit : "min";
+    const ftu = (m) => `${Calc.formatTime(m, tu, tu === "s" ? 2 : undefined)} ${Calc.TIME_UNITS[tu].label}/${pu}`;
+    const listRows = (seqs) => {
+      const rows = seqs.map((q) => epRow.get(q)).filter((v) => v != null);
+      return rows.length > 1 ? `etapas ${rows.slice(0, -1).join(", ")} e ${rows[rows.length - 1]}` : `etapa ${rows[0]}`;
+    };
+    const auto = [];
+    const shared = (r.sharedOperators || []).filter((o) => o.seqs.length > 1 && o.load != null);
+    shared.forEach((o) =>
+      auto.push(
+        `Operador ${o.label}: ${listRows(o.seqs)}, carga ${ftu(o.load)} (${Calc.formatNumber(o.taktPct, 1)}% do takt), capacidade ${Calc.formatNumber(o.capacityDay, 0)} ${pu}/dia.`
+      )
+    );
+    const weighted = r.steps.filter((x) => x.weight);
+    if (weighted.length) {
+      const f = (n) => Calc.formatNumber(n, n % 1 ? 1 : 0);
+      const byFactor = new Map(); // "200/800" → [nº das etapas]
+      weighted.forEach((x) => {
+        const k = `${f(x.weight.demand)}/${f(x.weight.family)}`;
+        byFactor.set(k, (byFactor.get(k) || []).concat([x.seq]));
+      });
+      auto.push(`TC ponderado pela demanda do produto: ${Array.from(byFactor, ([k, seqs]) => `${listRows(seqs)} (${k})`).join("; ")}.`);
+    }
+    if (r.unmeasured && r.unmeasured.length) auto.push(`Etapa(s) não medida(s): ${r.unmeasured.map((x) => x.name).join(", ")}.`);
+    if (shared.length) {
+      auto.push("A aba EP calcula gargalo e produção do processo Kaizen pelo TC da linha; com operador compartilhado, considerar a capacidade do operador informada aqui.");
+      warnings.push("Operador compartilhado entre etapas: Nº ops de cada etapa = TC ÷ carga do operador; a carga e a capacidade do operador foram para as premissas.");
+    }
+    if (auto.length) notes.push(...auto);
     const maxNotes = MFV.notesLast - MFV.notesFirst;
     ep.set(`B${MFV.notesFirst}`, `PREMISSAS E OBSERVAÇÕES (exportado do Lean Chrono em ${new Date().toLocaleDateString("pt-BR")}):`);
     for (let n = MFV.notesFirst + 1; n <= MFV.notesLast; n++) ep.set(`B${n}`, notes[n - MFV.notesFirst - 1] || null);

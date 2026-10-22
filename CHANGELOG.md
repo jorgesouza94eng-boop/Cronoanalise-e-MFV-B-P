@@ -4,7 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
-| **REV 1.14** | 22/10/2026 | Vários operadores no mesmo estudo (posto ou linha) e avisos de consistência |
+| **REV 1.14** | 22/10/2026 | Vários operadores no mesmo estudo, MFV com produto estratificado e avisos de consistência |
 | *REV 1.13 (revertida)* | 22/10/2026 | Desfeita a pedido do consultor; o app voltou à REV 1.12 |
 | **REV 1.12** | 21/10/2026 | "Considerar no mix" por produto, demanda geral não repetida no mix e nome do vídeo por filmagem |
 | **REV 1.11** | 21/10/2026 | Conferência dos vínculos do MFV (contagem dupla, mix, avisos e demanda) |
@@ -24,7 +24,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 ## REV 1.14 — 22/10/2026
 
-Fase 1 (vários operadores no mesmo estudo) e Fase 3 (avisos de consistência) da especificação em três fases. A **Fase 2** (MFV estratificado: TC ponderado pela demanda do produto, operador compartilhado entre etapas e etapa não medida) fica para a **REV 1.15**.
+As três fases da especificação: Fase 1 (vários operadores no mesmo estudo), Fase 2 (MFV com produto estratificado) e Fase 3 (avisos de consistência). A Fase 2 entrou na mesma revisão a pedido do consultor (service worker v22).
 
 ### Fase 1 — vários operadores no mesmo estudo
 - Parâmetro **Nº de operadores** (padrão 1; com 1 tudo fica igual à REV 1.12) e **Tipo** (POSTO, padrão, ou LINHA) a partir de 2 operadores.
@@ -41,6 +41,14 @@ Fase 1 (vários operadores no mesmo estudo) e Fase 3 (avisos de consistência) d
 - Excel no modelo B+P: **um arquivo por operador** (e por produto), com sufixo `_OpN`. Excel simples, CSV e JSON ganham o campo "Operador" e os resultados por operador e do posto.
 - Limitação: os operadores precisam aparecer no **mesmo vídeo** e produzir as **mesmas peças** do trecho filmado.
 
+### Fase 2 — MFV com produto estratificado
+- **Ponderar pela demanda do produto** (caixa na Origem do TC da etapa de estudo): TC = TP × demanda própria do produto ÷ demanda diária da família (a do MFV). Desligada por padrão; não se aplica ao Mix (já ponderado) nem ao TC digitado. A origem mostra "TP 6,72 × 200/800 → 1,68". Produto sem demanda própria: TC em "--" e aviso, sem herdar a demanda geral. A demanda própria vem do estudo (estudo de 1 produto = demanda do estudo) e é atualizada com "Atualizar TCs". Etapa ponderada não gera o aviso de demanda diferente da família.
+- **Operador compartilhado entre etapas** (coluna Operador da tabela de etapas, com autocompletar): etapas com o mesmo operador são do mesmo posto. Carga do operador = Σ TC das etapas dele; a conferência mostra carga, % do takt e capacidade (tempo disponível ÷ carga). Operadores atuais = operadores distintos + Nº ops das etapas sem operador. **Gargalo** = maior entre o maior TC de etapa e a maior carga de operador, informando qual dos dois. Kaizen em etapa de operador compartilhado usa a capacidade do operador. Ops efet. da linha mostra a fração do operador (TC ÷ carga). Linha vermelha "Carga do OpX" no GBO.
+- **Etapa não medida** (opção na etapa manual): só nome e posição no fluxo; barra tracejada "não medida" no GBO; fora de todos os cálculos; aviso "Fluxo incompleto: N etapa(s) sem TC. Gargalo e capacidade valem só para as etapas medidas."
+- **Tempo de processamento** (lead time) = Σ TP original, sem a ponderação.
+- **Exportação EP:** etapa não medida fica fora da tabela de processos; Nº ops da etapa de operador compartilhado = TC ÷ carga (a soma do operador dá 1); premissas acrescentadas com o operador (etapas, carga, % do takt e capacidade), a ponderação, as etapas não medidas e o aviso "A aba EP calcula gargalo e produção do processo Kaizen pelo TC da linha; com operador compartilhado, considerar a capacidade do operador informada aqui."
+- MFV passa para a **versão 6** do arquivo (campos `weighted`, `studyDemand`, `operatorTag` e `unmeasured` por etapa). MFVs da REV 1.12 abrem com resultados iguais.
+
 ### Fase 3 — avisos de consistência
 - 8.1: Σ quantidade de um elemento tipo C diferente das peças das filmagens em que ele aparece.
 - 8.2: tempo do ciclo × tempo observado por peça com diferença acima de **10%**.
@@ -49,9 +57,9 @@ Fase 1 (vários operadores no mesmo estudo) e Fase 3 (avisos de consistência) d
 - 8.5: a exportação para a aba EP continua gravando o uptime como fração na coluna G (90% → 0,9); a planilha calcula os operadores efetivos na coluna H (F × G). O uptime não altera TC nem capacidade.
 
 ### Arquivos e compatibilidade
-- Estudo passa para a **versão 6** (campo `operador` por elemento e `numOperadores`, `tipoOperadores`, `nomesOperadores`, `operadorExibido` nas configurações). Arquivos da REV 1.12 abrem iguais (1 operador). Um estudo salvo na REV 1.14 não abre em app da REV 1.12.
-- Service worker v21. Depois de atualizar, use **Ctrl+F5** (ou feche e abra o app no celular) para carregar a nova revisão.
-- Testes: `tests/operadores-rev114.test.js` (T1–T12, A1–A4) e `tests/e2e.rev114.js`.
+- Estudo passa para a **versão 6** (campo `operador` por elemento e `numOperadores`, `tipoOperadores`, `nomesOperadores`, `operadorExibido` nas configurações) e MFV para a **versão 6**. Arquivos da REV 1.12 abrem iguais. Um estudo ou MFV salvo na REV 1.14 não abre em app da REV 1.12.
+- Service worker v22 (v21 foi a primeira publicação da REV 1.14, sem a Fase 2). Depois de atualizar, use **Ctrl+F5** (ou feche e abra o app no celular) para carregar a nova revisão.
+- Testes: `tests/operadores-rev114.test.js` (T1–T12, A1–A4), `tests/mfv-estratificado-rev114.test.js` (M1–M9), `tests/template.test.js` (A3, T12, M5), `tests/e2e.rev114.js` e `tests/e2e.rev114-mfv.js`.
 
 ---
 

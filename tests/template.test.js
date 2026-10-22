@@ -351,3 +351,34 @@ test("REV 1.14 (A3/T12): modelo REV2.0 com acíclicos por peça avisa; um arquiv
   assert.ok(one.warnings.some((w) => /modelo REV2.0 soma os acíclicos sem dividir pelas peças; use o modelo REV2.1/.test(w)), one.warnings.join(" | "));
   assert.match(T.exportFileName(st, "m.xlsm", 2), /_Op2_\d{4}-\d{2}-\d{2}\.xlsm$/);
 });
+
+test("REV 1.14 (M5/M6): EP com operador compartilhado (Nº ops = TC ÷ carga) e etapa não medida nas premissas", async () => {
+  const d = M.createMfv({ clientName: "Empresa Teste", family: "Pães" });
+  d.timeUnit = "s";
+  d.schedule = M.DAYS.map((day, i) => ({ day, start: i < 5 ? "07:00" : "", end: i < 5 ? "15:40" : "", breaks: "", meal: "" }));
+  d.demandMonthly = String(800 * 22);
+  d.workDaysMonth = "22";
+  const st = (name, tp, demand, extra) =>
+    M.createStep(Object.assign({ name, source: "study", studyId: name, tcStudyMin: tp / 60, studyDemand: demand, weighted: true, operatorTag: "Op1" }, extra || {}));
+  d.steps = [
+    st("Enroladinho • Preparo", 6.72, 200, { kaizen: true }),
+    st("Enroladinho • Laminação e corte", 4.67, 200),
+    M.createStep({ name: "Forno", unmeasured: true }),
+    st("Enroladinho • Queijo", 3.07, 200),
+    st("Enroladinho • Enrolar", 11.85, 200),
+    st("Pão • Moldagem", 4.76, 600),
+  ];
+  const out = await T.fillFromBytes(buildMfvTemplate(), d, { inflate, expect: "mfv" });
+  const e = T.readZip(out.bytes).find((x) => x.name === "xl/worksheets/sheet1.xml");
+  const ep = new TextDecoder().decode(e.method === 0 ? e.compressed : inflate(e.compressed));
+  const f = [39, 40, 41, 42, 43].map((n) => Number(Number((ep.match(new RegExp(`<c r="F${n}"[^>]*><v>([^<]+)</v>`)) || [])[1]).toFixed(3)));
+  assert.deepEqual(f, [0.166, 0.115, 0.076, 0.292, 0.352], "pessoas por etapa (soma 1,00)");
+  assert.ok(Math.abs(f.reduce((a, b) => a + b, 0) - 1) < 0.002);
+  assert.ok(!/<c r="C4\d"[^>]*><is><t xml:space="preserve">Forno/.test(ep), "Forno fora da tabela de processos");
+  assert.match(ep, /<c r="C41"[^>]*><is><t xml:space="preserve">Enroladinho • Queijo<\/t>/, "etapas seguintes sobem uma linha");
+  assert.match(ep, /Operador Op1: etapas 1, 2, 3, 4 e 5, carga 10,15 s\/pç \(26,0% do takt\), capacidade 3\.075 pç\/dia\./);
+  assert.match(ep, /TC ponderado pela demanda do produto: etapas 1, 2, 3 e 4 \(200\/800\); etapa 5 \(600\/800\)\./);
+  assert.match(ep, /Etapa\(s\) não medida\(s\): Forno\./);
+  assert.match(ep, /com operador compartilhado, considerar a capacidade do operador informada aqui\./);
+  assert.ok(out.warnings.some((w) => /TC ÷ carga do operador/.test(w)));
+});

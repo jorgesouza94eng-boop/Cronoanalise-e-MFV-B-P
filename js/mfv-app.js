@@ -351,13 +351,17 @@
         warnings: q0.warnings,
         demand: q0.demand,
         netTime: r.kpis.netTime, // REV 1.14 (8.4): conferido com o tempo disponível do MFV
+        // REV 1.14 (Fase 2): demanda própria do produto para a ponderação (estudo de 1 produto = demanda do estudo)
+        ownDemand: !r.multiProduct && r.product && r.product.demand > 0 ? r.product.demand : null,
         ...opsOf(r.product),
         // Mix sem TC (incompleto ou sem produto no mix): a etapa Mix já existente mantém o último TC e avisa
         mixProblem: r.mix && r.mix.weightedTP == null ? r.mix.issues[0] || "mix incompleto" : "",
         products: r.multiProduct
           ? r.products
-              .map((p) => Object.assign({ key: p.key, name: p.name, tcMin: tc(p.kpis) }, quality(p.key), opsOf(p)))
-              .concat(r.mix && r.mix.weightedTP != null ? [Object.assign({ key: MIX_KEY, name: "Mix (TC ponderado)", tcMin: r.mix.weightedTP }, quality(MIX_KEY), mixOps())] : [])
+              .map((p) =>
+                Object.assign({ key: p.key, name: p.name, tcMin: tc(p.kpis), ownDemand: p.demandOwn && p.demand > 0 ? p.demand : null }, quality(p.key), opsOf(p))
+              )
+              .concat(r.mix && r.mix.weightedTP != null ? [Object.assign({ key: MIX_KEY, name: "Mix (TC ponderado)", tcMin: r.mix.weightedTP, ownDemand: null }, quality(MIX_KEY), mixOps())] : [])
           : [],
       });
     };
@@ -384,6 +388,7 @@
               tcMin: p.tcMin,
               warnings: p.warnings,
               demand: p.demand,
+              ownDemand: p.ownDemand,
               nOps: p.nOps,
               kind: p.kind,
               contentMin: p.contentMin,
@@ -561,6 +566,11 @@
       if (!st) return;
       const v = linkedValues(s, st);
       const contentNow = Number.isFinite(v.content) ? v.content : null;
+      const demandNow = st.ownDemand > 0 ? st.ownDemand : null;
+      if (demandNow !== s.studyDemand) {
+        s.studyDemand = demandNow; // demanda própria do produto (ponderação)
+        changed += 1;
+      }
       if (v.tc !== s.tcStudyMin || st.fileName !== s.studyFileName || contentNow !== s.contentStudyMin || (v.n != null && v.n !== s.studyOperators)) {
         if (s.source === "study" && Number.isFinite(s.tcStudyMin) && v.tc !== s.tcStudyMin) {
           visible.push({ id: s.id, name: s.name || st.processName, from: s.tcStudyMin, to: v.tc });
@@ -659,6 +669,7 @@
       studyProduct: st.product,
       studyFileName: st.fileName,
       tcStudyMin: st.tcMin,
+      studyDemand: st.ownDemand || null,
     });
   }
 
@@ -889,7 +900,7 @@
     $("steps-tbody").replaceChildren(...d.steps.map((s, i) => stepRow(s, i)));
     if (!d.steps.length) {
       const td = el("td", { className: "cell-text text-muted", textContent: "Adicione as etapas: escolha um estudo de cronoanálise e clique em '+ Etapa do estudo', ou use '+ Etapa manual'." });
-      td.colSpan = 10;
+      td.colSpan = 11;
       $("steps-tbody").append(el("tr", {}, [td]));
     }
 
@@ -1083,8 +1094,27 @@
         content.dataset.field = "content";
         origin.append(el("label", { className: "content-cell" }, ["Conteúdo ", content]));
       }
+      // REV 1.14: TC ponderado pela demanda do produto (não vale para o Mix, que já é ponderado)
+      if (s.studyProduct !== M.MIX_KEY && !edited) {
+        origin.classList.add("origin-cell-group");
+        const chk = el("input", { type: "checkbox", checked: !!s.weighted });
+        chk.dataset.field = "weighted";
+        origin.append(
+          el("label", { className: "content-cell weight-cell", title: "TC = TP × demanda própria do produto ÷ demanda diária da família (a do MFV)" }, [
+            chk,
+            "Ponderar pela demanda do produto",
+            el("span", { className: "weight-detail" }),
+          ])
+        );
+      }
     } else {
-      origin.append(el("span", { className: "text-muted", textContent: "Manual" }));
+      origin.classList.add("origin-cell-group");
+      const chk = el("input", { type: "checkbox", checked: !!s.unmeasured });
+      chk.dataset.field = "unmeasured";
+      origin.append(
+        el("span", { className: "text-muted", textContent: "Manual" }),
+        el("label", { className: "content-cell", title: "Etapa sem TC: aparece no fluxo e no gráfico, fora de todos os cálculos" }, [chk, " Não medida"])
+      );
     }
     const tcInput = el("input", { type: "text", className: "input-cell mono input-tc", inputMode: "decimal", autocomplete: "off", title: "TC editável: ao alterar, a etapa passa a usar o valor digitado" });
     tcInput.dataset.field = "tc";
@@ -1101,20 +1131,30 @@
     actions.children[0].dataset.action = "up";
     actions.children[1].dataset.action = "down";
     actions.children[2].dataset.action = "remove";
+    const opTag = mk("operatorTag", s.operatorTag, "input-op-tag");
+    opTag.setAttribute("list", "mfv-operator-list");
+    opTag.placeholder = "—";
+    opTag.maxLength = 20;
+    opTag.title = "Operador compartilhado entre etapas (ex.: Op1). Etapas com o mesmo operador são do mesmo posto: carga = Σ TC";
     tr.append(
       el("td", { className: "cell-center" }, [radio]),
       el("td", { className: "cell-num", textContent: String(i + 1).padStart(2, "0") }),
       el("td", {}, [mk("name", s.name, "")]),
       origin,
       el("td", {}, [tcInput]),
+      el("td", {}, [opTag]),
       el("td", {}, [mk("operators", s.operators, "mono")]),
       el("td", {}, [mk("uptimePct", s.uptimePct, "mono")]),
       el("td", { className: "cell-readonly mono" }),
       el("td", { className: "cell-readonly mono" }),
       actions
     );
-    tr.children[7].dataset.out = "opsEff";
-    tr.children[8].dataset.out = "takt";
+    tr.children[8].dataset.out = "opsEff";
+    tr.children[9].dataset.out = "takt";
+    if (s.unmeasured) {
+      tr.classList.add("row-unmeasured");
+      [radio, tcInput, opTag, tr.querySelector('[data-field="operators"]'), tr.querySelector('[data-field="uptimePct"]')].forEach((x) => (x.disabled = true));
+    }
     return tr;
   }
 
@@ -1175,20 +1215,42 @@
       const src = d.steps[i];
       const tcInput = tr.querySelector('[data-field="tc"]');
       if (document.activeElement !== tcInput) {
-        const tcMin = src.source === "study" ? src.tcStudyMin : src.source === "group" ? src.tcGroupMin : src.tcManualMin;
+        // Ponderada sem demanda própria: "--" (o app não usa o TP cheio nem herda a demanda geral)
+        const weightMissing = src.weighted && src.source === "study" && src.studyProduct !== M.MIX_KEY && !s.weight;
+        const tcMin = s.unmeasured || weightMissing ? null : s.weight ? s.tc : src.source === "study" ? src.tcStudyMin : src.source === "group" ? src.tcGroupMin : src.tcManualMin;
         tcInput.value = Number.isFinite(tcMin) ? ft(tcMin) : "";
+        tcInput.placeholder = s.unmeasured || weightMissing ? "--" : "";
+      }
+      const wd = tr.querySelector(".weight-detail");
+      if (wd) {
+        const f = (n) => fmt(n, n % 1 ? 1 : 0);
+        wd.textContent = !src.weighted
+          ? ""
+          : s.weight
+            ? `TP ${ft(s.tcOriginal)} × ${f(s.weight.demand)}/${f(s.weight.family)} → ${ft(s.tc)}`
+            : s.errors.length
+              ? "-- (informe a demanda do produto)"
+              : "";
       }
       const contentInput = tr.querySelector('[data-field="content"]');
       if (contentInput && document.activeElement !== contentInput) {
         contentInput.value = Number.isFinite(src.contentManualMin) ? ft(src.contentManualMin) : "";
         contentInput.placeholder = s.content != null ? ft(s.content) : "";
       }
-      tr.querySelector('[data-out="opsEff"]').textContent = fmt(s.opsEff, 2);
+      // Operador compartilhado: fração do operador na etapa (TC ÷ carga), como sai na aba EP
+      const sh = s.operatorTag ? r.sharedOperators.find((o) => o.label.toLowerCase() === s.operatorTag.toLowerCase() && o.seqs.length > 1) : null;
+      const opsCell = tr.querySelector('[data-out="opsEff"]');
+      opsCell.textContent = s.unmeasured ? "--" : sh && sh.load > 0 && s.tc != null ? fmt(s.tc / sh.load, 3) : fmt(s.opsEff, 2);
+      opsCell.title = sh ? `Fração do operador ${sh.label} nesta etapa (TC ÷ carga); o operador conta 1 pessoa` : "";
       tr.querySelector('[data-out="takt"]').textContent = s.taktPct != null ? `${fmt(s.taktPct, 1)}%` : "--";
       tr.classList.toggle("row-error", s.errors.length > 0);
       tr.classList.toggle("row-over-takt", s.overTakt);
-      tr.title = s.errors.concat(s.warnings).join(" • ") || (s.overTakt ? "TC acima do takt (gargalo)" : "");
+      tr.title = s.unmeasured ? "Etapa não medida: fora dos cálculos" : s.errors.concat(s.warnings).join(" • ") || (s.overTakt ? "TC acima do takt (gargalo)" : "");
     });
+    // Autocompletar do campo Operador com os operadores já usados
+    $("mfv-operator-list").replaceChildren(
+      ...Array.from(new Set(d.steps.map((x) => String(x.operatorTag || "").trim()).filter(Boolean).concat(["Op1", "Op2", "Op3"]))).map((v) => el("option", { value: v }))
+    );
     renderLinkChecks(M.linkChecks(d, r, linkInfo));
     $("tc-total").textContent = r.tcTotal ? ft(r.tcTotal) : "--";
     $("ops-total").textContent = fmt(r.opsTotal, 2);
@@ -1197,7 +1259,7 @@
     // Resultados
     $("kpi-bottleneck-tc").textContent = r.bottleneck ? ft(r.bottleneck.tc) : "--";
     $("kpi-bottleneck-unit").textContent = r.bottleneck ? `${u}/${pu()}` : "";
-    $("kpi-bottleneck-name").textContent = r.bottleneck ? `${r.bottleneck.seq}. ${r.bottleneck.name}` : "Sem etapas";
+    $("kpi-bottleneck-name").textContent = r.bottleneck ? (r.bottleneck.seq ? `${r.bottleneck.seq}. ${r.bottleneck.name}` : r.bottleneck.name) : "Sem etapas";
     $("kpi-ops").textContent = fmt(r.opsTotal, 2);
     $("kpi-ops").title = r.opsTyped ? `Digitado (equipe compartilhada). Soma das etapas: ${fmt(r.opsSum, 2)}` : "Soma dos operadores efetivos das etapas";
     $("kpi-ops-ideal").textContent =
@@ -1213,8 +1275,9 @@
     card.classList.remove("is-bottleneck", "is-balanced");
     if (r.kaizen) {
       $("kpi-kaizen").textContent = r.kaizen.capacityDay != null ? `${fmt(r.kaizen.capacityDay, 1)} ${pu()}/dia` : "--";
-      $("kpi-kaizen-detail").textContent = `${r.kaizen.name} • ${fmt(r.kaizen.productivityHour, 2)} ${pu()}/h/op`;
-      if (r.kaizen.tc != null && r.takt) card.classList.add(r.kaizen.tc > r.takt ? "is-bottleneck" : "is-balanced");
+      $("kpi-kaizen-detail").textContent =
+        `${r.kaizen.name}${r.kaizen.operator ? ` (capacidade do operador ${r.kaizen.operator})` : ""} • ${fmt(r.kaizen.productivityHour, 2)} ${pu()}/h/op`;
+      if (r.kaizen.limit != null && r.takt) card.classList.add(r.kaizen.limit > r.takt ? "is-bottleneck" : "is-balanced");
     } else {
       $("kpi-kaizen").textContent = "--";
       $("kpi-kaizen-detail").textContent = "Marque uma etapa como Kaizen";
@@ -1226,8 +1289,9 @@
       if (inv) tr.querySelector('[data-out="days"]').textContent = inv.days != null ? fmt(inv.days, 2) : "--";
     });
     $("lead-time").textContent = r.demandDaily ? `${fmt(r.leadTimeDays, 2)} dias` : "--";
+    const anyWeighted = r.steps.some((x) => x.weight);
     $("lead-hint").textContent = r.tcTotal && r.leadTimeDays
-      ? `Dias = estoque ÷ demanda diária. Tempo de processamento (ΣTC): ${ft(r.tcTotal)} ${u}.`
+      ? `Dias = estoque ÷ demanda diária. Tempo de processamento (${anyWeighted ? "Σ TP original, sem a ponderação" : "ΣTC"}): ${ft(r.processTotal)} ${u}.`
       : "Dias = quantidade em estoque ÷ demanda diária.";
 
     updateProductivity(r);
@@ -1237,7 +1301,7 @@
   function renderLinkChecks(checks) {
     const box = $("steps-warnings");
     box.replaceChildren(
-      ...checks.map((c) => el("div", { className: `link-check link-${c.kind}`, textContent: `⚠ ${c.text}` }))
+      ...checks.map((c) => el("div", { className: `link-check link-${c.kind}`, textContent: `${c.icon || "⚠"} ${c.text}` }))
     );
     box.hidden = !checks.length;
   }
@@ -1245,20 +1309,35 @@
   /** Gráfico de balanceamento: barras verticais por etapa e linha do takt. */
   function renderGbo(r) {
     const box = $("gbo-chart");
-    const steps = r.steps.filter((s) => s.tc != null);
-    if (!steps.length) {
+    const steps = r.steps.filter((s) => s.tc != null || s.unmeasured);
+    if (!steps.some((s) => s.tc != null)) {
       box.replaceChildren(el("p", { className: "chart-empty", textContent: "As barras aparecem quando as etapas tiverem TC." }));
       return;
     }
     const u = Calc.TIME_UNITS[unitOf()].label;
-    const max = Math.max(...steps.map((s) => s.tc), r.takt || 0) * 1.12;
+    // REV 1.14: linha da carga de cada operador compartilhado (Σ TC das etapas dele)
+    const loads = r.sharedOperators.filter((o) => o.seqs.length > 1 && o.load != null);
+    const max = Math.max(...steps.filter((s) => s.tc != null).map((s) => s.tc), ...loads.map((o) => o.load), r.takt || 0) * 1.12;
     const plot = el("div", { className: "gbo-plot" });
     if (r.takt) {
       const line = el("div", { className: "gbo-takt", title: `Takt: ${ft(r.takt)} ${u}` }, [el("span", { textContent: `Takt ${ft(r.takt)} ${u}` })]);
       line.style.bottom = `${(r.takt / max) * 100}%`;
       plot.append(line);
     }
+    loads.forEach((o) => {
+      const isBn = r.bottleneck && r.bottleneck.kind === "operador" && r.bottleneck.operator === o.label;
+      const text = `Carga do ${o.label} ${ft(o.load, unitOf() === "s" ? 2 : undefined)} ${u}${isBn ? " (gargalo)" : ""}`;
+      const line = el("div", { className: "gbo-load" + (o.overTakt ? " is-over" : ""), title: `${text}: etapas ${o.seqs.join(", ")}` }, [el("span", { textContent: text })]);
+      line.style.bottom = `${(o.load / max) * 100}%`;
+      plot.append(line);
+    });
     steps.forEach((s) => {
+      if (s.unmeasured) {
+        const col = el("div", { className: "gbo-col", title: `${s.seq}. ${s.name}: não medida (fora dos cálculos)` });
+        col.append(el("span", { className: "gbo-value", textContent: "não medida" }), el("div", { className: "gbo-bar is-unmeasured" }));
+        plot.append(col);
+        return;
+      }
       const col = el("div", { className: "gbo-col", title: `${s.seq}. ${s.name}: ${ft(s.tc)} ${u}${s.taktPct != null ? ` (${fmt(s.taktPct, 1)}% do takt)` : ""}` });
       const bar = el("div", { className: "gbo-bar" + (s.overTakt ? " is-over" : "") + (s.kaizen ? " is-kaizen" : "") });
       bar.style.height = `${(s.tc / max) * 100}%`;
@@ -1314,7 +1393,7 @@
     steps.addEventListener("input", (e) => {
       const tr = e.target.closest("tr[data-id]");
       const f = e.target.dataset.field;
-      if (!tr || !f || f === "kaizen") return;
+      if (!tr || !f || f === "kaizen" || e.target.type === "checkbox") return;
       const s = state.doc.steps.find((x) => x.id === tr.dataset.id);
       if (f === "content") {
         const v = Calc.parseNumber(e.target.value);
@@ -1336,7 +1415,15 @@
       markChanged();
     });
     steps.addEventListener("change", (e) => {
-      if (e.target.dataset.field !== "kaizen") return;
+      const f = e.target.dataset.field;
+      if (f === "weighted" || f === "unmeasured") {
+        const step = state.doc.steps.find((x) => x.id === e.target.closest("tr").dataset.id);
+        step[f] = e.target.checked;
+        if (f === "unmeasured" && step.unmeasured) step.kaizen = false;
+        markChanged({ render: f === "unmeasured" });
+        return;
+      }
+      if (f !== "kaizen") return;
       const id = e.target.closest("tr").dataset.id;
       state.doc.steps.forEach((s) => (s.kaizen = s.id === id));
       markChanged();

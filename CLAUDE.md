@@ -53,7 +53,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - HTML/CSS/JS puro, **sem build e sem servidor**. Funciona por `file://`, por servidor local e pelo GitHub Pages.
 - Scripts clássicos no padrão UMD (`window.LeanX` no navegador e `module.exports` nos testes do Node). **Não usar módulos ES** (quebram no `file://`).
 - Armazenamento local-first: IndexedDB (`LeanChronoDB`) e pasta do OneDrive pela File System Access API, com debounce de 3 s e proteção contra conflito (revisão + cópia `_conflito_`).
-- Arquivos: `Crono_*.json` (estudo, versão 6), `MFV_*.json` (MFV, versão 5) e `Yamazumi_*.json` (grupo de estudos, versão 1) — REV 1.14.
+- Arquivos: `Crono_*.json` (estudo, versão 6), `MFV_*.json` (MFV, versão 6) e `Yamazumi_*.json` (grupo de estudos, versão 1) — REV 1.14.
 - A revisão aparece no cabeçalho das 3 páginas (`.app-rev`); um teste confere com a versão do `package.json`.
 
 | Arquivo | Função |
@@ -120,4 +120,11 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 - MFV: POSTO = 1 etapa; LINHA = 1 etapa por operador. Yamazumi: N barras. Excel modelo B+P: um arquivo por operador.
 - Limitação: só vale para operadores filmados no mesmo vídeo e produzindo as mesmas peças. Com 1 operador tudo fica igual à REV 1.12.
 - Avisos de consistência (Fase 3): Σ Qtd ≠ peças (tipo C), ciclo × observado por peça > 10%, modelo REV2.0 com acíclicos por peça, tempo líquido do estudo ≠ tempo disponível do MFV.
-- Pendente (REV 1.15, Fase 2): TC ponderado pela demanda do produto (desligado por padrão), operador compartilhado entre etapas (gargalo = carga do operador), etapa não medida; lead time com o TP original.
+
+## Regra implementada na REV 1.14 (Fase 2): MFV com produto estratificado
+
+- **Ponderar pela demanda do produto** (opção da etapa, desligada por padrão): TC = TP × demanda própria do produto ÷ demanda diária da família. Não vale para o Mix nem para TC digitado. Sem demanda própria: "--" com aviso (não herda a demanda geral).
+- **Operador compartilhado** (campo Operador da etapa): carga = Σ TC das etapas do operador; capacidade = tempo disponível ÷ carga; operadores atuais = distintos + Nº ops das etapas sem operador. Gargalo = maior entre o maior TC e a maior carga (informa qual). Kaizen em etapa compartilhada usa a capacidade do operador. Na EP, Nº ops = TC ÷ carga.
+- **Etapa não medida:** fora de todos os cálculos, tracejada no GBO, aviso de fluxo incompleto; na EP vai só para as premissas.
+- Tempo de processamento (lead time) = Σ TP original, sem a ponderação.
+- Exemplo de conferência (M1–M9): 520 min/dia, família 800/dia (Pão 600, Enroladinho 200), takt 39 s; TPs 6,72 | 4,67 | 3,07 | 11,85 (×200/800) e 4,76 (×600/800) → carga do Op1 10,15 s (26,0% do takt), capacidade 3.075/dia; EP 0,166 | 0,115 | 0,076 | 0,292 | 0,352.

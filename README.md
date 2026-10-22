@@ -338,6 +338,14 @@ A "produtividade" do bloco *Resultados* é **teórica** (capacidade do gargalo �
 - **Payback (meses) = investimento ÷ ganho mensal**. Até 12 meses fica verde; acima disso, amarelo; sem ganho positivo, "sem retorno".
 - MFVs das revisões anteriores com payback preenchido continuam no método da mão de obra.
 
+### Produto estratificado no MFV (REV 1.14)
+
+Quando cada etapa de um produto foi estudada separadamente e a mesma pessoa faz várias etapas:
+
+- **Ponderar pela demanda do produto** (caixa na Origem do TC): TC = TP × demanda do produto ÷ demanda da família. Ex.: Enroladinho 200 de 800/dia → TP 6,72 × 200/800 = 1,68. Desligada por padrão; sem demanda própria no estudo, o TC fica "--".
+- **Operador** (coluna da tabela de etapas): digite o mesmo operador (ex.: Op1) nas etapas que ele faz. O app soma a **carga** dele, mostra % do takt e capacidade, conta 1 pessoa e usa a carga como gargalo quando ela for maior que a maior etapa.
+- **Não medida** (na etapa manual): a etapa aparece no fluxo e tracejada no gráfico, fora dos cálculos, com aviso de fluxo incompleto.
+
 ### Exportar Excel do MFV (modelo B+P)
 
 Em **MFVs → Modelo Excel → Carregar modelo**, escolha a planilha "MFV Simplificado". O botão **Exportar Excel (modelo B+P)** passa a preencher:

@@ -1497,3 +1497,15 @@ body.no-doc .app-workspace, body.no-doc .client-context { display: none !importa
 .op-menu button.is-current { font-weight: 700; color: var(--primary-700); }
 .op-hint { display: block; margin-top: 4px; color: var(--status-info-text); }
 .study-checks { margin: 0 16px 8px; }
+
+/* REV 1.14 (Fase 2): ponderação, operador compartilhado e etapa não medida no MFV */
+.weight-cell { display: block; line-height: 1.5; }
+.weight-cell input { vertical-align: -2px; margin: 0 4px 0 0; }
+.weight-detail { display: block; font-family: var(--font-mono); color: var(--primary-700); }
+.input-op-tag { text-align: center; }
+.mfv-steps-table tr.row-unmeasured td { color: var(--text-muted); font-style: italic; background: var(--bg-subtle); }
+.gbo-bar.is-unmeasured { height: 30%; background: transparent; border: 2px dashed #94a3b8; border-bottom: none; }
+.gbo-load { position: absolute; left: 0; right: 0; border-top: 2px solid #dc2626; z-index: 1; pointer-events: none; }
+.gbo-load span { position: absolute; left: 0; top: -18px; font-size: 11px; font-weight: 700; color: #b91c1c; background: var(--bg-surface); padding: 0 4px; }
+.link-check.link-operador { color: var(--status-ok-text); }
+.link-check.link-gargalo { color: var(--status-danger-text); font-weight: 700; }

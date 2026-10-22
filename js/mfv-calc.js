@@ -20,7 +20,7 @@
   "use strict";
 
   const SCHEMA_ID = "lean-chrono-mfv";
-  const SCHEMA_VERSION = 5; // v2: pç/HH e payback • v3: produto do estudo vinculado • v4: payback no padrão B+P • v5: etapa de grupo Posto (Yamazumi)
+  const SCHEMA_VERSION = 6; // v2: pç/HH e payback • v3: produto do estudo vinculado • v4: payback no padrão B+P • v5: etapa de grupo Posto (Yamazumi) • v6: ponderação, operador compartilhado e etapa não medida (REV 1.14)
   const FILE_PATTERN = /^MFV_.+\.json$/i;
   const DAYS = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
   const EPS = 1e-9;
@@ -122,6 +122,10 @@
         operators: "1",
         uptimePct: "",
         kaizen: false,
+        weighted: false, // REV 1.14: TC = TP × demanda própria do produto ÷ demanda diária da família
+        studyDemand: null, // demanda própria do produto (pç/dia) na última atualização; null = sem demanda própria
+        operatorTag: "", // REV 1.14: operador compartilhado entre etapas (ex.: "Op1")
+        unmeasured: false, // REV 1.14: etapa não medida (só nome e posição no fluxo; fora dos cálculos)
       },
       overrides || {}
     );
@@ -235,7 +239,11 @@
             groupOperators: Number.isFinite(s.groupOperators) ? s.groupOperators : null,
             operators: s.operators == null ? "1" : str(s.operators),
             uptimePct: str(s.uptimePct),
-            kaizen: s.kaizen === true,
+            kaizen: s.kaizen === true && s.unmeasured !== true,
+            weighted: s.weighted === true,
+            studyDemand: Number.isFinite(s.studyDemand) && s.studyDemand > 0 ? s.studyDemand : null,
+            operatorTag: str(s.operatorTag).trim(),
+            unmeasured: s.unmeasured === true,
           })
         ),
       inventories: (Array.isArray(raw.inventories) ? raw.inventories : [])
@@ -327,20 +335,40 @@
     const takt = demandDaily && availDayMin > 0 ? availDayMin / demandDaily : null;
 
     const steps = doc.steps.map((s, i) => {
+      // Etapa não medida (REV 1.14): só nome e posição no fluxo, fora de todos os cálculos
+      if (s.unmeasured) {
+        return {
+          id: s.id, seq: i + 1, name: s.name || `Etapa ${i + 1}`, unmeasured: true, tc: null, tcOriginal: null, weight: null,
+          fromStudy: false, operators: null, opsEff: 0, content: null, contentSource: "", isGroup: false, operatorTag: "",
+          warnings: [], kaizen: false, taktPct: null, overTakt: false, errors: [],
+        };
+      }
       const fromStudy = s.source === "study" && Number.isFinite(s.tcStudyMin);
       const fromGroup = s.source === "group" && Number.isFinite(s.tcGroupMin);
-      const tc = fromStudy ? s.tcStudyMin : fromGroup ? s.tcGroupMin : Number.isFinite(s.tcManualMin) ? s.tcManualMin : null;
+      const tcRaw = fromStudy ? s.tcStudyMin : fromGroup ? s.tcGroupMin : Number.isFinite(s.tcManualMin) ? s.tcManualMin : null;
       const ops = num(s.operators);
       const uptime = num(s.uptimePct);
       const errors = [];
-      if (tc == null || tc <= 0) errors.push(s.source === "study" ? "Estudo sem tempo padrão" : s.source === "group" ? "Grupo sem ciclo" : "Informe o TC");
+      const warnings = [];
+      if (tcRaw == null || tcRaw <= 0) errors.push(s.source === "study" ? "Estudo sem tempo padrão" : s.source === "group" ? "Grupo sem ciclo" : "Informe o TC");
+      // TC ponderado pela demanda do produto (REV 1.14): TP × demanda própria ÷ demanda diária da família.
+      // Não se aplica ao Mix (já ponderado) nem ao TC digitado. Sem demanda própria: "--" (não herda a geral).
+      let weight = null;
+      if (s.weighted && fromStudy && s.studyProduct !== MIX_KEY && !errors.length) {
+        if (!(s.studyDemand > 0)) errors.push("Informe a demanda do produto na Cronoanálise (ponderação pela demanda)");
+        else if (!(demandDaily > 0)) errors.push("Informe a demanda do MFV (ponderação pela demanda do produto)");
+        else {
+          weight = { demand: s.studyDemand, family: demandDaily, factor: s.studyDemand / demandDaily };
+          if (weight.factor > 1 + EPS) warnings.push("Demanda do produto maior que a da família: confira a demanda do MFV");
+        }
+      }
+      const tc = tcRaw == null ? null : weight ? tcRaw * weight.factor : tcRaw;
       if (ops == null || ops < 0) errors.push("Nº de operadores inválido");
       if (uptime != null && (uptime <= 0 || uptime > 100)) errors.push("Uptime deve estar entre 1% e 100%");
       const opsEff = ops == null ? 0 : uptime > 0 && uptime <= 100 ? ops * (uptime / 100) : ops;
       // Conteúdo de trabalho (operadores ideais e balanceamento da linha)
       let content = errors.length ? null : tc;
       let contentSource = "tc";
-      const warnings = [];
       // Conteúdo do posto: grupo Posto do Yamazumi ou estudo com 2+ operadores tipo POSTO (REV 1.14)
       const baseContent = s.groupId ? s.contentGroupMin : s.contentStudyMin;
       const baseTc = s.groupId ? s.tcGroupMin : s.tcStudyMin;
@@ -351,7 +379,7 @@
           contentSource = "manual";
           warnings.push("Conteúdo de trabalho digitado à mão");
         } else if (fromBase && Number.isFinite(baseContent)) {
-          content = baseContent;
+          content = weight ? baseContent * weight.factor : baseContent;
           contentSource = s.groupId ? "group" : "study";
         } else if (Number.isFinite(baseContent) && baseTc > EPS) {
           content = (baseContent * tc) / baseTc;
@@ -365,6 +393,10 @@
         seq: i + 1,
         name: s.name || `Etapa ${i + 1}`,
         tc: errors.length ? null : tc,
+        tcOriginal: errors.length ? null : tcRaw, // TP original (tempo de processamento do lead time)
+        weight,
+        unmeasured: false,
+        operatorTag: String(s.operatorTag || "").trim(),
         fromStudy,
         operators: ops,
         opsEff,
@@ -381,18 +413,70 @@
 
     const valid = steps.filter((s) => s.tc != null);
     const tcTotal = valid.reduce((a, s) => a + s.tc, 0);
+    // Tempo de processamento (lead time): Σ TP original, mesmo com a ponderação pela demanda
+    const processTotal = valid.reduce((a, s) => a + s.tcOriginal, 0);
     const contentTotal = valid.reduce((a, s) => a + s.content, 0);
-    const bottleneck = valid.reduce((m, s) => (!m || s.tc > m.tc ? s : m), null);
+
+    // Operador compartilhado entre etapas (REV 1.14): carga = Σ TC das etapas dele; conta 1 pessoa
+    const sharedMap = new Map();
+    steps.forEach((s) => {
+      if (s.unmeasured || !s.operatorTag) return;
+      const key = s.operatorTag.toLowerCase();
+      if (!sharedMap.has(key)) sharedMap.set(key, { label: s.operatorTag, all: [], steps: [] });
+      const o = sharedMap.get(key);
+      o.all.push(s);
+      if (s.tc != null) o.steps.push(s);
+      if (s.operators != null && Math.abs(s.operators - 1) > EPS) s.warnings.push(`Etapa do operador ${s.operatorTag}: o Nº ops da linha não entra (o operador conta 1 pessoa)`);
+    });
+    const sharedOperators = Array.from(sharedMap.values()).map((o) => {
+      const load = o.steps.reduce((a, s) => a + s.tc, 0);
+      const uptimes = Array.from(new Set(o.all.map((s) => String(doc.steps[s.seq - 1].uptimePct || "").trim())));
+      const up = uptimes.length === 1 ? num(uptimes[0]) : null;
+      const issues = [];
+      if (uptimes.length > 1) issues.push("uptime diferente entre as etapas: não aplicado");
+      if (o.steps.length < o.all.length) issues.push(`${o.all.length - o.steps.length} etapa(s) sem TC fora da carga`);
+      return {
+        label: o.label,
+        seqs: o.all.map((s) => s.seq),
+        load: o.steps.length ? load : null,
+        taktPct: takt && o.steps.length ? (load / takt) * 100 : null,
+        overTakt: !!(takt && o.steps.length && load > takt + EPS),
+        capacityDay: availDayMin > 0 && load > EPS ? availDayMin / load : null,
+        opsEff: up > 0 && up <= 100 ? up / 100 : 1,
+        issues,
+      };
+    });
+    const sharedBy = (s) => (s.operatorTag ? sharedOperators.find((o) => o.label.toLowerCase() === s.operatorTag.toLowerCase()) : null);
+
+    // Gargalo = maior entre o maior TC de etapa e a maior carga de operador (informa qual dos dois)
+    const stepMax = valid.reduce((m, s) => (!m || s.tc > m.tc ? s : m), null);
+    const opMax = sharedOperators.filter((o) => o.load != null).reduce((m, o) => (!m || o.load > m.load ? o : m), null);
+    const bottleneck =
+      opMax && (!stepMax || opMax.load > stepMax.tc + EPS)
+        ? { kind: "operador", seq: null, name: `Carga do operador ${opMax.label}`, operator: opMax.label, tc: opMax.load }
+        : stepMax
+          ? { kind: "etapa", seq: stepMax.seq, name: stepMax.name, tc: stepMax.tc }
+          : null;
     // Nº total de operadores da linha: digitado (equipe compartilhada entre etapas, como na
-    // planilha K37) ou, se vazio, a soma dos operadores efetivos das etapas.
-    const opsSum = steps.reduce((a, s) => a + s.opsEff, 0);
+    // planilha K37) ou, se vazio, a soma dos operadores efetivos das etapas (o operador
+    // compartilhado conta uma vez).
+    const opsSum =
+      steps.filter((s) => !s.operatorTag).reduce((a, s) => a + s.opsEff, 0) + sharedOperators.reduce((a, o) => a + o.opsEff, 0);
     const opsTyped = num(doc.operatorsTotal);
     const opsTotal = opsTyped > 0 ? opsTyped : opsSum;
     const line = lineResults(availDayMin, bottleneck ? bottleneck.tc : null, opsTotal);
     const kaizenStep = steps.find((s) => s.kaizen) || null;
+    // Kaizen em etapa de operador compartilhado: a produção usa a capacidade do operador (carga)
+    const kzOp = kaizenStep ? sharedBy(kaizenStep) : null;
+    const kzLimit = kzOp && kzOp.load != null ? kzOp.load : kaizenStep ? kaizenStep.tc : null;
+    const kzOps = kzOp ? kzOp.opsEff : kaizenStep ? kaizenStep.opsEff : 0;
     const kaizen = kaizenStep
-      ? Object.assign({ name: kaizenStep.name, tc: kaizenStep.tc, operators: kaizenStep.opsEff }, lineResults(availDayMin, kaizenStep.tc, kaizenStep.opsEff))
+      ? Object.assign(
+          { name: kaizenStep.name, tc: kaizenStep.tc, limit: kzLimit, operator: kzOp ? kzOp.label : "", operators: kzOps },
+          lineResults(availDayMin, kzLimit, kzOps)
+        )
       : null;
+    const unmeasured = steps.filter((s) => s.unmeasured).map((s) => ({ seq: s.seq, name: s.name }));
 
     const inventories = doc.inventories.map((inv) => {
       const q = num(inv.quantity);
@@ -413,7 +497,10 @@
       takt,
       steps,
       tcTotal,
-      bottleneck: bottleneck ? { seq: bottleneck.seq, name: bottleneck.name, tc: bottleneck.tc } : null,
+      processTotal,
+      bottleneck,
+      sharedOperators,
+      unmeasured,
       opsTotal,
       opsSum,
       opsTyped: opsTyped > 0,
@@ -639,7 +726,8 @@
       if (!info) return;
       info.warnings.forEach((w) => out.push({ kind: "estudo", seq, text: `${seq}. ${name}: ${w}` }));
       const dd = computed.demandDaily;
-      if (s.studyId && dd > 0 && info.demand > 0 && Math.abs(info.demand - dd) / dd > 0.01) {
+      // Etapa ponderada: a demanda do produto difere da família por definição (REV 1.14)
+      if (s.studyId && !s.weighted && dd > 0 && info.demand > 0 && Math.abs(info.demand - dd) / dd > 0.01) {
         mismatch.push(`${seq}. ${name} (${Calc.formatNumber(info.demand, 1)}/dia)`);
       }
       const av = computed.availDayMin;
@@ -666,6 +754,35 @@
           : `Contagem dupla: o mesmo posto em mais de uma etapa (${steps}) — para o posto que faz vários produtos, use o Mix`;
       out.unshift({ kind: "duplo", text });
     });
+    // Operadores compartilhados e etapas não medidas (REV 1.14)
+    const tu = Calc.TIME_UNITS[doc.timeUnit] ? doc.timeUnit : "min";
+    const ft = (m) => `${Calc.formatTime(m, tu, tu === "s" ? 2 : undefined)} ${Calc.TIME_UNITS[tu].label}`;
+    const seqText = (list) => (list.length > 1 ? `etapas ${list.slice(0, -1).join(", ")} e ${list[list.length - 1]}` : `etapa ${list[0]}`);
+    (computed.sharedOperators || []).forEach((o) => {
+      if (o.seqs.length < 2) return; // operador numa etapa só: nada a conferir
+      const isBn = computed.bottleneck && computed.bottleneck.kind === "operador" && computed.bottleneck.operator === o.label;
+      const parts = [
+        `Operador ${o.label}: ${seqText(o.seqs)}`,
+        `carga ${o.load != null ? ft(o.load) : "--"}`,
+        `${o.taktPct != null ? Calc.formatNumber(o.taktPct, 1) + "%" : "--"} do takt`,
+        `capacidade ${o.capacityDay != null ? Calc.formatNumber(o.capacityDay, 0) : "--"}/dia`,
+      ];
+      out.push({ kind: o.overTakt ? "operador-over" : "operador", icon: o.overTakt ? "⚠" : "✔", text: parts.join(" • ") + (o.issues.length ? ` (${o.issues.join("; ")})` : "") });
+      if (isBn) {
+        const stepMax = (computed.steps || []).filter((x) => x.tc != null).reduce((m, x) => (!m || x.tc > m.tc ? x : m), null);
+        out.push({
+          kind: "gargalo",
+          text: `Gargalo = carga do operador ${o.label} (${ft(o.load)}), não a maior etapa${stepMax ? ` (${stepMax.seq}. ${stepMax.name}, ${ft(stepMax.tc)})` : ""}`,
+        });
+      }
+    });
+    const nm = computed.unmeasured || [];
+    if (nm.length) {
+      out.push({
+        kind: "fluxo",
+        text: `Fluxo incompleto: ${nm.length} etapa(s) sem TC (${nm.map((x) => `${x.seq}. ${x.name}`).join(", ")}). Gargalo e capacidade valem só para as etapas medidas.`,
+      });
+    }
     if (netMismatch.length) {
       out.push({
         kind: "tempo",
@@ -710,6 +827,9 @@
           demandDaily: round(r.demandDaily, 3),
           taktMin: round(r.takt, 4),
           cycleTimeTotalMin: round(r.tcTotal, 4),
+          processingTimeMin: round(r.processTotal, 4), // REV 1.14: Σ TP original (lead time)
+          sharedOperators: r.sharedOperators.map((o) => ({ operator: o.label, steps: o.seqs, loadMin: round(o.load, 4), taktPct: round(o.taktPct, 2), capacityDay: round(o.capacityDay, 2) })),
+          unmeasuredSteps: r.unmeasured,
           workContentMin: round(r.contentTotal, 4),
           lineBalancePct: round(r.lineBalancePct, 2),
           bottleneck: r.bottleneck,
