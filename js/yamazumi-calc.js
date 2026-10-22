@@ -151,10 +151,14 @@
    *  - Conteúdo de trabalho = TP − espera.
    *  - Movimentação + transporte = Σ TN dos elementos com esses desperdícios.
    */
-  function memberMetrics(study, productKey) {
+  function memberMetrics(study, productKey, op) {
     const r = Calc.computeStudy(study);
-    const p = (productKey != null && r.products.find((x) => x.key === productKey)) || (productKey ? null : r.product);
-    if (!p) return { found: false, productMissing: true };
+    const prod = (productKey != null && r.products.find((x) => x.key === productKey)) || (productKey ? null : r.product);
+    if (!prod) return { found: false, productMissing: true };
+    // Estudo com vários operadores (REV 1.14): as medidas são as do operador pedido
+    const opData = op && prod.operators ? prod.operators.find((o) => o.op === op) : null;
+    if (op && prod.operators && !opData) return { found: false, productMissing: true };
+    const p = opData ? Object.assign({}, prod, { summary: opData.summary }) : prod;
     const tolRaw = num(study.shiftParams && study.shiftParams.tolerancePct);
     const tolOk = tolRaw != null && tolRaw >= 0 && tolRaw < 100;
     const tol = tolOk ? tolRaw : 0;
@@ -190,7 +194,17 @@
       netTime: p.kpis.netTime,
       takt: p.kpis.taktTime,
       errorCount: r.errorCount,
+      operator: opData ? opData.op : 0,
+      operatorName: opData ? opData.label : "",
     };
+  }
+
+  /** Operadores de um estudo (produto) com 2+ operadores; [] para estudo de 1 operador. */
+  function studyOperators(study, productKey) {
+    const r = Calc.computeStudy(study);
+    if (!r.multiOperator) return [];
+    const p = (productKey != null && r.products.find((x) => x.key === productKey)) || (productKey ? null : r.product);
+    return p && p.operators ? p.operators.map((o) => ({ op: o.op, label: o.label })) : [];
   }
 
   /**
@@ -201,13 +215,29 @@
   function computeGroup(group, studiesById) {
     const get = (id) => (studiesById instanceof Map ? studiesById.get(id) : studiesById && studiesById[id]);
     const warnings = [];
-    const members = group.members.map((m, i) => {
+    // Estudo com N operadores (REV 1.14) entra como N barras, uma por operador
+    const members = [];
+    group.members.forEach((m, i) => {
       const study = get(m.studyId);
       const label = m.label || (group.kind === "linha" ? `Etapa ${i + 1}` : `Op. ${i + 1}`);
-      if (!study) return { id: m.id, label, studyId: m.studyId, found: false };
-      const mm = memberMetrics(study, m.product || "");
-      if (!mm.found) return { id: m.id, label, studyId: m.studyId, found: false, productMissing: true, processName: study.processName || "" };
-      return Object.assign({ id: m.id, label, studyId: m.studyId }, mm);
+      if (!study) return members.push({ id: m.id, memberId: m.id, label, studyId: m.studyId, found: false });
+      const ops = studyOperators(study, m.product || "");
+      (ops.length ? ops : [null]).forEach((o) => {
+        const lbl = o ? `${m.label || study.processName || "Estudo"} • ${o.label}` : label;
+        const mm = memberMetrics(study, m.product || "", o ? o.op : 0);
+        if (!mm.found) members.push({ id: m.id, memberId: m.id, label: lbl, studyId: m.studyId, found: false, productMissing: true, processName: study.processName || "" });
+        else members.push(Object.assign({ id: o ? `${m.id}#${o.op}` : m.id, memberId: m.id, label: lbl, studyId: m.studyId }, mm));
+      });
+    });
+    // Contagem dupla: o mesmo estudo duas vezes, ou um operador com nome que também é outro estudo do grupo
+    const seenStudy = new Map();
+    group.members.forEach((m) => seenStudy.set(`${m.studyId}|${m.product || ""}`, (seenStudy.get(`${m.studyId}|${m.product || ""}`) || 0) + 1));
+    if (Array.from(seenStudy.values()).some((v) => v > 1)) warnings.push("Contagem dupla: o mesmo estudo aparece mais de uma vez no grupo");
+    const named = members.filter((x) => x.found && x.operator && /\((.+)\)$/.test(x.operatorName));
+    named.forEach((x) => {
+      const name = Calc.elementKey(x.operatorName.match(/\((.+)\)$/)[1]);
+      const other = members.find((y) => y !== x && y.studyId !== x.studyId && (Calc.elementKey(y.label).includes(name) || Calc.elementKey(y.processName).includes(name)));
+      if (other) warnings.push(`Contagem dupla? ${x.label} também parece estar no estudo separado "${other.label}"`);
     });
     const ok = members.filter((m) => m.found && m.tp > EPS);
     members.forEach((m) => {
@@ -428,6 +458,7 @@
     normalizeGroup,
     classOf,
     memberMetrics,
+    studyOperators,
     computeGroup,
     segments,
     compareGroups,

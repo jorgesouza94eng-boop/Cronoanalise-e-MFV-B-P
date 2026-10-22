@@ -107,6 +107,9 @@
         source: "manual",
         studyId: "",
         studyProduct: "", // chave do produto quando o estudo tem vários produtos
+        studyOperator: 0, // REV 1.14: operador do estudo (tipo LINHA); 0 = o estudo inteiro (posto)
+        contentStudyMin: null, // REV 1.14: conteúdo do posto quando o estudo tem 2+ operadores (tipo POSTO)
+        studyOperators: null, // nº de operadores do estudo na última atualização
         studyFileName: "",
         tcStudyMin: null,
         tcManualMin: null,
@@ -218,6 +221,9 @@
             source: s.source === "study" || s.source === "group" ? s.source : "manual",
             studyId: str(s.studyId),
             studyProduct: str(s.studyProduct),
+            studyOperator: Number.isInteger(s.studyOperator) && s.studyOperator > 0 ? s.studyOperator : 0,
+            contentStudyMin: Number.isFinite(s.contentStudyMin) ? s.contentStudyMin : null,
+            studyOperators: Number.isFinite(s.studyOperators) ? s.studyOperators : null,
             studyFileName: str(s.studyFileName),
             tcStudyMin: Number.isFinite(s.tcStudyMin) ? s.tcStudyMin : null,
             tcManualMin: Number.isFinite(s.tcManualMin) ? s.tcManualMin : null,
@@ -335,16 +341,20 @@
       let content = errors.length ? null : tc;
       let contentSource = "tc";
       const warnings = [];
-      if (s.groupId && !errors.length) {
+      // Conteúdo do posto: grupo Posto do Yamazumi ou estudo com 2+ operadores tipo POSTO (REV 1.14)
+      const baseContent = s.groupId ? s.contentGroupMin : s.contentStudyMin;
+      const baseTc = s.groupId ? s.tcGroupMin : s.tcStudyMin;
+      const fromBase = s.groupId ? fromGroup : fromStudy;
+      if ((s.groupId || Number.isFinite(s.contentStudyMin)) && !errors.length) {
         if (Number.isFinite(s.contentManualMin) && s.contentManualMin > 0) {
           content = s.contentManualMin;
           contentSource = "manual";
           warnings.push("Conteúdo de trabalho digitado à mão");
-        } else if (fromGroup && Number.isFinite(s.contentGroupMin)) {
-          content = s.contentGroupMin;
-          contentSource = "group";
-        } else if (Number.isFinite(s.contentGroupMin) && s.tcGroupMin > EPS) {
-          content = (s.contentGroupMin * tc) / s.tcGroupMin;
+        } else if (fromBase && Number.isFinite(baseContent)) {
+          content = baseContent;
+          contentSource = s.groupId ? "group" : "study";
+        } else if (Number.isFinite(baseContent) && baseTc > EPS) {
+          content = (baseContent * tc) / baseTc;
           contentSource = "proporcional";
           warnings.push("TC do posto editado: conteúdo ajustado na mesma proporção");
         }
@@ -360,7 +370,7 @@
         opsEff,
         content,
         contentSource,
-        isGroup: !!s.groupId,
+        isGroup: !!s.groupId || Number.isFinite(s.contentStudyMin),
         warnings,
         kaizen: !!s.kaizen,
         taktPct: takt && tc ? (tc / takt) * 100 : null,
@@ -613,17 +623,18 @@
    */
   function linkChecks(doc, computed, lookup) {
     const out = [];
-    const uses = new Map(); // estudo → [{ seq, name, product, via }]
+    const uses = new Map(); // estudo → [{ seq, name, product, via, op }]
     const mismatch = [];
+    const netMismatch = []; // REV 1.14 (8.4): tempo líquido do estudo × tempo disponível do MFV
     doc.steps.forEach((s, i) => {
       const seq = i + 1;
       const name = s.name || `Etapa ${seq}`;
       const info = lookup(s);
-      const add = (id, product, via) => {
+      const add = (id, product, via, op) => {
         if (!uses.has(id)) uses.set(id, []);
-        uses.get(id).push({ seq, name, product, via });
+        uses.get(id).push({ seq, name, product, via, op: op || 0 });
       };
-      if (s.studyId) add(s.studyId, s.studyProduct || "", "etapa");
+      if (s.studyId) add(s.studyId, s.studyProduct || "", "etapa", s.studyOperator);
       if (s.groupId && info && info.studyIds) info.studyIds.forEach((id) => add(id, null, "grupo"));
       if (!info) return;
       info.warnings.forEach((w) => out.push({ kind: "estudo", seq, text: `${seq}. ${name}: ${w}` }));
@@ -631,9 +642,20 @@
       if (s.studyId && dd > 0 && info.demand > 0 && Math.abs(info.demand - dd) / dd > 0.01) {
         mismatch.push(`${seq}. ${name} (${Calc.formatNumber(info.demand, 1)}/dia)`);
       }
+      const av = computed.availDayMin;
+      if (s.studyId && av > 0 && info.netTime > 0 && Math.abs(info.netTime - av) > 0.5) {
+        netMismatch.push(`${seq}. ${name} (${Calc.formatNumber(info.netTime, 0)} min)`);
+      }
     });
-    uses.forEach((list) => {
-      if (list.length < 2) return;
+    uses.forEach((all) => {
+      if (all.length < 2) return;
+      // Tipo LINHA: etapas de operadores diferentes do mesmo estudo são válidas
+      const whole = all.filter((u) => !u.op);
+      const byOp = {};
+      all.filter((u) => u.op).forEach((u) => (byOp[u.op] = (byOp[u.op] || []).concat([u])));
+      const repeatedOp = Object.values(byOp).find((l) => l.length > 1);
+      if (whole.length < 2 && !(whole.length && Object.keys(byOp).length) && !repeatedOp) return;
+      const list = repeatedOp && whole.length < 2 && !(whole.length && Object.keys(byOp).length) ? repeatedOp : all;
       const steps = list.map((u) => `${u.seq}. ${u.name}`).join(" e ");
       const viaGroup = list.some((u) => u.via === "grupo");
       const mix = list.some((u) => u.product === MIX_KEY) && list.some((u) => u.product != null && u.product !== MIX_KEY);
@@ -644,6 +666,14 @@
           : `Contagem dupla: o mesmo posto em mais de uma etapa (${steps}) — para o posto que faz vários produtos, use o Mix`;
       out.unshift({ kind: "duplo", text });
     });
+    if (netMismatch.length) {
+      out.push({
+        kind: "tempo",
+        text:
+          `Tempo disponível do MFV (${Calc.formatNumber(computed.availDayMin, 0)} min/dia) diferente do tempo líquido dos estudos: ${netMismatch.join(", ")}. ` +
+          "O takt do estudo e o do MFV não são comparáveis: confira a jornada e as paradas.",
+      });
+    }
     if (mismatch.length) {
       out.push({
         kind: "demanda",

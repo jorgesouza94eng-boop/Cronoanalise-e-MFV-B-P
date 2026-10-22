@@ -80,7 +80,8 @@ const STUDIES = [
   await p.fill("#demand-monthly", String(640 * 22));
   await p.fill("#work-days", "22");
   const warn2 = await txt("#steps-warnings");
-  check(warn2.includes("Demanda diária do MFV (640,0/dia)") && warn2.includes("2. Forno • Mix (TC ponderado) (1.280,0/dia)") && !warn2.includes("1. Solda (") , "demanda: só o Mix (1.280/dia) difere dos 640/dia do MFV");
+  const dem = warn2.slice(warn2.indexOf("Demanda diária do MFV")); // REV 1.14: o aviso de tempo líquido (8.4) cita todas as etapas
+  check(dem.includes("Demanda diária do MFV (640,0/dia)") && dem.includes("2. Forno • Mix (TC ponderado) (1.280,0/dia)") && !dem.includes("1. Solda (") , "demanda: só o Mix (1.280/dia) difere dos 640/dia do MFV");
 
   // ---- Seletor: incluir o produto do mesmo estudo pede confirmação
   const pao = await p.$eval("#study-picker", (s) => Array.from(s.options).find((o) => o.textContent.startsWith("Forno • Pão")).value);

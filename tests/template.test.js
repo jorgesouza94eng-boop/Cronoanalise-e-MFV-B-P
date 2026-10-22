@@ -339,3 +339,15 @@ test("REV2.0: avisa que o ritmo não é levado (a planilha não tem a coluna)", 
   const out = T.fillTemplate(await T.loadTemplate(buildTemplate(), { inflate }), st);
   assert.ok(out.warnings.some((w) => /não tem coluna de ritmo/.test(w)));
 });
+
+test("REV 1.14 (A3/T12): modelo REV2.0 com acíclicos por peça avisa; um arquivo por operador", async () => {
+  const st = study();
+  st.elements.forEach((e) => (e.operador = 1));
+  st.elements.push(C.createElement({ description: "Setup", type: "A", videoTime: "9:00", operador: 2 }));
+  st.settings.numOperadores = 2;
+  st.filmPieces = { inicio: "10" };
+  const tpl = await T.loadTemplate(buildTemplate(), { inflate });
+  const one = T.fillTemplate(tpl, C.operatorStudy(st, 2));
+  assert.ok(one.warnings.some((w) => /modelo REV2.0 soma os acíclicos sem dividir pelas peças; use o modelo REV2.1/.test(w)), one.warnings.join(" | "));
+  assert.match(T.exportFileName(st, "m.xlsm", 2), /_Op2_\d{4}-\d{2}-\d{2}\.xlsm$/);
+});

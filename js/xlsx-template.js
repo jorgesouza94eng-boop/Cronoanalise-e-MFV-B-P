@@ -329,7 +329,7 @@
     });
     if (skipped) warnings.push(`${skipped} linha(s) sem tempo ou com erro não foram exportadas.`);
     if (!rev21 && r.summary.acyclic === "por-unidade") {
-      warnings.push("Acíclicos por unidade: a Listagem recebe o tempo do app (Σtempo ÷ peças), mas o ciclo da aba Análise (G3, soma da GERAL) continua com o tempo total do tipo A.");
+      warnings.push("A aba Análise do modelo REV2.0 soma os acíclicos sem dividir pelas peças; use o modelo REV2.1 para o mesmo TP do app.");
     }
     if (r.multiProduct && r.products.length > 1) {
       warnings.push(`Estudo com ${r.products.length} produtos: exportado só "${r.product.name}". Escolha o outro produto no resumo e exporte de novo.`);
@@ -568,12 +568,13 @@
     return tpl.kind === "mfv-rev1" ? fillMfvTemplate(tpl, docOrStudy) : fillTemplate(tpl, docOrStudy);
   }
 
-  function exportFileName(study, templateName) {
+  function exportFileName(study, templateName, op) {
     const ext = /\.xlsm$/i.test(templateName || "") ? "xlsm" : "xlsx";
     const date = new Date().toISOString().slice(0, 10);
     const r = Calc.computeStudy(study);
     const product = r.multiProduct && r.products.length > 1 ? `_${Calc.slugify(r.product.name, "Produto")}` : "";
-    return `Crono_${Calc.slugify(study.clientName, "Cliente")}_${Calc.slugify(study.processName, "Posto")}${product}_${date}.${ext}`;
+    const operator = op ? `_Op${op}` : ""; // REV 1.14: um arquivo por operador
+    return `Crono_${Calc.slugify(study.clientName, "Cliente")}_${Calc.slugify(study.processName, "Posto")}${product}${operator}_${date}.${ext}`;
   }
 
   function exportMfvFileName(doc, templateName) {

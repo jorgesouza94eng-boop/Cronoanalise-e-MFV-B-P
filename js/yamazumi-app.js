@@ -468,9 +468,17 @@
     $("grp-takt-hint").textContent = "O takt do grupo vale só para o Yamazumi; no MFV vale o takt do MFV. Pré-preenchido com os parâmetros do 1º estudo.";
 
     // Estudos
-    $("members-tbody").querySelectorAll("tr[data-id]").forEach((tr, i) => {
-      const m = r.members[i];
-      if (!m) return;
+    $("members-tbody").querySelectorAll("tr[data-id]").forEach((tr) => {
+      // Estudo com N operadores (REV 1.14): a linha resume as N barras (maior TP, Σ espera, Σ conteúdo)
+      const parts = r.members.filter((x) => x.memberId === tr.dataset.id);
+      if (!parts.length) return;
+      const okParts = parts.filter((x) => x.found && x.tp > 0);
+      const m = parts.length === 1 ? parts[0] : okParts.length ? Object.assign({}, okParts[0], {
+        tn: Math.max(...okParts.map((x) => x.tn)),
+        tp: Math.max(...okParts.map((x) => x.tp)),
+        wait: okParts.reduce((a, x) => a + x.wait, 0),
+        content: okParts.reduce((a, x) => a + x.content, 0),
+      }) : parts[0];
       const set = (k, v) => (tr.querySelector(`[data-out="${k}"]`).textContent = v);
       const ok = m.found && m.tp > 0;
       set("tn", ok ? ft(m.tn) : "--");
@@ -478,6 +486,7 @@
       set("wait", ok ? ft(m.wait) : "--");
       set("content", ok ? ft(m.content) : "--");
       set("takt", ok && r.takt ? `${fmt((m.tp / r.takt) * 100, 1)}%` : "--");
+      if (parts.length > 1) tr.cells[2].textContent = `${tr.cells[2].textContent.replace(/ \(\d+ operadores\)$/, "")} (${parts.length} operadores)`;
       tr.classList.toggle("row-error", !ok);
       tr.classList.toggle("row-over-takt", !!(ok && r.takt && m.tp > r.takt + 1e-9));
       tr.title = !m.found ? "Estudo não encontrado neste navegador nem na pasta" : !ok ? "Estudo sem tempo padrão" : "";

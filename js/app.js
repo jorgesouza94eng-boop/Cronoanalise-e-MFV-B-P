@@ -210,6 +210,60 @@
       return valid;
     },
 
+    /* ---- Vários operadores no mesmo estudo (REV 1.14) ---- */
+
+    /** Nº de operadores do estudo. Não pode ficar abaixo do maior operador já usado nas linhas. */
+    onOperatorCountChange(raw) {
+      if (!state.study) return { ok: false, error: "Nenhum estudo aberto", value: 1 };
+      const n = Number(String(raw).trim());
+      const used = state.study.elements.reduce((m, e) => Math.max(m, e.operador || 1), 1);
+      const settings = state.study.settings || (state.study.settings = {});
+      const cur = settings.numOperadores || 1;
+      if (!Number.isInteger(n) || n < 1) return { ok: false, error: "Nº de operadores deve ser um inteiro a partir de 1", value: cur };
+      if (n < used) return { ok: false, error: `Há linhas do Op${used}: troque o operador dessas linhas antes de reduzir para ${n}.`, value: cur };
+      if (n !== cur) {
+        settings.numOperadores = n;
+        if (settings.operadorExibido > n) settings.operadorExibido = 0;
+        markChanged({ rerender: true });
+      }
+      return { ok: true, value: n };
+    },
+
+    onOperatorKindChange(kind) {
+      if (!state.study) return;
+      state.study.settings.tipoOperadores = kind === "linha" ? "linha" : "posto";
+      markChanged();
+    },
+
+    /** Operador da linha (Alt+1…Alt+9 ou etiqueta). Um operador novo aumenta o Nº de operadores. */
+    onSetOperator(id, k) {
+      const el = findElement(id);
+      if (!el || !Number.isInteger(k) || k < 1) return;
+      const settings = state.study.settings || (state.study.settings = {});
+      if (k > (settings.numOperadores || 1)) settings.numOperadores = k;
+      if (el.operador === k) return;
+      el.operador = k;
+      markChanged({ rerender: true });
+    },
+
+    /** Nome opcional do operador (não vai para a IA: ela recebe só "OpN"). */
+    onRenameOperator(k, name) {
+      if (!state.study) return;
+      const settings = state.study.settings || (state.study.settings = {});
+      const map = settings.nomesOperadores || (settings.nomesOperadores = {});
+      const v = String(name || "").trim();
+      if (v) map[k] = v;
+      else delete map[k];
+      markChanged({ rerender: true });
+    },
+
+    /** Operador exibido no resumo e nos indicadores (0 = todos = posto). */
+    onOperatorSelect(k) {
+      if (!state.study) return;
+      state.study.settings.operadorExibido = Number.isInteger(k) && k >= 0 ? k : 0;
+      markChanged();
+    },
+
     /** Considerar no mix (REV 1.12): false = produto fora da carga do posto. */
     onProductInMixChange(key, included) {
       if (!state.study) return;
@@ -352,7 +406,8 @@
       // Novo elemento herda o ritmo da linha anterior (o ritmo do operador tende a se manter).
       const inheritedPace = last && !Calc.parsePace(last.pace).error ? last.pace : "100";
       // ...e o produto (o vídeo costuma seguir no mesmo produto).
-      els.push(Calc.createElement({ pace: inheritedPace, product: last ? last.product || "" : "" }));
+      // ...e o operador (REV 1.14).
+      els.push(Calc.createElement({ pace: inheritedPace, product: last ? last.product || "" : "", operador: last ? last.operador || 1 : 1 }));
       markChanged({ rerender: true });
       return els.length - 1;
     },
@@ -388,14 +443,21 @@
       if (!rec && state.folder === "granted") rec = await syncTemplateFromFolder(true);
       if (!rec) return handlers.onExportXlsxSimple();
       try {
-        const res = await Tpl.fillFromBytes(rec.bytes, state.study);
-        const name = Tpl.exportFileName(state.study, rec.name);
-        const mime = /\.xlsm$/i.test(name)
-          ? "application/vnd.ms-excel.sheet.macroEnabled.12"
-          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-        Store.downloadText(name, res.bytes, mime);
-        UI.toast(`Excel (modelo B+P) exportado: ${name} — ${res.lines} lançamento(s), ${res.elements} elemento(s).`, "ok", 6000);
-        res.warnings.forEach((w) => UI.toast(w, "warn", 9000));
+        // Vários operadores (REV 1.14): o modelo é de um operador → um arquivo por operador
+        const c = state.computed;
+        const ops = c.multiOperator && c.product.operators ? c.product.operators.map((o) => o.op) : [0];
+        for (const op of ops) {
+          const study = op ? Calc.operatorStudy(state.study, op) : state.study;
+          const res = await Tpl.fillFromBytes(rec.bytes, study);
+          const name = Tpl.exportFileName(state.study, rec.name, op);
+          const mime = /\.xlsm$/i.test(name)
+            ? "application/vnd.ms-excel.sheet.macroEnabled.12"
+            : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+          Store.downloadText(name, res.bytes, mime);
+          UI.toast(`Excel (modelo B+P) exportado: ${name} — ${res.lines} lançamento(s), ${res.elements} elemento(s).`, "ok", 6000);
+          res.warnings.forEach((w) => UI.toast(w, "warn", 9000));
+        }
+        if (ops.length > 1) UI.toast(`${ops.length} arquivos: um por operador (o modelo B+P é de um operador).`, "ok", 7000);
       } catch (err) {
         console.error("Falha ao preencher o modelo:", err);
         UI.toast(`Não foi possível usar o modelo: ${err.message || err}. Foi exportado o Excel simples.`, "error", 9000);

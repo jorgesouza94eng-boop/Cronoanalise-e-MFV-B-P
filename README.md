@@ -148,6 +148,18 @@ Num posto que faz vários produtos, o tempo é dividido entre eles. Por isso, o 
 - Com produto fora do mix, aparece o aviso **"Mix parcial: ocupação do posto subestimada"** e o status ganha "(mix parcial)". Sem nenhum produto no mix: "Informe a demanda ou inclua um produto no mix".
 - O **TC ponderado** também pode ir para o MFV como a etapa "Posto • Mix (TC ponderado)".
 
+### Vários operadores no mesmo estudo (REV 1.14)
+
+Quando 2 ou mais pessoas aparecem no **mesmo vídeo** trabalhando no mesmo produto:
+
+1. Em **Nº de operadores**, informe a quantidade e escolha o **Tipo**: POSTO (1 etapa no MFV) ou LINHA (1 etapa por operador).
+2. Cada linha recebe a etiqueta **Op1, Op2…** no nº da linha. Troque com **Alt+1…Alt+9** ou clicando na etiqueta (o menu também cria um operador novo e dá nome opcional).
+3. Lance as linhas na ordem do vídeo, intercaladas. O tempo subtraído é calculado **pelo mesmo operador** (a 1ª linha de cada um usa o Início da filmagem).
+4. Atividade feita em paralelo: a Qtd de cada operador é a produção do posto no trecho.
+5. No resumo, o seletor **Operador** mostra cada um ou o posto (Todos). Indicadores do posto: ciclo = maior TP, conteúdo, balanceamento e operadores ideais.
+
+Limitação: os operadores precisam produzir as mesmas peças do trecho filmado. Filmagens separadas de cada operador continuam como estudos separados (Yamazumi/grupo Posto).
+
 ### Filtros da grade e do resumo (REV 1.3)
 
 A barra de filtros fica acima da grade: **nome do elemento**, **produto**, **tipo C/A**, **valor**, **desperdício**, **filmagem** e **só linhas com erro**. Os filtros podem ser combinados.
@@ -349,7 +361,7 @@ Conferido com o MFV real da Laje Forte: depois do recálculo, 20 de 22 células 
 
 Use quando **um produto depende de mais de uma pessoa** (posto com 2 operadores fazendo atividades diferentes) ou para ver a linha inteira empilhada por classe de valor.
 
-1. Em **Grupos**, informe a empresa e o nome, escolha o tipo e a situação (T1 ou T3) e marque os estudos (cada estudo = 1 operador).
+1. Em **Grupos**, informe a empresa e o nome, escolha o tipo e a situação (T1 ou T3) e marque os estudos (cada estudo = 1 operador; um estudo com vários operadores (REV 1.14) vira uma barra por operador).
    - **Posto:** vira 1 etapa no MFV.
    - **Linha:** cada estudo vira 1 etapa.
 2. O gráfico empilha o TP de cada estudo por **classe de valor** ou **por elemento**, com a linha do takt.

@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.14** | 22/10/2026 | Vários operadores no mesmo estudo (posto ou linha) e avisos de consistência |
 | *REV 1.13 (revertida)* | 22/10/2026 | Desfeita a pedido do consultor; o app voltou à REV 1.12 |
 | **REV 1.12** | 21/10/2026 | "Considerar no mix" por produto, demanda geral não repetida no mix e nome do vídeo por filmagem |
 | **REV 1.11** | 21/10/2026 | Conferência dos vínculos do MFV (contagem dupla, mix, avisos e demanda) |
@@ -18,6 +19,39 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.14 — 22/10/2026
+
+Fase 1 (vários operadores no mesmo estudo) e Fase 3 (avisos de consistência) da especificação em três fases. A **Fase 2** (MFV estratificado: TC ponderado pela demanda do produto, operador compartilhado entre etapas e etapa não medida) fica para a **REV 1.15**.
+
+### Fase 1 — vários operadores no mesmo estudo
+- Parâmetro **Nº de operadores** (padrão 1; com 1 tudo fica igual à REV 1.12) e **Tipo** (POSTO, padrão, ou LINHA) a partir de 2 operadores.
+- Cada linha pertence a um operador: etiqueta **Op1, Op2…** no nº da linha (sem coluna nova na grade). Troca por **Alt+1…Alt+9** ou clicando na etiqueta (menu com "+ Novo operador" e "Dar nome ao OpN…"). Sem limite de operadores; acima de 9, só pela etiqueta. Linha nova repete o operador da anterior.
+- Nome do operador é opcional e **não vai para a IA** (ela recebe só "OpN").
+- **Tempo subtraído pelo mesmo operador na mesma filmagem** (a 1ª linha de cada operador usa o Início da filmagem). As linhas podem ser intercaladas; a validação ("tempo final menor que a leitura anterior do OpX") é por operador.
+- As peças das filmagens valem para todos os operadores; acíclicos (tipo A) = Σtempo ÷ Σpeças por operador.
+- Dica fixa: "Atividade feita em paralelo por mais de um operador: a Qtd de cada um é a produção do posto no trecho."
+- Avisos: "OpX termina em mm:ss; a filmagem termina em mm:ss" e, a partir de 5 operadores, "Muitos operadores no mesmo vídeo: confira a linha do tempo de cada um."
+- Seletor **Operador** no resumo (Todos = posto) e filtro por operador na grade (só exibição).
+- Posto: **ciclo = maior TP**, conteúdo = Σ (TP − espera), balanceamento = conteúdo ÷ (n × ciclo), operadores ideais = conteúdo ÷ takt, capacidade = tempo líquido ÷ ciclo, status pelo ciclo. Com vários produtos, o mix usa o ciclo do posto de cada produto. Na compilação do posto, a % é sobre a soma dos tempos de todos os operadores.
+- MFV: tipo POSTO = 1 etapa (TC = ciclo, Nº ops, conteúdo do posto); tipo LINHA = 1 etapa por operador. A conferência dos vínculos aceita os operadores de um mesmo estudo em etapas diferentes (LINHA) e acusa contagem dupla quando o mesmo operador (ou o posto inteiro e um operador) aparece duas vezes.
+- Yamazumi: estudo com N operadores vira N barras; aviso de contagem dupla quando o mesmo estudo entra duas vezes no grupo.
+- Excel no modelo B+P: **um arquivo por operador** (e por produto), com sufixo `_OpN`. Excel simples, CSV e JSON ganham o campo "Operador" e os resultados por operador e do posto.
+- Limitação: os operadores precisam aparecer no **mesmo vídeo** e produzir as **mesmas peças** do trecho filmado.
+
+### Fase 3 — avisos de consistência
+- 8.1: Σ quantidade de um elemento tipo C diferente das peças das filmagens em que ele aparece.
+- 8.2: tempo do ciclo × tempo observado por peça com diferença acima de **10%**.
+- 8.3: ao exportar no modelo REV2.0 com acíclicos por peça, aviso para usar o modelo REV2.1 (a aba Análise do REV2.0 soma os acíclicos sem dividir pelas peças).
+- 8.4: no MFV, tempo disponível diferente do tempo líquido dos estudos vinculados (diferença acima de 0,5 min/dia).
+- 8.5: a exportação para a aba EP continua gravando o uptime como fração na coluna G (90% → 0,9); a planilha calcula os operadores efetivos na coluna H (F × G). O uptime não altera TC nem capacidade.
+
+### Arquivos e compatibilidade
+- Estudo passa para a **versão 6** (campo `operador` por elemento e `numOperadores`, `tipoOperadores`, `nomesOperadores`, `operadorExibido` nas configurações). Arquivos da REV 1.12 abrem iguais (1 operador). Um estudo salvo na REV 1.14 não abre em app da REV 1.12.
+- Service worker v21. Depois de atualizar, use **Ctrl+F5** (ou feche e abra o app no celular) para carregar a nova revisão.
+- Testes: `tests/operadores-rev114.test.js` (T1–T12, A1–A4) e `tests/e2e.rev114.js`.
 
 ---
 

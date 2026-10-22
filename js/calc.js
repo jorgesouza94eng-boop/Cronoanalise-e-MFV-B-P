@@ -17,7 +17,7 @@
   "use strict";
 
   const SCHEMA_ID = "lean-chrono-estudo";
-  const SCHEMA_VERSION = 5; // v2: peças por filmagem • v3: início por filmagem e produto • v4: demanda por produto • v5: produto no mix e nome do vídeo
+  const SCHEMA_VERSION = 6; // v2: peças por filmagem • v3: início por filmagem e produto • v4: demanda por produto • v5: produto no mix e nome do vídeo • v6: vários operadores no mesmo estudo
 
   /** Faixa aceita para o fator de ritmo (%). */
   const PACE_MIN = 50;
@@ -250,12 +250,21 @@
     const inMix = (study && study.produtoNoMix) || {}; // { chave: false } = fora da carga do posto
     const videos = (study && study.filmVideos) || {}; // { chave da filmagem: nome do vídeo }
     const start = parseTimeInput(study && study.videoStart);
-    let previous = start.minutes != null ? start.minutes : 0;
+    // Vários operadores (REV 1.14): cada um tem a sua leitura contínua dentro da filmagem
+    const settings = (study && study.settings) || {};
+    const opOf = (el) => (Number.isInteger(el && el.operador) && el.operador >= 1 ? el.operador : 1);
+    const declaredOps = Number.isInteger(settings.numOperadores) && settings.numOperadores >= 1 ? settings.numOperadores : 1;
+    const opCount = Math.max(declaredOps, elements.reduce((m, el) => Math.max(m, opOf(el)), 1));
+    const multiOp = opCount > 1;
+    const opNames = settings.nomesOperadores || {};
+    const opLabel = (n) => `Op${n}${String(opNames[n] || "").trim() ? ` (${String(opNames[n]).trim()})` : ""}`;
+    let filmStartMin = start.minutes != null ? start.minutes : 0;
+    let prevByOp = {}; // última leitura de cada operador na filmagem atual
     let film = 1;
     // Filmagens: chave estável = "inicio" (1ª) ou id da linha que marca a nova filmagem.
     // Início da 1ª = Leitura inicial; das demais = study.filmStarts[id] (vazio = 00:00).
     const films = [
-      { film: 1, key: FIRST_FILM_KEY, startSeq: 1, startRaw: String((study && study.videoStart) || ""), start: start.minutes || 0, startError: start.error, observed: 0, video: String(videos[FIRST_FILM_KEY] || "") },
+      { film: 1, key: FIRST_FILM_KEY, startSeq: 1, startRaw: String((study && study.videoStart) || ""), start: start.minutes || 0, startError: start.error, observed: 0, video: String(videos[FIRST_FILM_KEY] || ""), obsByOp: {}, lastByOp: {} },
     ];
 
     let sumSubtracted = 0;
@@ -270,9 +279,12 @@
         film += 1;
         const raw = String(starts[el.id] == null ? "" : starts[el.id]).trim();
         const st = parseTimeInput(raw);
-        previous = st.minutes != null ? st.minutes : 0;
-        films.push({ film, key: el.id, startSeq: index + 1, startRaw: raw, start: previous, startError: st.error, observed: 0, video: String(videos[el.id] || "") });
+        filmStartMin = st.minutes != null ? st.minutes : 0;
+        prevByOp = {};
+        films.push({ film, key: el.id, startSeq: index + 1, startRaw: raw, start: filmStartMin, startError: st.error, observed: 0, video: String(videos[el.id] || ""), obsByOp: {}, lastByOp: {} });
       }
+      const op = multiOp ? opOf(el) : 1;
+      const previous = prevByOp[op] != null ? prevByOp[op] : filmStartMin;
       const time = parseTimeInput(el.videoTime);
       const freq = parseFrequency(el.frequency);
       const qty = parseQuantity(el.quantity);
@@ -285,10 +297,10 @@
       if (time.minutes != null) {
         const diff = time.minutes - previous;
         if (diff < -EPS) {
-          errors.push(`Tempo final menor que a leitura anterior (${formatVideoTime(previous)})`);
+          errors.push(`Tempo final menor que a leitura anterior${multiOp ? ` do Op${op}` : ""} (${formatVideoTime(previous)})`);
         } else {
           subtractedTime = Math.max(0, diff);
-          previous = time.minutes;
+          prevByOp[op] = time.minutes;
           hasReading = true;
         }
       }
@@ -306,7 +318,13 @@
       if (valid) {
         sumSubtracted += subtractedTime;
         sumNormal += normalTime;
-        if (hasReading) films[film - 1].observed += subtractedTime;
+        if (hasReading) {
+          const f = films[film - 1];
+          f.obsByOp[op] = (f.obsByOp[op] || 0) + subtractedTime;
+          f.lastByOp[op] = time.minutes;
+          // Tempo observado da filmagem = o do operador com mais tempo (não soma operadores em paralelo)
+          f.observed = Math.max(...Object.values(f.obsByOp));
+        }
       } else {
         errorCount += 1;
       }
@@ -318,6 +336,7 @@
         type: el.type === "A" ? "A" : "C",
         film,
         newVideo,
+        operator: op,
         product: productName,
         productKey: productName ? elementKey(productName) : "",
         frequency: freq.value,
@@ -344,6 +363,13 @@
     if (!productMap.size) rows.slice(0, 1).forEach(addProduct);
     if (!productMap.size) productMap.set("", { key: "", name: "" });
 
+    // Tempo observado de um conjunto de linhas: o do operador com mais tempo (operadores em paralelo)
+    const maxByOp = (list) => {
+      const by = {};
+      list.forEach((r) => (by[r.operator] = (by[r.operator] || 0) + r.subtractedTime));
+      const v = Object.values(by);
+      return v.length ? Math.max(...v) : 0;
+    };
     // Filmagem × produto: as peças são informadas por produto quando a filmagem tem mais de um
     const filmList = films.map((f) => {
       const inFilm = rows.filter((r) => r.film === f.film && r.hasReading);
@@ -356,7 +382,7 @@
         productKey: pk,
         productName: (productMap.get(pk) || { name: "" }).name,
         key: keys.length > 1 ? `${f.key}|${pk}` : f.key,
-        observed: inFilm.filter((r) => r.productKey === pk && r.valid).reduce((a, r) => a + r.subtractedTime, 0),
+        observed: maxByOp(inFilm.filter((r) => r.productKey === pk && r.valid)),
       }));
       return Object.assign({}, f, { segments });
     });
@@ -367,36 +393,108 @@
         f.segments.filter((s) => s.productKey === p.key).forEach((s) => segs.push({ film: f.film, startSeq: f.startSeq, key: s.key, observed: s.observed }))
       );
       const filmInfo = filmPieces(study, segs, mode);
-      const summary = summarize(elements, rows, mode, filmInfo, p.key);
       // Demanda própria do produto (vazio = demanda geral dos parâmetros)
       const own = multi ? toFiniteOrNull(demands[p.key]) : null;
       const pParams = own != null ? Object.assign({}, params, { dailyDemandPcs: own }) : params;
+      let summary;
+      let kpis;
+      let operators = null;
+      let posto = null;
+      if (!multiOp) {
+        summary = summarize(elements, rows, mode, filmInfo, p.key);
+        kpis = computeKpis(pParams, summary.cycleNormal);
+      } else {
+        // Por operador: resumo, TP, espera e conteúdo; posto: ciclo = maior TP (regra do grupo Posto)
+        const opsHere = [];
+        rows.forEach((r) => r.hasReading && r.productKey === p.key && !opsHere.includes(r.operator) && opsHere.push(r.operator));
+        opsHere.sort((a, b) => a - b);
+        operators = opsHere.map((n) => {
+          const sm = summarize(elements, rows, mode, filmInfo, p.key, n);
+          const k = computeKpis(pParams, sm.cycleNormal);
+          const factor = k.standardTime != null && sm.cycleNormal > EPS ? k.standardTime / sm.cycleNormal : 1;
+          const tp = k.standardTime != null ? k.standardTime : sm.cycleNormal;
+          const wait = sm.elements.filter((g) => g.waste === "espera").reduce((a, g) => a + g.cycleTime, 0) * factor;
+          return { op: n, label: opLabel(n), summary: sm, compilation: compile(sm), kpis: k, tn: sm.cycleNormal, tp, wait, content: tp - wait };
+        });
+        const cycleOp = operators.reduce((m, o) => (!m || o.tn > m.tn ? o : m), null);
+        const combined = [];
+        operators.forEach((o) => o.summary.elements.forEach((g) => combined.push(Object.assign({}, g, { op: o.op, opLabel: o.label }))));
+        combined.forEach((g, i) => (g.seq = i + 1));
+        summary = {
+          elements: combined,
+          cycleNormal: cycleOp ? cycleOp.tn : 0,
+          acyclic: filmInfo.acyclic,
+          conflictCount: combined.filter((g) => g.conflicts.length).length,
+        };
+        kpis = computeKpis(pParams, summary.cycleNormal);
+        const n = operators.length;
+        const cycle = kpis.standardTime != null ? kpis.standardTime : summary.cycleNormal;
+        const content = operators.reduce((a, o) => a + o.content, 0);
+        posto = {
+          n,
+          cycle,
+          cycleOp: cycleOp ? cycleOp.op : null,
+          cycleLabel: cycleOp ? cycleOp.label : "",
+          wait: operators.reduce((a, o) => a + o.wait, 0),
+          content,
+          balancePct: n && cycle > EPS ? (content / (n * cycle)) * 100 : null,
+          opsIdeal: kpis.taktTime > 0 && n ? content / kpis.taktTime : null,
+        };
+      }
       return Object.assign({}, p, {
         films: filmInfo,
         summary,
-        compilation: compile(summary),
+        operators,
+        posto,
+        checks: studyChecks(rows, mode, filmInfo, p, operators ? operators.map((o) => ({ label: o.label, op: o.op, summary: o.summary })) : [{ label: "", op: null, summary }], multi),
+        compilation: compile(summary, operators ? operators.reduce((a, o) => a + o.tn, 0) : null),
         demand: toFiniteOrNull(pParams.dailyDemandPcs),
         demandRaw: multi && demands[p.key] != null ? String(demands[p.key]) : "",
         demandOwn: own != null,
         inMix: !multi || inMix[p.key] !== false,
-        kpis: computeKpis(pParams, summary.cycleNormal),
+        kpis,
       });
     });
     const wanted = study && study.settings && study.settings.product;
     const current = products.find((p) => p.key === wanted) || products[0];
     const mix = multi ? computeMix(products, computeKpis(params, 0).netTime) : null;
+    // Operador exibido no resumo (0 = todos = posto)
+    const wantOp = Number.isInteger(settings.operadorExibido) ? settings.operadorExibido : 0;
+    const view = multiOp && current.operators ? current.operators.find((o) => o.op === wantOp) || null : null;
+    // Avisos da linha do tempo (2.4) e de muitos operadores (1.5)
+    const warnings = [];
+    if (multiOp) {
+      films.forEach((f) => {
+        const lasts = Object.entries(f.lastByOp);
+        if (lasts.length < 2) return;
+        const end = Math.max(...lasts.map(([, t]) => t));
+        lasts
+          .filter(([, t]) => t < end - EPS)
+          .forEach(([n, t]) => warnings.push(`Op${n} termina em ${formatVideoTime(t)}; a filmagem${filmCountLabel(film, f.film)} termina em ${formatVideoTime(end)}`));
+      });
+      if (opCount >= 5) warnings.push("Muitos operadores no mesmo vídeo: confira a linha do tempo de cada um.");
+    }
+    const checks = [];
+    products.forEach((p) => p.checks.forEach((t) => checks.push(multi && p.name ? `${p.name}: ${t}` : t)));
 
     return {
       mode,
       unit: timeUnit(study),
       rows,
       multiProduct: multi,
+      multiOperator: multiOp,
+      operatorCount: opCount,
+      operatorKind: settings.tipoOperadores === "linha" ? "linha" : "posto",
+      operatorLabel: opLabel,
+      operatorView: view ? view.op : 0,
       products,
       product: current,
-      summary: current.summary,
-      compilation: current.compilation,
+      summary: view ? view.summary : current.summary,
+      compilation: view ? view.compilation : current.compilation,
       totals: { sumSubtracted, sumNormal },
-      kpis: current.kpis,
+      kpis: view ? view.kpis : current.kpis,
+      warnings,
+      checks,
       mix,
       errorCount,
       filmCount: film,
@@ -498,8 +596,9 @@
    * Compilação (aba "Compilação e Soluções"): por valor agregado e por desperdício,
    * contando elementos do resumo e somando o tempo no ciclo.
    */
-  function compile(summary) {
-    const total = summary.cycleNormal;
+  function compile(summary, totalOverride) {
+    // Posto com vários operadores: a % é sobre a soma dos tempos de todos os operadores (o ciclo do posto é só o maior)
+    const total = totalOverride != null ? totalOverride : summary.cycleNormal;
     const pct = (t) => (total > EPS ? (t / total) * 100 : 0);
     const byValue = ["AG", "NA", "IN", ""]
       .map((key) => {
@@ -565,12 +664,13 @@
     };
   }
 
-  function summarize(elements, rows, mode, filmInfo, productKey) {
+  function summarize(elements, rows, mode, filmInfo, productKey, op) {
     const perUnitA = !!(filmInfo && filmInfo.acyclic === "por-unidade");
     const groups = new Map();
     rows.forEach((row, i) => {
       if (!row.valid || !row.hasReading) return;
       if (productKey != null && row.productKey !== productKey) return;
+      if (op != null && row.operator !== op) return;
       const el = elements[i];
       const name = String(el.description || "").trim().replace(/\s+/g, " ");
       const key = name ? elementKey(name) : `#${el.id}`;
@@ -588,6 +688,7 @@
           sumNormal: 0,
           sumQuantity: 0,
           conflicts: [],
+          films: [],
         };
         groups.set(key, g);
       } else if (g.type !== row.type && !g.conflicts.includes("tipo")) {
@@ -600,6 +701,7 @@
       }
       if (WASTES[el.waste] && !g.waste) g.waste = el.waste;
       g.occurrences += 1;
+      if (!g.films.includes(row.film)) g.films.push(row.film);
       g.sumSubtracted += row.subtractedTime;
       g.sumNormal += row.normalTime;
       g.sumQuantity += mode === "quantidade" ? row.quantity : 1;
@@ -622,6 +724,86 @@
       g.sharePct = cycleNormal > EPS ? (g.cycleTime / cycleNormal) * 100 : 0;
     });
     return { elements: list, cycleNormal, acyclic: filmInfo ? filmInfo.acyclic : "total", conflictCount: list.filter((g) => g.conflicts.length).length };
+  }
+
+  /**
+   * Cópia do estudo só com as linhas de um operador (REV 1.14), para exportar no modelo B+P
+   * (o modelo é de um operador). As filmagens são mantidas: a 1ª linha do operador em cada
+   * filmagem recebe a marcação de filmagem e o id da linha original que a marcava, para o
+   * início e as peças da filmagem continuarem valendo. O estudo original não é alterado.
+   */
+  function operatorStudy(study, op) {
+    const r = computeStudy(study);
+    const copy = JSON.parse(JSON.stringify(study));
+    const seen = new Set();
+    copy.elements = [];
+    study.elements.forEach((el, i) => {
+      const row = r.rows[i];
+      if (!row || row.operator !== op) return;
+      const e = Object.assign({}, JSON.parse(JSON.stringify(el)), { operador: 1, newVideo: false });
+      if (!seen.has(row.film)) {
+        seen.add(row.film);
+        const f = r.filmList[row.film - 1];
+        if (row.film > 1) {
+          e.newVideo = true;
+          e.id = f.key; // mesma chave do início e das peças da filmagem
+        }
+      }
+      copy.elements.push(e);
+    });
+    if (!copy.elements.length) copy.elements.push(createElement());
+    copy.settings = Object.assign({}, copy.settings, { numOperadores: 1, operadorExibido: 0 });
+    const name = String((study.settings && study.settings.nomesOperadores && study.settings.nomesOperadores[op]) || "").trim();
+    copy.processName = `${study.processName || "Posto"} — Op${op}${name ? ` (${name})` : ""}`;
+    return copy;
+  }
+
+  /** " F2" quando o estudo tem mais de uma filmagem. */
+  function filmCountLabel(total, film) {
+    return total > 1 ? ` F${film}` : "";
+  }
+
+  /**
+   * Avisos de consistência (REV 1.14, Fase 3) — não mudam nenhum cálculo:
+   *  8.1 Elemento tipo C: Σ quantidade ≠ peças do produto nas filmagens em que o elemento aparece
+   *      (só quando essas filmagens têm as peças informadas) → Qtd provavelmente fora de peças.
+   *  8.2 Tempo normal do ciclo × tempo observado por peça (Σ tempo normal das linhas ÷ Σ peças),
+   *      com as peças de todas as filmagens: diferença acima de 10% → conferir Qtd e tipo.
+   * parts: [{ label, op, summary }] — um por operador (ou um só, sem operadores).
+   */
+  function studyChecks(rows, mode, filmInfo, product, parts) {
+    const out = [];
+    if (mode !== "quantidade" || !filmInfo) return out;
+    const piecesByFilm = {};
+    let complete = true;
+    filmInfo.list.forEach((x) => {
+      if (x.pieces == null) complete = false;
+      else piecesByFilm[x.film] = (piecesByFilm[x.film] || 0) + x.pieces;
+    });
+    parts.forEach((part) => {
+      const tag = part.label ? `${part.label}: ` : "";
+      part.summary.elements.forEach((g) => {
+        if (g.type !== "C") return;
+        if (!g.films.every((f) => piecesByFilm[f] != null)) return;
+        const pieces = g.films.reduce((a, f) => a + piecesByFilm[f], 0);
+        if (pieces > 0 && Math.abs(g.sumQuantity - pieces) > 1e-6) {
+          out.push(
+            `${tag}Elemento "${g.name}": Σ quantidade (${formatNumber(g.sumQuantity, g.sumQuantity % 1 ? 2 : 0)}) diferente das peças do produto (${formatNumber(pieces, pieces % 1 ? 2 : 0)}). Confira se a Qtd está em peças do produto final.`
+          );
+        }
+      });
+      if (complete && filmInfo.piecesTotal > 0) {
+        const own = rows.filter((r) => r.valid && r.hasReading && r.productKey === product.key && (part.op == null || r.operator === part.op));
+        const observed = own.reduce((a, r) => a + r.normalTime, 0) / filmInfo.piecesTotal;
+        const cyc = part.summary.cycleNormal;
+        if (observed > EPS && Math.abs(cyc - observed) / observed > 0.1 + EPS) {
+          out.push(
+            `${tag}Tempo do ciclo (${formatNumber(cyc * 60, 2)} s) diferente do tempo observado por peça (${formatNumber(observed * 60, 2)} s): confira Qtd e tipo dos elementos.`
+          );
+        }
+      }
+    });
+    return out;
   }
 
   /**
@@ -765,6 +947,7 @@
         kaizen: "",
         newVideo: false,
         product: "",
+        operador: 1, // REV 1.14: operador da linha (1 = único operador)
       },
       overrides || {}
     );
@@ -859,6 +1042,11 @@
         timeUnit: TIME_UNITS[raw.settings && raw.settings.timeUnit] ? raw.settings.timeUnit : "min",
         multiProduct: !!(raw.settings && raw.settings.multiProduct === true),
         product: raw.settings && typeof raw.settings.product === "string" ? raw.settings.product : "",
+        // Vários operadores (REV 1.14): ausente = 1 operador (como antes)
+        numOperadores: raw.settings && Number.isInteger(raw.settings.numOperadores) && raw.settings.numOperadores >= 1 ? raw.settings.numOperadores : 1,
+        tipoOperadores: raw.settings && raw.settings.tipoOperadores === "linha" ? "linha" : "posto",
+        nomesOperadores: normalizeFilmPieces(raw.settings && raw.settings.nomesOperadores),
+        operadorExibido: raw.settings && Number.isInteger(raw.settings.operadorExibido) && raw.settings.operadorExibido >= 0 ? raw.settings.operadorExibido : 0,
       },
       shiftParams: {
         shiftTimeMin: num(params.shiftTimeMin, null),
@@ -883,6 +1071,7 @@
             kaizen: str(e.kaizen),
             newVideo: e.newVideo === true,
             product: str(e.product),
+            operador: Number.isInteger(e.operador) && e.operador >= 1 ? e.operador : 1,
           })
         ),
     };
@@ -975,6 +1164,35 @@
             }
           : undefined,
         acyclicTime: r.summary.acyclic,
+        // Vários operadores (REV 1.14): resultados por operador e do posto, por produto
+        operadores: r.multiOperator
+          ? {
+              numero: r.operatorCount,
+              tipo: r.operatorKind,
+              porProduto: r.products.map((p) => ({
+                produto: p.name,
+                posto: p.posto
+                  ? {
+                      cicloMin: round(p.posto.cycle, 6),
+                      operadorDoCiclo: p.posto.cycleLabel,
+                      conteudoMin: round(p.posto.content, 6),
+                      esperaMin: round(p.posto.wait, 6),
+                      balanceamentoPct: round(p.posto.balancePct, 2),
+                      operadoresIdeais: round(p.posto.opsIdeal, 3),
+                      capacidadePcsDia: p.kpis.capacity,
+                    }
+                  : null,
+                operadores: (p.operators || []).map((o) => ({
+                  operador: o.label,
+                  tempoNormalMin: round(o.tn, 6),
+                  tempoPadraoMin: round(o.tp, 6),
+                  esperaMin: round(o.wait, 6),
+                  conteudoMin: round(o.content, 6),
+                })),
+              })),
+            }
+          : undefined,
+        avisos: r.warnings.concat(r.checks),
         summary: r.summary.elements.map((g) => ({
           seq: g.seq,
           element: g.name,
@@ -993,6 +1211,7 @@
           id: row.id,
           seq: row.seq,
           film: row.film,
+          operador: row.operator,
           type: row.type,
           subtractedTimeMin: round(row.subtractedTime, 4),
           normalTimeMin: round(row.normalTime, 4),
@@ -1033,6 +1252,7 @@
     const qtyMode = r.mode === "quantidade";
     const multi = r.multiProduct;
     const P = (v) => (multi ? [v] : []); // coluna Produto só com vários produtos
+    const O = (v) => (r.multiOperator ? [v] : []); // coluna Operador só com 2+ operadores (REV 1.14)
 
     const lines = [];
     lines.push(["Cliente", q(study.clientName)].join(";"));
@@ -1046,6 +1266,7 @@
         "Nº",
         "Filmagem",
         "Vídeo",
+        ...O("Operador"),
         ...P("Produto"),
         "Elemento",
         "Tipo",
@@ -1069,6 +1290,7 @@
           row.seq,
           row.film,
           q(r.filmList[row.film - 1].video),
+          ...O(q(r.operatorLabel(row.operator))),
           ...P(q(row.product || "(sem produto)")),
           q(el.description),
           row.type === "A" ? "Acíclico" : "Cíclico",
@@ -1139,6 +1361,21 @@
       lines.push(["Status do mix", q(MIX_STATUS[r.mix.status] + (r.mix.partial ? " (mix parcial)" : ""))].join(";"));
       r.mix.issues.forEach((t) => lines.push(["Aviso", q(t)].join(";")));
     }
+    if (r.multiOperator) {
+      lines.push("");
+      lines.push(`OPERADORES (${r.operatorCount}) — tipo ${r.operatorKind === "linha" ? "LINHA" : "POSTO"}`);
+      lines.push([...P("Produto"), "Operador", `Tempo normal (${u}/pç)`, `Tempo padrão (${u}/pç)`, `Espera (${u}/pç)`, `Conteúdo (${u}/pç)`].join(";"));
+      r.products.forEach((pr) => {
+        (pr.operators || []).forEach((o) => lines.push([...P(q(pr.name)), q(o.label), nt(o.tn), nt(o.tp), nt(o.wait), nt(o.content)].join(";")));
+        if (pr.posto) {
+          lines.push(
+            [...P(q(pr.name)), q("Posto"), "", nt(pr.posto.cycle), nt(pr.posto.wait), nt(pr.posto.content)].join(";") +
+              `;Balanceamento (%);${pr.posto.balancePct == null ? "" : formatNumber(pr.posto.balancePct, 1)};Operadores ideais;${pr.posto.opsIdeal == null ? "" : formatNumber(pr.posto.opsIdeal, 2)}`
+          );
+        }
+      });
+    }
+    r.warnings.concat(r.checks).forEach((t) => lines.push(["Aviso", q(t)].join(";")));
     return "\uFEFF" + lines.join("\r\n");
   }
 
@@ -1202,6 +1439,7 @@
     computeKpis,
     computeMix,
     productFillPlan,
+    operatorStudy,
     formatNumber,
     generateId,
     slugify,

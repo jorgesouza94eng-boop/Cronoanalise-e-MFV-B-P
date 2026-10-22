@@ -317,6 +317,30 @@
       const tc = (k) => (k.standardTime > 0 ? k.standardTime : k.sumNormal > 0 ? k.sumNormal : null);
       const quality = (k) => M.studyQuality(r, k); // avisos levados à etapa do MFV (REV 1.11)
       const q0 = quality("");
+      // Vários operadores (REV 1.14): POSTO = 1 etapa (ciclo, N ops, conteúdo); LINHA = 1 etapa por operador
+      const opsOf = (p) =>
+        p && p.operators
+          ? { nOps: p.posto.n, kind: r.operatorKind, contentMin: p.posto.content, opList: p.operators.map((o) => ({ op: o.op, label: o.label, tcMin: o.tp })) }
+          : {};
+      const mixOps = () => {
+        if (!r.multiOperator || !r.mix || r.mix.weightedTP == null) return {};
+        const inc = r.products.filter((p) => p.inMix !== false && p.demandOwn && p.demand > 0 && p.posto);
+        const D = inc.reduce((a, p) => a + p.demand, 0);
+        if (!(D > 0)) return {};
+        const ops = [];
+        inc.forEach((p) => p.operators.forEach((o) => !ops.includes(o.op) && ops.push(o.op)));
+        ops.sort((a, b) => a - b);
+        return {
+          nOps: ops.length,
+          kind: r.operatorKind,
+          contentMin: inc.reduce((a, p) => a + p.posto.content * p.demand, 0) / D,
+          opList: ops.map((op) => ({
+            op,
+            label: r.operatorLabel(op),
+            tcMin: inc.reduce((a, p) => a + ((p.operators.find((o) => o.op === op) || { tp: 0 }).tp || 0) * p.demand, 0) / D,
+          })),
+        };
+      };
       map.set(study.id, {
         id: study.id,
         fileName: fileName || study.fileName,
@@ -326,12 +350,14 @@
         tcMin: tc(r.kpis),
         warnings: q0.warnings,
         demand: q0.demand,
+        netTime: r.kpis.netTime, // REV 1.14 (8.4): conferido com o tempo disponível do MFV
+        ...opsOf(r.product),
         // Mix sem TC (incompleto ou sem produto no mix): a etapa Mix já existente mantém o último TC e avisa
         mixProblem: r.mix && r.mix.weightedTP == null ? r.mix.issues[0] || "mix incompleto" : "",
         products: r.multiProduct
           ? r.products
-              .map((p) => Object.assign({ key: p.key, name: p.name, tcMin: tc(p.kpis) }, quality(p.key)))
-              .concat(r.mix && r.mix.weightedTP != null ? [Object.assign({ key: MIX_KEY, name: "Mix (TC ponderado)", tcMin: r.mix.weightedTP }, quality(MIX_KEY))] : [])
+              .map((p) => Object.assign({ key: p.key, name: p.name, tcMin: tc(p.kpis) }, quality(p.key), opsOf(p)))
+              .concat(r.mix && r.mix.weightedTP != null ? [Object.assign({ key: MIX_KEY, name: "Mix (TC ponderado)", tcMin: r.mix.weightedTP }, quality(MIX_KEY), mixOps())] : [])
           : [],
       });
     };
@@ -350,7 +376,20 @@
       if (!st.products.length) state.studies.push(Object.assign({ key: st.id, product: "", productName: "" }, st));
       else
         st.products.forEach((p) =>
-          state.studies.push(Object.assign({}, st, { key: `${st.id}::${p.key}`, product: p.key, productName: p.name, tcMin: p.tcMin, warnings: p.warnings, demand: p.demand }))
+          state.studies.push(
+            Object.assign({}, st, {
+              key: `${st.id}::${p.key}`,
+              product: p.key,
+              productName: p.name,
+              tcMin: p.tcMin,
+              warnings: p.warnings,
+              demand: p.demand,
+              nOps: p.nOps,
+              kind: p.kind,
+              contentMin: p.contentMin,
+              opList: p.opList,
+            })
+          )
         );
     });
     state.studyDocs = docs;
@@ -406,7 +445,7 @@
       const any = state.studies.find((x) => x.id === step.studyId);
       if (any && any.mixProblem) return { warnings: [`mix incompleto na Cronoanálise (${any.mixProblem}); TC mantido do último cálculo`], demand: null };
     }
-    return st ? { warnings: st.warnings || [], demand: st.demand } : null;
+    return st ? { warnings: st.warnings || [], demand: st.demand, netTime: st.netTime } : null;
   }
 
   /** Avisos de contagem dupla que surgiriam ao incluir estas etapas (pede confirmação). */
@@ -476,7 +515,7 @@
     const options = list.map((s) =>
       el("option", {
         value: s.key,
-        textContent: `${s.processName || "Sem posto"}${s.productName ? ` • ${s.productName}` : ""} — ${s.clientName || "Sem cliente"} (${s.tcMin ? ft(s.tcMin) + " " + Calc.TIME_UNITS[unitOf()].label : "sem tempo"})`,
+        textContent: `${s.processName || "Sem posto"}${s.productName ? ` • ${s.productName}` : ""}${opsTag(s)} — ${s.clientName || "Sem cliente"} (${s.tcMin ? ft(s.tcMin) + " " + Calc.TIME_UNITS[unitOf()].label : "sem tempo"})`,
       })
     );
     const groups = state.groups
@@ -520,11 +559,17 @@
       if (!s.studyId) return;
       const st = findStudy(s);
       if (!st) return;
-      if (st.tcMin !== s.tcStudyMin || st.fileName !== s.studyFileName) {
-        if (s.source === "study" && Number.isFinite(s.tcStudyMin) && st.tcMin !== s.tcStudyMin) {
-          visible.push({ id: s.id, name: s.name || st.processName, from: s.tcStudyMin, to: st.tcMin });
+      const v = linkedValues(s, st);
+      const contentNow = Number.isFinite(v.content) ? v.content : null;
+      if (v.tc !== s.tcStudyMin || st.fileName !== s.studyFileName || contentNow !== s.contentStudyMin || (v.n != null && v.n !== s.studyOperators)) {
+        if (s.source === "study" && Number.isFinite(s.tcStudyMin) && v.tc !== s.tcStudyMin) {
+          visible.push({ id: s.id, name: s.name || st.processName, from: s.tcStudyMin, to: v.tc });
         }
-        s.tcStudyMin = st.tcMin;
+        // Nº de operadores acompanha o estudo (POSTO), salvo se tiver sido alterado à mão
+        if (v.n != null && String(s.operators).trim() === String(s.studyOperators)) s.operators = String(v.n);
+        s.tcStudyMin = v.tc;
+        s.contentStudyMin = contentNow;
+        if (v.n != null) s.studyOperators = v.n;
         s.studyFileName = st.fileName;
         changed += 1;
       }
@@ -617,6 +662,29 @@
     });
   }
 
+  /**
+   * Etapas de um estudo (REV 1.14): 1 operador = 1 etapa (como antes); 2+ operadores tipo POSTO =
+   * 1 etapa (TC = ciclo do posto, Nº ops = N, conteúdo do posto); tipo LINHA = 1 etapa por operador.
+   */
+  function stepsFromStudy(st) {
+    if (!(st.nOps > 1)) return [stepFromStudy(st)];
+    if (st.kind === "linha") {
+      return st.opList.map((o) =>
+        Object.assign(stepFromStudy(st), { name: `${stepFromStudy(st).name} • ${o.label}`, studyOperator: o.op, tcStudyMin: o.tcMin })
+      );
+    }
+    return [Object.assign(stepFromStudy(st), { contentStudyMin: st.contentMin, operators: String(st.nOps), studyOperators: st.nOps })];
+  }
+
+  /** TC (e conteúdo) atuais de uma etapa ligada ao estudo, inclusive a de um operador (LINHA). */
+  function linkedValues(step, st) {
+    if (step.studyOperator) {
+      const o = (st.opList || []).find((x) => x.op === step.studyOperator);
+      return { tc: o ? o.tcMin : null, content: null, n: null };
+    }
+    return { tc: st.tcMin, content: st.nOps > 1 && st.kind !== "linha" ? st.contentMin : null, n: st.nOps > 1 ? st.nOps : null };
+  }
+
   /** Lista de estudos da empresa digitada no "Novo MFV" (marcados viram etapas). */
   function renderNewDocStudies() {
     const key = Calc.elementKey($("new-client").value);
@@ -637,7 +705,7 @@
         const label = el("label", {}, [
           cb,
           el("span", { className: "study-check-order" }),
-          el("span", { textContent: `${s.processName || "Sem posto"}${s.productName ? ` • ${s.productName}` : ""}` }),
+          el("span", { textContent: `${s.processName || "Sem posto"}${s.productName ? ` • ${s.productName}` : ""}${opsTag(s)}` }),
           warn,
           el("span", { className: "study-check-tc", textContent: s.tcMin ? `TC ${ft(s.tcMin)} ${u}` : "sem tempo padrão" }),
         ]);
@@ -666,7 +734,7 @@
       cb.closest("label").querySelector(".study-check-order").textContent = i >= 0 ? `${i + 1}º` : "";
     });
     const chosen = state.checkOrder.map((k) => state.studies.find((x) => x.key === k)).filter(Boolean);
-    const dup = M.linkChecks({ steps: chosen.map(stepFromStudy) }, { demandDaily: null }, linkInfo).filter((c) => c.kind === "duplo");
+    const dup = M.linkChecks({ steps: chosen.flatMap(stepsFromStudy) }, { demandDaily: null }, linkInfo).filter((c) => c.kind === "duplo");
     const box = $("new-doc-warning");
     box.textContent = dup.length ? `⚠ ${dup[0].text}.` : "";
     box.hidden = !dup.length;
@@ -685,7 +753,7 @@
       toast(`"${exists.name}" já é etapa deste MFV.`, "ok");
       return;
     }
-    state.doc.steps.push(stepFromStudy(st));
+    state.doc.steps.push(...stepsFromStudy(st));
     markChanged({ render: true });
     toast(`Etapa adicionada: ${st.processName}${st.productName ? ` • ${st.productName}` : ""} (TC ${st.tcMin ? ft(st.tcMin) + " " + Calc.TIME_UNITS[unitOf()].label : "sem tempo padrão"}). Preencha nº de operadores e uptime.`, "ok", 7000);
   }
@@ -995,11 +1063,25 @@
       origin.append(el("label", { className: "content-cell" }, ["Conteúdo ", content]));
     } else if (s.studyId) {
       const edited = s.source === "manual";
-      origin.append(el("span", { className: "origin-study", textContent: `${edited ? "✎ editado • " : "Estudo: "}${studyLabel(s)}`, title: s.studyFileName }));
+      const postoTag = Number.isFinite(s.contentStudyMin) ? ` (posto, ${s.studyOperators || "?"} op.)` : "";
+      origin.append(el("span", { className: "origin-study", textContent: `${edited ? "✎ editado • " : "Estudo: "}${studyLabel(s)}${postoTag}`, title: s.studyFileName }));
       if (edited) {
         const back = el("button", { type: "button", className: "btn-link", textContent: "↺ usar estudo", title: "Voltar a usar o tempo padrão do estudo" });
         back.dataset.action = "use-study";
         origin.append(back);
+      }
+      // Estudo com 2+ operadores (POSTO): conteúdo de trabalho editável, como no grupo Posto
+      if (Number.isFinite(s.contentStudyMin)) {
+        origin.classList.add("origin-cell-group");
+        const content = el("input", {
+          type: "text",
+          className: "input-cell mono input-content",
+          inputMode: "decimal",
+          autocomplete: "off",
+          title: "Conteúdo de trabalho do posto Σ(TP − espera). Vazio = calculado pelo estudo",
+        });
+        content.dataset.field = "content";
+        origin.append(el("label", { className: "content-cell" }, ["Conteúdo ", content]));
       }
     } else {
       origin.append(el("span", { className: "text-muted", textContent: "Manual" }));
@@ -1045,10 +1127,16 @@
     );
   }
 
+  /** " (posto, 2 op.)" / " (linha, 3 op.)" para estudos com vários operadores. */
+  function opsTag(st) {
+    return st.nOps > 1 ? ` (${st.kind === "linha" ? "linha" : "posto"}, ${st.nOps} op.)` : "";
+  }
+
   function studyLabel(s) {
     const st = findStudy(s);
-    if (st && st.productName) return `${st.processName || st.fileName} • ${st.productName}`;
-    return st ? st.processName || st.fileName : s.studyFileName || "estudo não encontrado";
+    const op = st && s.studyOperator ? ((st.opList || []).find((o) => o.op === s.studyOperator) || { label: `Op${s.studyOperator}` }).label : "";
+    const base = st && st.productName ? `${st.processName || st.fileName} • ${st.productName}` : st ? st.processName || st.fileName : s.studyFileName || "estudo não encontrado";
+    return op ? `${base} • ${op}` : base;
   }
 
   /** Atualiza só os valores calculados (mantém o foco do teclado). */
@@ -1280,9 +1368,9 @@
       }
       const st = state.studies.find((x) => x.key === value);
       if (!st) return toast("Escolha um estudo na lista.", "warn");
-      const step = stepFromStudy(st);
-      if (!confirmNoDouble(state.doc, [step])) return;
-      state.doc.steps.push(step);
+      const newSteps = stepsFromStudy(st);
+      if (!confirmNoDouble(state.doc, newSteps)) return;
+      state.doc.steps.push(...newSteps);
       if (!state.doc.clientName && st.clientName) state.doc.clientName = st.clientName;
       markChanged({ render: true });
       toast(`Etapa adicionada: ${st.processName} (TC ${st.tcMin ? ft(st.tcMin) + " " + Calc.TIME_UNITS[unitOf()].label : "sem tempo padrão"}).`, "ok");
@@ -1435,7 +1523,7 @@
       state.checkOrder = [];
       await flushSave();
       const doc = M.createMfv({ clientName: client, family });
-      doc.steps = chosen.map(stepFromStudy);
+      doc.steps = chosen.flatMap(stepsFromStudy);
       const pg = state.pendingGroupId && state.groups.find((g) => g.id === state.pendingGroupId);
       state.pendingGroupId = null;
       if (pg) doc.steps.push(...stepsFromGroup(pg));

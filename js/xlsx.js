@@ -279,6 +279,7 @@
       H("Nº"), ...(multi ? [H("Produto")] : []), H("Elemento"), H("Tempo (Início)"), H("Tempo (Fim)"), H("Filmagem"),
       H(qtyMode ? "Quantidade" : "Frequência"), H("Valor"), H("Tipo"), H("Tempo/un (s)"), H("Tempo (s)"),
       H("Ritmo (%)"), H("Tempo normal (s)"), H("Desperdício"), H("Ação Kaizen (ECRS)"), H("Erros"), H("Vídeo"),
+      ...(r.multiOperator ? [H("Operador")] : []),
     ]);
     study.elements.forEach((el, i) => {
       const row = r.rows[i];
@@ -289,6 +290,7 @@
         N(row.hasReading ? sec(row.unitTime) : ""), N(row.hasReading ? sec(row.subtractedTime) : ""), N(Calc.parsePace(el.pace).value || "", "int"),
         N(row.hasReading ? sec(row.normalTime) : ""), T(Calc.WASTES[el.waste] || ""), T(el.kaizen), T(row.errors.join(" | ")),
         T(r.filmList[row.film - 1].video),
+        ...(r.multiOperator ? [T(r.operatorLabel(row.operator))] : []),
       ]);
     });
     const geralLast = geral.length;
@@ -392,15 +394,29 @@
       ].forEach(([a, b, c]) => analise.push([T(a), typeof b === "number" ? N(b) : T(b == null ? "" : b), T(c)]));
       mix.issues.forEach((t) => analise.push([T("Aviso"), T(t), T("")]));
     }
+    // Vários operadores (REV 1.14): por operador e o posto, de cada produto
+    if (r.multiOperator) {
+      analise.push(null, [{ v: `Operadores (${r.operatorCount}) — tipo ${r.operatorKind === "linha" ? "LINHA" : "POSTO"}`, s: "subtitle" }]);
+      analise.push([H(multi ? "Produto • operador" : "Operador"), H("Tempo normal (s/pç)"), H("Tempo padrão (s/pç)"), H("Espera (s/pç)"), H("Conteúdo (s/pç)")]);
+      r.products.forEach((pr) => {
+        const tag = (t) => (multi ? `${pr.name} • ${t}` : t);
+        (pr.operators || []).forEach((o) => analise.push([T(tag(o.label)), N(sec(o.tn)), N(sec(o.tp)), N(sec(o.wait)), N(sec(o.content))]));
+        if (pr.posto) {
+          analise.push([T(tag(`Posto (ciclo = maior TP: ${pr.posto.cycleLabel})`)), T(""), N(sec(pr.posto.cycle)), N(sec(pr.posto.wait)), N(sec(pr.posto.content))]);
+          analise.push([T(tag("Balanceamento / operadores ideais")), pr.posto.balancePct == null ? T("") : N(Math.round(pr.posto.balancePct * 10) / 10), T("%"), pr.posto.opsIdeal == null ? T("") : N(Math.round(pr.posto.opsIdeal * 100) / 100), T("ideais")]);
+        }
+      });
+    }
+    r.warnings.concat(r.checks).forEach((t) => analise.push([T("Aviso"), T(t)]));
     const lastCol = (n) => colName(n - 1);
 
     return [
       {
         name: "GERAL",
         rows: geral,
-        cols: multi ? [6, 18, 42, 13, 13, 10, 11, 13, 7, 13, 11, 10, 15, 24, 32, 30, 24] : [6, 42, 13, 13, 10, 11, 13, 7, 13, 11, 10, 15, 24, 32, 30, 24],
+        cols: (multi ? [6, 18, 42, 13, 13, 10, 11, 13, 7, 13, 11, 10, 15, 24, 32, 30, 24] : [6, 42, 13, 13, 10, 11, 13, 7, 13, 11, 10, 15, 24, 32, 30, 24]).concat(r.multiOperator ? [16] : []),
         merges: ["A1:H1"],
-        autoFilter: `A${geralHeader}:${lastCol(multi ? 17 : 16)}${Math.max(geralLast, geralHeader + 1)}`,
+        autoFilter: `A${geralHeader}:${lastCol((multi ? 17 : 16) + (r.multiOperator ? 1 : 0))}${Math.max(geralLast, geralHeader + 1)}`,
       },
       {
         name: "Listagem de Elementos",

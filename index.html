@@ -19,7 +19,7 @@
         <h1>Cronoanálise &amp; MFV</h1>
         <nav class="app-nav" aria-label="Módulos">
           <a href="index.html" aria-current="page">Cronoanálise</a><a href="mfv.html">MFV</a><a href="yamazumi.html">Yamazumi</a>
-        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.12</span></nav>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.14</span></nav>
       </div>
     </div>
 
@@ -96,6 +96,14 @@
             <input type="text" inputmode="decimal" id="tolerance-factor" data-param="tolerancePct" autocomplete="off"
                    title="Tempo padrão = ΣTempo normal × (1 + Tolerância/100)">
           </div>
+          <div class="param-field">
+            <label for="op-count" title="Operadores filmados no mesmo vídeo, cada um com a sua leitura contínua. 1 = como antes">Nº de operadores</label>
+            <input type="text" inputmode="numeric" id="op-count" autocomplete="off" title="Cada linha pertence a um operador (etiqueta Op1, Op2… no nº da linha; Alt+1…Alt+9)">
+          </div>
+          <div class="param-field" id="op-kind-field" hidden>
+            <label for="op-kind" title="POSTO: vira 1 etapa no MFV (ciclo = maior TP). LINHA: 1 etapa por operador">Tipo (2+ operadores)</label>
+            <select id="op-kind"><option value="posto">POSTO</option><option value="linha">LINHA</option></select>
+          </div>
         </div>
       </div>
 
@@ -157,7 +165,9 @@
             &bull; <kbd>Alt</kbd>+<kbd>N</kbd> nova filmagem
             &bull; <kbd>↑</kbd><kbd>↓</kbd> muda de linha
             &bull; <kbd>Ctrl</kbd>+<kbd>Del</kbd> exclui
+            <span id="op-keys" hidden>&bull; <kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>9</kbd> operador da linha</span>
           </span>
+          <span class="keyboard-hint op-hint" id="op-hint" hidden>ℹ Atividade feita em paralelo por mais de um operador: a Qtd de cada um é a produção do posto no trecho. Clique na etiqueta Op da linha para trocar o operador ou dar um nome.</span>
         </div>
         <div class="toolbar-actions">
           <div class="inline-field">
@@ -196,6 +206,7 @@
       <div class="filter-bar" id="filter-bar" role="search" aria-label="Filtrar a grade e o resumo">
         <input type="search" id="flt-text" placeholder="Filtrar elemento..." autocomplete="off" aria-label="Filtrar pelo nome do elemento">
         <select id="flt-product" aria-label="Filtrar por produto" hidden></select>
+        <select id="flt-operator" aria-label="Filtrar por operador" hidden></select>
         <select id="flt-type" aria-label="Filtrar por tipo">
           <option value="">Tipo: todos</option><option value="C">C — cíclico</option><option value="A">A — acíclico</option>
         </select>
@@ -266,8 +277,14 @@
             <label for="summary-product" title="Resumo, compilação e indicadores do produto escolhido">Produto</label>
             <select id="summary-product"></select>
           </div>
+          <div class="inline-field" id="summary-operator-field" hidden>
+            <label for="summary-operator" title="Resumo, compilação e indicadores do operador escolhido. Todos = o posto (ciclo = maior TP)">Operador</label>
+            <select id="summary-operator"></select>
+          </div>
         </div>
       </div>
+      <!-- Avisos do estudo: linha do tempo dos operadores e consistência (REV 1.14) -->
+      <div class="mix-issues study-checks" id="study-checks" role="status" hidden></div>
       <!-- Filmagens: início da análise em cada vídeo e peças produzidas (acíclicos por unidade) -->
       <div class="films-panel" id="films-panel">
         <div class="films-head">
@@ -385,7 +402,8 @@
     <tr>
       <td class="cell-num"><button type="button" class="btn-seq" tabindex="-1"
                  title="Marcar/desmarcar o início de uma nova filmagem (Alt+N)"><span class="seq-num"></span><span
-                 class="film-tag" hidden></span></button></td>
+                 class="film-tag" hidden></span></button><button type="button" class="op-tag" tabindex="-1" hidden
+                 title="Operador da linha (Alt+1…Alt+9). Clique para trocar ou dar um nome"></button></td>
       <td class="cell-product"><input type="text" class="input-cell input-product" data-field="product" aria-label="Produto"
                  list="product-names" placeholder="Produto" autocomplete="off" enterkeyhint="next"></td>
       <td><input type="text" class="input-cell input-elem" data-field="description" aria-label="Elemento de trabalho"

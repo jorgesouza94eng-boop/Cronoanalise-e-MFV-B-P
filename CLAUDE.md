@@ -53,7 +53,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - HTML/CSS/JS puro, **sem build e sem servidor**. Funciona por `file://`, por servidor local e pelo GitHub Pages.
 - Scripts clássicos no padrão UMD (`window.LeanX` no navegador e `module.exports` nos testes do Node). **Não usar módulos ES** (quebram no `file://`).
 - Armazenamento local-first: IndexedDB (`LeanChronoDB`) e pasta do OneDrive pela File System Access API, com debounce de 3 s e proteção contra conflito (revisão + cópia `_conflito_`).
-- Arquivos: `Crono_*.json` (estudo, versão 5), `MFV_*.json` (MFV, versão 5) e `Yamazumi_*.json` (grupo de estudos, versão 1) — REV 1.12.
+- Arquivos: `Crono_*.json` (estudo, versão 6), `MFV_*.json` (MFV, versão 5) e `Yamazumi_*.json` (grupo de estudos, versão 1) — REV 1.14.
 - A revisão aparece no cabeçalho das 3 páginas (`.app-rev`); um teste confere com a versão do `package.json`.
 
 | Arquivo | Função |
@@ -103,7 +103,7 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 
 ## Regra confirmada (implementada na REV 1.9): grupo "Posto" no MFV
 
-- **Ciclo do posto** = maior TP dos estudos do grupo (cada estudo = 1 operador). Usado no TC do GBO, % do takt, gargalo e capacidade.
+- **Ciclo do posto** = maior TP dos estudos do grupo (cada estudo = 1 operador; estudo com vários operadores entra como N membros). Usado no TC do GBO, % do takt, gargalo e capacidade.
 - **Conteúdo de trabalho** = Σ (TP − espera); espera = elementos com o desperdício "Espera". Usado nos operadores ideais: Σ (TC das etapas comuns + conteúdo dos grupos) ÷ takt.
 - Operadores atuais = nº de estudos × uptime (o total digitado prevalece). Balanceamento do posto = conteúdo ÷ (nº de operadores × ciclo); da linha = Σ conteúdo ÷ (operadores atuais × gargalo).
 - Tempo de processamento (lead time) usa Σ TC com o ciclo do posto. No MFV vale o takt do MFV.
@@ -111,3 +111,13 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 - Grupo "Linha": cada estudo vira uma etapa comum. Fora da regra: postos paralelos idênticos (TC ÷ nº de pessoas).
 - No Yamazumi, a espera entra no TP com a tolerância (espera = TN da espera × (1 + Tol%)), e o mix ponderado não é usado (a composição é por elemento de um produto).
 - Exemplo de conferência (testes `tests/yamazumi.test.js` e `tests/e2e.rev19.js`): Corte 30, Solda 52, Célula (40 + 28), Embalagem 18, takt 45 s → ciclo 40 (89%), gargalo Solda, capacidade 553,8, ideais 3,73, atuais 5, balanceamento 85% (célula) e 64,6% (linha).
+
+## Regra implementada na REV 1.14: vários operadores no mesmo estudo
+
+- Cada elemento tem `operador` (1, 2…). O tempo subtraído é calculado **pelo mesmo operador na mesma filmagem** (1ª linha usa o Início da filmagem); linhas podem ser intercaladas.
+- Peças das filmagens iguais para todos os operadores; tipo A = Σtempo ÷ Σpeças por operador.
+- Posto: ciclo = maior TP; conteúdo = Σ (TP − espera); balanceamento = conteúdo ÷ (n × ciclo); ideais = conteúdo ÷ takt; capacidade = tempo líquido ÷ ciclo. Mix: ciclo do posto por produto.
+- MFV: POSTO = 1 etapa; LINHA = 1 etapa por operador. Yamazumi: N barras. Excel modelo B+P: um arquivo por operador.
+- Limitação: só vale para operadores filmados no mesmo vídeo e produzindo as mesmas peças. Com 1 operador tudo fica igual à REV 1.12.
+- Avisos de consistência (Fase 3): Σ Qtd ≠ peças (tipo C), ciclo × observado por peça > 10%, modelo REV2.0 com acíclicos por peça, tempo líquido do estudo ≠ tempo disponível do MFV.
+- Pendente (REV 1.15, Fase 2): TC ponderado pela demanda do produto (desligado por padrão), operador compartilhado entre etapas (gargalo = carga do operador), etapa não medida; lead time com o TP original.

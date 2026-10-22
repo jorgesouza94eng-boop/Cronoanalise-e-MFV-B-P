@@ -17,10 +17,11 @@
   let els = {};
   let h = {}; // handlers fornecidos pelo app.js
   let lastComputed = null;
+  let opMenu = null; // menu aberto da etiqueta do operador (REV 1.14)
 
   /** Filtros da grade e do resumo: só exibição (não são gravados e não alteram cálculos). */
-  const filter = { text: "", product: "", type: "", value: "", waste: "", film: "", errors: false };
-  const filterActive = () => !!(filter.text || filter.product || filter.type || filter.value || filter.waste || filter.film || filter.errors);
+  const filter = { text: "", product: "", operator: "", type: "", value: "", waste: "", film: "", errors: false };
+  const filterActive = () => !!(filter.text || filter.product || filter.operator || filter.type || filter.value || filter.waste || filter.film || filter.errors);
 
   /** Ordem do fluxo rápido com Enter. Frequência e Kaizen ficam fora (acesso por Tab). */
   const ENTER_FLOW = {
@@ -102,6 +103,15 @@
       filterBar: $("filter-bar"),
       fltText: $("flt-text"),
       fltProduct: $("flt-product"),
+      fltOperator: $("flt-operator"),
+      opCount: $("op-count"),
+      opKind: $("op-kind"),
+      opKindField: $("op-kind-field"),
+      opKeys: $("op-keys"),
+      opHint: $("op-hint"),
+      summaryOperatorField: $("summary-operator-field"),
+      summaryOperator: $("summary-operator"),
+      studyChecks: $("study-checks"),
       fltType: $("flt-type"),
       fltValue: $("flt-value"),
       fltWaste: $("flt-waste"),
@@ -193,6 +203,7 @@
     const onFilter = () => {
       filter.text = els.fltText.value.trim();
       filter.product = els.fltProduct.value;
+      filter.operator = els.fltOperator.value;
       filter.type = els.fltType.value;
       filter.value = els.fltValue.value;
       filter.waste = els.fltWaste.value;
@@ -201,7 +212,20 @@
       applyFilters(true);
     };
     els.fltText.addEventListener("input", onFilter);
-    [els.fltProduct, els.fltType, els.fltValue, els.fltWaste, els.fltFilm, els.fltErrors].forEach((c) => c.addEventListener("change", onFilter));
+    [els.fltProduct, els.fltOperator, els.fltType, els.fltValue, els.fltWaste, els.fltFilm, els.fltErrors].forEach((c) => c.addEventListener("change", onFilter));
+    // Vários operadores (REV 1.14)
+    els.opCount.addEventListener("change", () => {
+      const res = h.onOperatorCountChange(els.opCount.value);
+      if (!res.ok) {
+        toast(res.error, "warn");
+        els.opCount.value = String(res.value);
+      }
+    });
+    els.opKind.addEventListener("change", () => h.onOperatorKindChange(els.opKind.value));
+    els.summaryOperator.addEventListener("change", () => h.onOperatorSelect(Number(els.summaryOperator.value)));
+    document.addEventListener("click", (e) => {
+      if (opMenu && !e.target.closest(".op-menu") && !e.target.closest(".op-tag")) closeOpMenu();
+    });
     els.btnClearFilter.addEventListener("click", () => {
       clearFilters();
       els.fltText.focus();
@@ -368,6 +392,16 @@
     const info = rowInfo(e.target);
     if (!info || !info.field) return;
 
+    // Alt+1…Alt+9: operador da linha (REV 1.14)
+    if (e.altKey && !e.ctrlKey && !e.metaKey && /^Digit[1-9]$/.test(e.code)) {
+      e.preventDefault();
+      const k = Number(e.code.slice(5));
+      h.onSetOperator(info.id, k);
+      focusCell(info.index, info.field); // a grade é redesenhada: o cursor fica na mesma célula
+      toast(`Linha ${info.index + 1}: ${lastComputed ? lastComputed.operatorLabel(k) : `Op${k}`}.`, "ok", 1500);
+      return;
+    }
+
     // Alt+N: marca/desmarca o início de uma nova filmagem nesta linha
     if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyN") {
       e.preventDefault();
@@ -427,7 +461,53 @@
     }
   }
 
+  /* ---- Menu da etiqueta do operador (trocar o operador da linha ou dar um nome) ---- */
+  function closeOpMenu() {
+    if (opMenu) opMenu.remove();
+    opMenu = null;
+  }
+  function openOpMenu(tag, info) {
+    closeOpMenu();
+    const c = lastComputed;
+    const n = c ? c.operatorCount : 1;
+    const current = c && c.rows[info.index] ? c.rows[info.index].operator : 1;
+    opMenu = document.createElement("div");
+    opMenu.className = "op-menu";
+    const item = (text, fn, cls) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = text;
+      if (cls) b.className = cls;
+      b.addEventListener("click", () => {
+        closeOpMenu();
+        fn();
+      });
+      opMenu.append(b);
+    };
+    for (let k = 1; k <= n; k++) item(`${c.operatorLabel(k)}${k <= 9 ? ` (Alt+${k})` : ""}`, () => setOperator(info, k), k === current ? "is-current" : "");
+    item(`+ Novo operador (Op${n + 1})`, () => setOperator(info, n + 1));
+    item(`Dar nome ao Op${current}…`, () => {
+      const name = root.prompt(`Nome do Op${current} (opcional; a IA recebe só "Op${current}"):`, (c.operatorLabel(current).match(/\((.*)\)$/) || [])[1] || "");
+      if (name != null) h.onRenameOperator(current, name);
+    });
+    const r = tag.getBoundingClientRect();
+    opMenu.style.left = `${r.left + root.scrollX}px`;
+    opMenu.style.top = `${r.bottom + root.scrollY + 2}px`;
+    document.body.append(opMenu);
+  }
+  function setOperator(info, k) {
+    h.onSetOperator(info.id, k);
+    const input = info.tr.querySelector('[data-field="description"]');
+    if (input && document.activeElement !== input) input.focus();
+  }
+
   function onGridClick(e) {
+    const opTag = e.target.closest(".op-tag");
+    if (opTag) {
+      const info = rowInfo(opTag);
+      if (info) openOpMenu(opTag, info);
+      return;
+    }
     const seq = e.target.closest(".btn-seq");
     if (seq) {
       const info = rowInfo(seq);
@@ -573,6 +653,8 @@
     });
     els.videoStart.value = study.videoStart || "";
     els.videoStart.classList.remove("input-invalid");
+    els.opCount.value = String(computed.operatorCount);
+    els.opKind.value = computed.operatorKind;
     els.settings.forEach((sel) => (sel.value = Calc[sel.dataset.setting](study)));
     els.notes.value = study.notes || "";
     clearFilters(true);
@@ -630,6 +712,13 @@
       if (!tr) return;
       tr.querySelector(".seq-num").textContent = String(row.seq).padStart(2, "0");
       const filmTag = tr.querySelector(".film-tag");
+      const opTag = tr.querySelector(".op-tag");
+      opTag.hidden = !computed.multiOperator;
+      if (computed.multiOperator) {
+        opTag.textContent = `Op${row.operator}`;
+        opTag.className = `op-tag op-c${(row.operator - 1) % 8}`;
+        opTag.title = `${computed.operatorLabel(row.operator)} — clique para trocar ou dar um nome (Alt+1…Alt+9)`;
+      }
       const showFilm = row.newVideo || (i === 0 && computed.filmCount > 1);
       filmTag.hidden = !showFilm;
       filmTag.textContent = showFilm ? `F${row.film}` : "";
@@ -666,6 +755,7 @@
     renderFilms(computed);
     renderSummary(computed);
     renderMix(computed);
+    renderOperators(computed);
     renderCompilation(computed);
     renderKpis(computed);
     applyFilters(false);
@@ -756,6 +846,36 @@
     els.mixIssues.hidden = !notes.length;
   }
 
+  /** Vários operadores (REV 1.14): seletor do resumo, filtro, dicas e avisos do estudo. */
+  function renderOperators(computed) {
+    const multi = computed.multiOperator;
+    els.opKindField.hidden = !multi;
+    els.opKeys.hidden = !multi;
+    els.opHint.hidden = !multi;
+    els.summaryOperatorField.hidden = !multi;
+    els.fltOperator.hidden = !multi;
+    if (document.activeElement !== els.opCount) els.opCount.value = String(computed.operatorCount);
+    const ops = [];
+    for (let k = 1; k <= computed.operatorCount; k++) ops.push([String(k), computed.operatorLabel(k)]);
+    const fill = (sel, first) => {
+      const want = first.concat(ops);
+      const cur = Array.from(sel.options).map((o) => [o.value, o.textContent]);
+      if (JSON.stringify(cur) !== JSON.stringify(want)) {
+        const keep = sel.value;
+        sel.replaceChildren(...want.map(([v, t]) => Object.assign(document.createElement("option"), { value: v, textContent: t })));
+        sel.value = want.some(([v]) => v === keep) ? keep : want[0][0];
+      }
+    };
+    fill(els.summaryOperator, [["0", "Todos (posto)"]]);
+    els.summaryOperator.value = String(computed.operatorView || 0);
+    fill(els.fltOperator, [["", "Operador: todos"]]);
+    filter.operator = multi ? els.fltOperator.value : "";
+    // Avisos: linha do tempo dos operadores, muitos operadores e consistência (Fase 3)
+    const notes = computed.warnings.concat(computed.checks);
+    els.studyChecks.replaceChildren(...notes.map((t) => Object.assign(document.createElement("div"), { textContent: `⚠ ${t}` })));
+    els.studyChecks.hidden = !notes.length;
+  }
+
   /** Lista de produtos: autocompletar, seletor do resumo e filtro. */
   function renderProducts(computed) {
     const names = computed.multiProduct ? computed.products.filter((p) => p.key).map((p) => p.name) : [];
@@ -796,9 +916,9 @@
      ========================================================================== */
 
   function clearFilters(silent) {
-    Object.assign(filter, { text: "", product: "", type: "", value: "", waste: "", film: "", errors: false });
+    Object.assign(filter, { text: "", product: "", operator: "", type: "", value: "", waste: "", film: "", errors: false });
     els.fltText.value = "";
-    [els.fltProduct, els.fltType, els.fltValue, els.fltWaste, els.fltFilm].forEach((c) => (c.value = ""));
+    [els.fltProduct, els.fltOperator, els.fltType, els.fltValue, els.fltWaste, els.fltFilm].forEach((c) => (c.value = ""));
     els.fltErrors.checked = false;
     if (!silent) applyFilters(true);
   }
@@ -825,6 +945,7 @@
         !active ||
         (matchText(el.description) &&
           (!filter.product || row.productKey === filter.product) &&
+          (!filter.operator || String(row.operator) === filter.operator) &&
           (!filter.type || row.type === filter.type) &&
           matchValue(el.value) &&
           matchWaste(el.waste) &&
@@ -840,7 +961,9 @@
     Array.from(els.summaryTbody.rows).forEach((tr, i) => {
       const g = computed.summary.elements[i];
       if (!g) return;
-      const ok = !active || (matchText(g.name) && (!filter.type || g.type === filter.type) && matchValue(g.value) && matchWaste(g.waste));
+      const ok =
+        !active ||
+        (matchText(g.name) && (!filter.operator || g.op == null || String(g.op) === filter.operator) && (!filter.type || g.type === filter.type) && matchValue(g.value) && matchWaste(g.waste));
       tr.classList.toggle("row-filtered-out", !ok);
       if (ok) {
         sumShown += 1;
@@ -852,7 +975,7 @@
     els.btnClearFilter.hidden = !active;
     els.btnAddRow.disabled = active;
     els.btnAddRow.title = active ? "Limpe o filtro para incluir linhas" : "Nova linha (Ctrl+Enter)";
-    [els.fltText, els.fltProduct, els.fltType, els.fltValue, els.fltWaste, els.fltFilm].forEach((c) => c.classList.toggle("is-active", !!c.value));
+    [els.fltText, els.fltProduct, els.fltOperator, els.fltType, els.fltValue, els.fltWaste, els.fltFilm].forEach((c) => c.classList.toggle("is-active", !!c.value));
     if (active) {
       const ft = (m) => Calc.formatTime(m, computed.unit);
       const cyc = computed.summary.cycleNormal;
@@ -1074,7 +1197,7 @@
       typeTd.appendChild(tag);
       tr.append(
         cell(String(g.seq).padStart(2, "0"), "cell-num"),
-        cell((g.conflicts.length ? "⚠ " : "") + g.name, "cell-text", conflictMsg),
+        cell((g.conflicts.length ? "⚠ " : "") + (g.opLabel ? `${g.opLabel.split(" ")[0]} • ` : "") + g.name, "cell-text", conflictMsg),
         typeTd,
         cell(String(g.occurrences), "cell-readonly mono"),
         cell(qtyMode ? fmt(g.sumQuantity, g.sumQuantity % 1 ? 2 : 0) : "—", "cell-readonly mono"),
@@ -1099,6 +1222,14 @@
     const notes = [];
     if (computed.summary.conflictCount) notes.push(`⚠ ${computed.summary.conflictCount} elemento(s) com classificação divergente`);
     notes.push(`${computed.summary.elements.length} elemento(s) • observado: ${ft(computed.totals.sumSubtracted)} ${Calc.TIME_UNITS[unit].label}`);
+    // Vários operadores: o total do resumo do posto é o ciclo do posto (maior operador), não a soma
+    if (computed.multiOperator && !computed.operatorView && computed.product.posto) {
+      const p = computed.product.posto;
+      notes.unshift(
+        `Posto (${p.n} op.): total = ciclo do posto (${p.cycleLabel}), não a soma • ` +
+          computed.product.operators.map((o) => `${o.label.split(" ")[0]}: TN ${ft(o.tn)} • TP ${ft(o.tp)} • espera ${ft(o.wait)} • conteúdo ${ft(o.content)}`).join(" | ")
+      );
+    }
     els.summaryNote.textContent = notes.join(" • ");
     els.summaryNote.classList.toggle("has-conflict", computed.summary.conflictCount > 0);
 
@@ -1130,6 +1261,14 @@
     els.kpiCycle.textContent = k.standardTime != null && k.standardTime > 0 ? Calc.formatTime(k.standardTime, unit, kd) : "--";
     els.kpiNormal.textContent =
       (computed.multiProduct ? `${computed.product.name} • ` : "") + `Tempo normal do ciclo: ${Calc.formatTime(k.sumNormal, unit)} ${u}`;
+    // Vários operadores (REV 1.14): o painel mostra o posto (ciclo = maior TP) ou o operador escolhido
+    if (computed.multiOperator && computed.product.posto) {
+      const p = computed.product.posto;
+      const f = (m) => Calc.formatTime(m, unit, kd);
+      els.kpiNormal.textContent = computed.operatorView
+        ? `${computed.operatorLabel(computed.operatorView)} • tempo normal ${Calc.formatTime(k.sumNormal, unit)} ${u}`
+        : `Posto (${p.n} op.): ciclo = maior TP (${p.cycleLabel}) • conteúdo ${f(p.content)} ${u} • balanceamento ${fmt(p.balancePct, 1)}% • ideais ${fmt(p.opsIdeal, 2)}`;
+    }
     els.kpiCapacity.textContent = k.capacity != null ? fmt(k.capacity, 0) : "--";
 
     els.kpiCard.classList.remove("is-bottleneck", "is-balanced", "is-invalid");
