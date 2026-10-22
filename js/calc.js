@@ -17,7 +17,7 @@
   "use strict";
 
   const SCHEMA_ID = "lean-chrono-estudo";
-  const SCHEMA_VERSION = 5; // v2: peças por filmagem • v3: início por filmagem e produto • v4: demanda por produto • v5: produto no mix, nome do vídeo e macro-etapa
+  const SCHEMA_VERSION = 5; // v2: peças por filmagem • v3: início por filmagem e produto • v4: demanda por produto • v5: produto no mix e nome do vídeo
 
   /** Faixa aceita para o fator de ritmo (%). */
   const PACE_MIN = 50;
@@ -245,7 +245,6 @@
     const mode = entryMode(study);
     const elements = (study && study.elements) || [];
     const multi = elements.some((e) => String(e.product || "").trim());
-    const macroUsed = elements.some((e) => String(e.macroEtapa || "").trim());
     const starts = (study && study.filmStarts) || {};
     const demands = (study && study.productDemand) || {};
     const inMix = (study && study.produtoNoMix) || {}; // { chave: false } = fora da carga do posto
@@ -313,7 +312,6 @@
       }
 
       const productName = multi ? String(el.product || "").trim().replace(/\s+/g, " ") : "";
-      const macroName = String(el.macroEtapa || "").trim().replace(/\s+/g, " ");
       return {
         id: el.id,
         seq: index + 1,
@@ -322,8 +320,6 @@
         newVideo,
         product: productName,
         productKey: productName ? elementKey(productName) : "",
-        macro: macroName,
-        macroKey: elementKey(macroName),
         frequency: freq.value,
         quantity: qty.value,
         timeMinutes: time.minutes,
@@ -375,17 +371,15 @@
       // Demanda própria do produto (vazio = demanda geral dos parâmetros)
       const own = multi ? toFiniteOrNull(demands[p.key]) : null;
       const pParams = own != null ? Object.assign({}, params, { dailyDemandPcs: own }) : params;
-      const kp = computeKpis(pParams, summary.cycleNormal);
       return Object.assign({}, p, {
         films: filmInfo,
         summary,
-        macros: macroUsed ? summarizeMacros(summary, kp) : null,
         compilation: compile(summary),
         demand: toFiniteOrNull(pParams.dailyDemandPcs),
         demandRaw: multi && demands[p.key] != null ? String(demands[p.key]) : "",
         demandOwn: own != null,
         inMix: !multi || inMix[p.key] !== false,
-        kpis: kp,
+        kpis: computeKpis(pParams, summary.cycleNormal),
       });
     });
     const wanted = study && study.settings && study.settings.product;
@@ -397,7 +391,6 @@
       unit: timeUnit(study),
       rows,
       multiProduct: multi,
-      macroUsed,
       products,
       product: current,
       summary: current.summary,
@@ -480,58 +473,24 @@
    * Segue a ordem da grade (atravessa filmagens). Retorna null quando não há o que fazer.
    */
   function productFillPlan(elements, idx, oldProduct) {
-    return fillPlan(elements, idx, oldProduct, "product");
-  }
-
-  /**
-   * Macro-etapa (REV 1.13), depois que a linha idx recebeu uma macro (antes: oldMacro):
-   *  - "preencher": antes vazia → as linhas vazias logo abaixo, do MESMO produto, recebem a macro.
-   *  - "renomear":  antes "X" → todas as outras linhas do mesmo produto com "X" podem ser
-   *                 renomeadas (pede confirmação na tela). A macro pertence ao produto da linha.
-   */
-  function macroFillPlan(elements, idx, oldMacro) {
     const list = elements || [];
     const row = list[idx];
     if (!row) return null;
-    const value = String(row.macroEtapa || "").trim().replace(/\s+/g, " ");
-    const oldKey = elementKey(oldMacro);
-    if (elementKey(value) === oldKey) return null;
-    const prod = elementKey(row.product);
-    const ids = [];
-    let mode;
-    if (!oldKey) {
-      if (!value) return null;
-      mode = "preencher";
-      for (let i = idx + 1; i < list.length && !elementKey(list[i].macroEtapa) && elementKey(list[i].product) === prod; i++) ids.push(list[i].id);
-    } else {
-      if (!value) return null; // apagar a macro de uma linha não renomeia as outras
-      mode = "renomear";
-      list.forEach((e, i) => i !== idx && elementKey(e.product) === prod && elementKey(e.macroEtapa) === oldKey && ids.push(e.id));
-    }
-    if (!ids.length) return null;
-    return { mode, value, oldValue: String(oldMacro || "").trim(), ids, count: ids.length, from: idx + 2, to: idx + 1 + ids.length };
-  }
-
-  /** Preenchimento para baixo genérico (coluna Produto). */
-  function fillPlan(elements, idx, oldValue, field) {
-    const list = elements || [];
-    const row = list[idx];
-    if (!row) return null;
-    const value = String(row[field] || "").trim().replace(/\s+/g, " ");
-    const oldKey = elementKey(oldValue);
+    const value = String(row.product || "").trim().replace(/\s+/g, " ");
+    const oldKey = elementKey(oldProduct);
     if (elementKey(value) === oldKey) return null;
     const ids = [];
     let mode;
     if (!oldKey) {
       if (!value) return null;
       mode = "preencher";
-      for (let i = idx + 1; i < list.length && !elementKey(list[i][field]); i++) ids.push(list[i].id);
+      for (let i = idx + 1; i < list.length && !elementKey(list[i].product); i++) ids.push(list[i].id);
     } else {
       mode = "trocar";
-      for (let i = idx + 1; i < list.length && elementKey(list[i][field]) === oldKey; i++) ids.push(list[i].id);
+      for (let i = idx + 1; i < list.length && elementKey(list[i].product) === oldKey; i++) ids.push(list[i].id);
     }
     if (!ids.length) return null;
-    return { mode, value, oldValue: String(oldValue || "").trim(), ids, from: idx + 2, to: idx + 1 + ids.length };
+    return { mode, value, oldValue: String(oldProduct || "").trim(), ids, from: idx + 2, to: idx + 1 + ids.length };
   }
 
   /** Agrupa as linhas válidas pelo nome do elemento (equivale à aba "Listagem de Elementos"). */
@@ -629,9 +588,6 @@
           sumNormal: 0,
           sumQuantity: 0,
           conflicts: [],
-          macro: "",
-          macroKey: "",
-          macroNames: [],
         };
         groups.set(key, g);
       } else if (g.type !== row.type && !g.conflicts.includes("tipo")) {
@@ -643,15 +599,6 @@
         else if (g.value !== value && !g.conflicts.includes("valor")) g.conflicts.push("valor");
       }
       if (WASTES[el.waste] && !g.waste) g.waste = el.waste;
-      // Macro-etapa: a 1ª preenchida define o grupo; nomes diferentes = conflito (o cálculo não muda)
-      if (row.macroKey) {
-        if (!g.macroKey) {
-          g.macroKey = row.macroKey;
-          g.macro = row.macro;
-        }
-        if (!g.macroNames.some((n) => elementKey(n) === row.macroKey)) g.macroNames.push(row.macro);
-        if (g.macroNames.length > 1 && !g.conflicts.includes("macro-etapa")) g.conflicts.push("macro-etapa");
-      }
       g.occurrences += 1;
       g.sumSubtracted += row.subtractedTime;
       g.sumNormal += row.normalTime;
@@ -675,41 +622,6 @@
       g.sharePct = cycleNormal > EPS ? (g.cycleTime / cycleNormal) * 100 : 0;
     });
     return { elements: list, cycleNormal, acyclic: filmInfo ? filmInfo.acyclic : "total", conflictCount: list.filter((g) => g.conflicts.length).length };
-  }
-
-  /**
-   * Resumo por macro-etapa de um produto (REV 1.13). Só agrupa: o tempo de cada elemento é o do
-   * resumo (já com a divisão por quantidade/peças e o ritmo), então Σ macros = tempo normal do
-   * ciclo. TP da macro = tempo normal × (1 + tolerância). Elementos sem macro ficam em
-   * "Sem macro-etapa" (não são descartados). Ordem: 1ª aparição no estudo.
-   */
-  function summarizeMacros(summary, kpis) {
-    const map = new Map();
-    summary.elements.forEach((g) => {
-      const key = g.macroKey || "";
-      if (!map.has(key)) map.set(key, { key, name: g.macroKey ? g.macro : "Sem macro-etapa", none: !g.macroKey, elements: 0, tn: 0, firstSeq: g.firstSeq });
-      const m = map.get(key);
-      m.elements += 1;
-      m.tn += g.cycleTime;
-      m.firstSeq = Math.min(m.firstSeq, g.firstSeq);
-    });
-    const factor = kpis.standardTime != null && summary.cycleNormal > EPS ? kpis.standardTime / summary.cycleNormal : null;
-    const list = Array.from(map.values()).sort((a, b) => a.none - b.none || a.firstSeq - b.firstSeq);
-    list.forEach((m) => {
-      m.sharePct = summary.cycleNormal > EPS ? (m.tn / summary.cycleNormal) * 100 : 0;
-      m.tp = factor != null ? m.tn * factor : null;
-    });
-    const sumTn = list.reduce((a, m) => a + m.tn, 0);
-    const sumTp = factor != null ? list.reduce((a, m) => a + m.tp, 0) : null;
-    const issues = [];
-    const none = list.find((m) => m.none);
-    if (none) issues.push(`${none.elements} elemento(s) sem macro-etapa (em "Sem macro-etapa")`);
-    summary.elements
-      .filter((g) => g.conflicts.includes("macro-etapa"))
-      .forEach((g) => issues.push(`Elemento "${g.name}" em macro-etapas diferentes (${g.macroNames.join(", ")}): contado em "${g.macro}"`));
-    const balanced = Math.abs(sumTn - summary.cycleNormal) < 1e-9 && (sumTp == null || Math.abs(sumTp - kpis.standardTime) < 1e-9);
-    if (!balanced) issues.push("Soma das macro-etapas diferente do ciclo: confira os elementos");
-    return { list, sumTn, sumTp, balanced, issues };
   }
 
   /**
@@ -853,7 +765,6 @@
         kaizen: "",
         newVideo: false,
         product: "",
-        macroEtapa: "", // REV 1.13: agrupa elementos por recurso/etapa (não altera o cálculo)
       },
       overrides || {}
     );
@@ -948,11 +859,6 @@
         timeUnit: TIME_UNITS[raw.settings && raw.settings.timeUnit] ? raw.settings.timeUnit : "min",
         multiProduct: !!(raw.settings && raw.settings.multiProduct === true),
         product: raw.settings && typeof raw.settings.product === "string" ? raw.settings.product : "",
-        // Coluna Macro-etapa: gravada ao marcar/desmarcar; sem a opção, aparece se houver macro preenchida
-        macroColumn:
-          raw.settings && typeof raw.settings.macroColumn === "boolean"
-            ? raw.settings.macroColumn
-            : elements.some((e) => e && String(e.macroEtapa || "").trim()),
       },
       shiftParams: {
         shiftTimeMin: num(params.shiftTimeMin, null),
@@ -977,7 +883,6 @@
             kaizen: str(e.kaizen),
             newVideo: e.newVideo === true,
             product: str(e.product),
-            macroEtapa: str(e.macroEtapa),
           })
         ),
     };
@@ -1070,25 +975,9 @@
             }
           : undefined,
         acyclicTime: r.summary.acyclic,
-        // Resumo por macro-etapa (REV 1.13), de cada produto
-        resumoMacro: r.macroUsed
-          ? r.products.map((p) => ({
-              produto: p.name,
-              macros: p.macros.list.map((m) => ({
-                macroEtapa: m.none ? "" : m.name,
-                elementos: m.elements,
-                tempoNormalMin: round(m.tn, 6),
-                participacaoPct: round(m.sharePct, 2),
-                tempoPadraoMin: round(m.tp, 6),
-              })),
-              somaConfere: p.macros.balanced,
-              avisos: p.macros.issues,
-            }))
-          : undefined,
         summary: r.summary.elements.map((g) => ({
           seq: g.seq,
           element: g.name,
-          macroEtapa: g.macro,
           type: g.type,
           occurrences: g.occurrences,
           quantity: round(g.sumQuantity, 4),
@@ -1144,7 +1033,6 @@
     const qtyMode = r.mode === "quantidade";
     const multi = r.multiProduct;
     const P = (v) => (multi ? [v] : []); // coluna Produto só com vários produtos
-    const M = (v) => (r.macroUsed ? [v] : []); // coluna Macro-etapa só quando alguma linha tem macro (REV 1.13)
 
     const lines = [];
     lines.push(["Cliente", q(study.clientName)].join(";"));
@@ -1159,7 +1047,6 @@
         "Filmagem",
         "Vídeo",
         ...P("Produto"),
-        ...M("Macro-etapa"),
         "Elemento",
         "Tipo",
         qtyMode ? "Quantidade" : "Frequência (texto)",
@@ -1183,7 +1070,6 @@
           row.film,
           q(r.filmList[row.film - 1].video),
           ...P(q(row.product || "(sem produto)")),
-          ...M(q(row.macro)),
           q(el.description),
           row.type === "A" ? "Acíclico" : "Cíclico",
           // Fórmula ="1/50" impede que o Excel converta a fração em data (ex.: 1/5 → 01/mai).
@@ -1253,17 +1139,6 @@
       lines.push(["Status do mix", q(MIX_STATUS[r.mix.status] + (r.mix.partial ? " (mix parcial)" : ""))].join(";"));
       r.mix.issues.forEach((t) => lines.push(["Aviso", q(t)].join(";")));
     }
-    if (r.macroUsed) {
-      lines.push("");
-      lines.push("RESUMO POR MACRO-ETAPA");
-      lines.push([...P("Produto"), "Macro-etapa", "Elementos", `Tempo normal (${u}/pç)`, "% do ciclo", `Tempo padrão (${u}/pç)`].join(";"));
-      r.products.forEach((pr) => {
-        pr.macros.list.forEach((m) =>
-          lines.push([...P(q(pr.name)), q(m.name), m.elements, nt(m.tn), formatNumber(m.sharePct, 1), nt(m.tp)].join(";"))
-        );
-        pr.macros.issues.forEach((t) => lines.push([...P(q(pr.name)), "Aviso", q(t)].join(";")));
-      });
-    }
     return "\uFEFF" + lines.join("\r\n");
   }
 
@@ -1327,8 +1202,6 @@
     computeKpis,
     computeMix,
     productFillPlan,
-    macroFillPlan,
-    summarizeMacros,
     formatNumber,
     generateId,
     slugify,

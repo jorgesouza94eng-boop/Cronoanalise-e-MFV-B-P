@@ -4,7 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
-| **REV 1.13** | 21/10/2026 | Macro-etapas na cronoanálise, ocupação dos recursos no MFV e Yamazumi por macro-etapa |
+| *REV 1.13 (revertida)* | 22/10/2026 | Desfeita a pedido do consultor; o app voltou à REV 1.12 |
 | **REV 1.12** | 21/10/2026 | "Considerar no mix" por produto, demanda geral não repetida no mix e nome do vídeo por filmagem |
 | **REV 1.11** | 21/10/2026 | Conferência dos vínculos do MFV (contagem dupla, mix, avisos e demanda) |
 | **REV 1.10** | 20/10/2026 | Sair da janela inicial sem abrir um documento |
@@ -21,50 +21,12 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 ---
 
-## REV 1.13 — 21/10/2026 (macro-etapas e ocupação dos recursos)
+## Reversão da REV 1.13 — 22/10/2026
 
-### Novidades — Cronoanálise
-- **Coluna Macro-etapa** (opção "Macro-etapas" na barra; ocultar mantém as macros).
-  - Texto livre com autocompletar.
-  - Preenchida para baixo dentro do mesmo produto.
-  - Trocar o nome oferece **renomear em todas as linhas do produto**.
-  - A linha nova herda a macro da anterior.
-- **Resumo por macro-etapa** (por produto): elementos, tempo normal por peça, % do ciclo e TP.
-  - Conferência Σ macros = tempo normal do ciclo, e Σ TP = TP do produto.
-  - Elementos sem macro ficam em "Sem macro-etapa", com aviso.
-  - O mesmo elemento em macros diferentes do mesmo produto gera um aviso de conflito.
-  - O cálculo dos elementos **não muda**.
-- **Filtro por macro-etapa** (só exibição).
-- **Exportações:**
-  - JSON: `macroEtapa` por elemento e `resumoMacro` no resumo;
-  - CSV e Excel simples: coluna "Macro-etapa" e resumo por macro;
-  - modelo B+P: não muda.
-
-### Novidades — MFV (decisão do consultor: opção B2 com agrupamento por recurso)
-- O **TC do GBO não muda**: continua o TP do estudo, um operador por etapa (Módulo 6).
-- **Coluna "Ocupação"** no GBO = TC × demanda ÷ tempo disponível.
-  - Etapa de um produto: usa a **demanda própria** do produto (sem herdar a geral; "--" sem ela).
-  - Etapa Mix: usa a demanda do mix.
-  - Etapa da família: igual ao % do takt.
-- **Quadro "Ocupação dos recursos (macro-etapas dos estudos)"**:
-  - por estudo ligado ao MFV: carga = Σ TP da macro × demanda própria do produto;
-  - TC ponderado = carga ÷ demanda da família; ocupação = carga ÷ tempo disponível;
-  - a **mesma macro em produtos diferentes soma** (mesmo recurso);
-  - total do operador com a conferência "= carga do mix";
-  - produto fora do mix e produto sem demanda própria aparecem com aviso.
-
-### Novidades — Yamazumi
-- Barras **"Por macro-etapa"**: mesma macro = mesma cor em todos os estudos, com a tolerância à parte.
-
-### Ajustes
-- Grade mais larga com Produto e/ou Macro-etapa (rolagem horizontal), para o elemento não ficar espremido.
-- Revisão no cabeçalho: REV 1.13.
-
-### Compatibilidade
-- Arquivos da REV 1.12 abrem com os mesmos resultados; sem o campo, a macro fica vazia e a coluna oculta. Nenhum cálculo de cronoanálise, MFV ou Yamazumi existente muda.
-
-### Testes
-- 169 testes de unidade (15 novos em `tests/macro-rev113.test.js`, com os valores de conferência do consultor). Novo teste de navegador `tests/e2e.rev113.js`.
+- A pedido do consultor, o app voltou à **REV 1.12** (commit de reversão do `2eae6a6`; o histórico da REV 1.13 continua no Git e pode ser reaplicado).
+- Saíram: coluna e resumo por macro-etapa na cronoanálise, coluna Ocupação e quadro "Ocupação dos recursos" no MFV, barras por macro-etapa no Yamazumi e a grade mais larga.
+- Service worker v20, para os aparelhos que já tinham a REV 1.13 receberem a versão restaurada.
+- **Atenção:** um estudo com macro-etapas, se for salvo na REV 1.12, perde as macro-etapas (o campo não existe nesta revisão). Os demais dados não mudam.
 
 ---
 

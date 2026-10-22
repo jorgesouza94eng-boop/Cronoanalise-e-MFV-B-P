@@ -1482,19 +1482,3 @@ body.no-doc .app-workspace, body.no-doc .client-context { display: none !importa
 .mix-issues { display: flex; flex-direction: column; gap: 2px; margin: 6px 0; font-size: 12px; color: var(--status-warn-text); }
 .film-box .film-video { width: 150px; }
 .app-rev { margin-left: 6px; font-size: 11px; color: var(--text-on-dark-muted); align-self: center; }
-
-/* Macro-etapas (REV 1.13) */
-col.col-macro { width: 140px; }
-.macro-table tr.macro-none td { color: var(--status-warn-text); }
-.resource-panel { padding: 0 16px 16px; }
-.resource-table tr.resource-total td { font-weight: 700; border-top: 2px solid var(--slate-300); }
-.resource-table td.is-over, .mfv-steps-table td.is-over { color: var(--status-danger-text); font-weight: 700; }
-.resource-table .resource-parts { font-size: 12px; color: var(--text-secondary); white-space: normal; }
-/* Yamazumi por macro-etapa: paleta de 8 cores (mesma macro = mesma cor) */
-.yz-p0 { background: #2563eb; } .yz-p1 { background: #0d9488; } .yz-p2 { background: #d97706; } .yz-p3 { background: #7c3aed; }
-.yz-p4 { background: #db2777; } .yz-p5 { background: #65a30d; } .yz-p6 { background: #0891b2; } .yz-p7 { background: #b45309; }
-/* Grade com Produto e/ou Macro-etapa: mais largura para o elemento (rolagem horizontal) */
-.chrono-table.has-product { min-width: 1360px; }
-.chrono-table.has-macro { min-width: 1400px; }
-.chrono-table.has-product.has-macro { min-width: 1520px; }
-.app-rev { white-space: nowrap; }

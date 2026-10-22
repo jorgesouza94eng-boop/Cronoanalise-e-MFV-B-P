@@ -210,37 +210,6 @@
       return valid;
     },
 
-    /** Mostra/oculta a coluna Macro-etapa (ocultar mantém as macros e o resumo por macro). */
-    onMacroColumnToggle(on) {
-      if (!state.study) return;
-      const settings = state.study.settings || (state.study.settings = {});
-      settings.macroColumn = !!on;
-      markChanged({ rerender: true });
-    },
-
-    /**
-     * Macro-etapa confirmada numa linha: preenche as vazias abaixo do mesmo produto ou, ao trocar
-     * o nome, oferece renomear em todas as linhas do produto (REV 1.13).
-     */
-    onMacroCommit(id, oldValue, filtered) {
-      if (!state.study) return null;
-      const els = state.study.elements;
-      const idx = els.findIndex((e) => e.id === id);
-      const plan = Calc.macroFillPlan(els, idx, oldValue);
-      if (!plan) return null;
-      if (plan.mode === "preencher" && filtered) return null; // com filtro, só a linha editada muda
-      if (plan.mode === "renomear") {
-        const ok = root.confirm(
-          `Renomear a macro-etapa "${plan.oldValue}" para "${plan.value}" também nas outras ${plan.count} linha(s) deste produto?\n\n` +
-            "OK (Enter) = renomear em todas\nCancelar (Esc) = só esta linha"
-        );
-        if (!ok) return null;
-      }
-      plan.ids.forEach((rid) => (findElement(rid).macroEtapa = plan.value));
-      markChanged();
-      return plan;
-    },
-
     /** Considerar no mix (REV 1.12): false = produto fora da carga do posto. */
     onProductInMixChange(key, included) {
       if (!state.study) return;
@@ -383,7 +352,7 @@
       // Novo elemento herda o ritmo da linha anterior (o ritmo do operador tende a se manter).
       const inheritedPace = last && !Calc.parsePace(last.pace).error ? last.pace : "100";
       // ...e o produto (o vídeo costuma seguir no mesmo produto).
-      els.push(Calc.createElement({ pace: inheritedPace, product: last ? last.product || "" : "", macroEtapa: last ? last.macroEtapa || "" : "" }));
+      els.push(Calc.createElement({ pace: inheritedPace, product: last ? last.product || "" : "" }));
       markChanged({ rerender: true });
       return els.length - 1;
     },

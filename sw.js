@@ -3,7 +3,7 @@
  * Estratégia: cache primeiro, com atualização em segundo plano.
  * Ao alterar qualquer arquivo do aplicativo, incremente CACHE_VERSION.
  */
-const CACHE_VERSION = "lean-chrono-v19";
+const CACHE_VERSION = "lean-chrono-v20";
 const APP_SHELL = [
   "./",
   "./index.html",

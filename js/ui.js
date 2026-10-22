@@ -19,13 +19,12 @@
   let lastComputed = null;
 
   /** Filtros da grade e do resumo: só exibição (não são gravados e não alteram cálculos). */
-  const filter = { text: "", product: "", macro: "", type: "", value: "", waste: "", film: "", errors: false };
-  const filterActive = () => !!(filter.text || filter.product || filter.macro || filter.type || filter.value || filter.waste || filter.film || filter.errors);
+  const filter = { text: "", product: "", type: "", value: "", waste: "", film: "", errors: false };
+  const filterActive = () => !!(filter.text || filter.product || filter.type || filter.value || filter.waste || filter.film || filter.errors);
 
   /** Ordem do fluxo rápido com Enter. Frequência e Kaizen ficam fora (acesso por Tab). */
   const ENTER_FLOW = {
-    product: "macroEtapa", // sem a coluna Macro-etapa, vai direto para o elemento
-    macroEtapa: "description",
+    product: "description",
     description: "videoTime",
     type: "__qty__",
     quantity: "videoTime",
@@ -103,19 +102,6 @@
       filterBar: $("filter-bar"),
       fltText: $("flt-text"),
       fltProduct: $("flt-product"),
-      fltMacro: $("flt-macro"),
-      optMacro: $("opt-macro"),
-      thMacro: $("th-macro"),
-      colMacro: $("col-macro"),
-      macroNames: $("macro-names"),
-      macroPanel: $("macro-panel"),
-      macroTbody: $("macro-tbody"),
-      macroHint: $("macro-hint"),
-      macroIssues: $("macro-issues"),
-      macroCount: $("macro-count"),
-      macroTn: $("macro-tn"),
-      macroShare: $("macro-share"),
-      macroTp: $("macro-tp"),
       fltType: $("flt-type"),
       fltValue: $("flt-value"),
       fltWaste: $("flt-waste"),
@@ -180,7 +166,6 @@
     });
 
     // Vários produtos (coluna Produto) e produto exibido no resumo/indicadores
-    els.optMacro.addEventListener("change", () => h.onMacroColumnToggle(els.optMacro.checked));
     els.multiProduct.addEventListener("change", () => {
       const ok = h.onMultiProductToggle(els.multiProduct.checked);
       if (!ok) els.multiProduct.checked = !els.multiProduct.checked;
@@ -208,7 +193,6 @@
     const onFilter = () => {
       filter.text = els.fltText.value.trim();
       filter.product = els.fltProduct.value;
-      filter.macro = els.fltMacro.value;
       filter.type = els.fltType.value;
       filter.value = els.fltValue.value;
       filter.waste = els.fltWaste.value;
@@ -217,7 +201,7 @@
       applyFilters(true);
     };
     els.fltText.addEventListener("input", onFilter);
-    [els.fltProduct, els.fltMacro, els.fltType, els.fltValue, els.fltWaste, els.fltFilm, els.fltErrors].forEach((c) => c.addEventListener("change", onFilter));
+    [els.fltProduct, els.fltType, els.fltValue, els.fltWaste, els.fltFilm, els.fltErrors].forEach((c) => c.addEventListener("change", onFilter));
     els.btnClearFilter.addEventListener("click", () => {
       clearFilters();
       els.fltText.focus();
@@ -263,7 +247,7 @@
     // Produto: guarda o valor ao entrar no campo (para saber se foi preenchido ou trocado)
     // e seleciona o texto: digitar substitui o produto (inclusive o que acabou de ser preenchido)
     els.tbody.addEventListener("focusin", (e) => {
-      if (e.target.dataset && (e.target.dataset.field === "product" || e.target.dataset.field === "macroEtapa")) {
+      if (e.target.dataset && e.target.dataset.field === "product") {
         e.target.dataset.before = e.target.value;
         e.target.select();
       }
@@ -337,28 +321,6 @@
     if (info.field === "pace") commitPace(info, e.target, true);
     if (info.field === "description") commitDescription(info);
     if (info.field === "product") commitProduct(info, e.target);
-    if (info.field === "macroEtapa") commitMacro(info, e.target);
-  }
-
-  /** Macro-etapa: preenche as vazias abaixo (mesmo produto) ou renomeia em todas as linhas do produto. */
-  function commitMacro(info, input) {
-    const before = input.dataset.before == null ? input.value : input.dataset.before;
-    input.dataset.before = input.value;
-    const plan = h.onMacroCommit(info.id, before, filterActive());
-    if (!plan) return;
-    plan.ids.forEach((rid) => {
-      const other = els.tbody.querySelector(`tr[data-id="${rid}"] [data-field="macroEtapa"]`);
-      if (other) {
-        other.value = plan.value;
-        other.dataset.before = plan.value;
-      }
-    });
-    toast(
-      plan.mode === "renomear"
-        ? `Macro-etapa "${plan.oldValue}" renomeada para "${plan.value}" em ${plan.count + 1} linha(s).`
-        : `"${plan.value}" aplicada nas linhas ${plan.from} a ${plan.to}.`,
-      "ok"
-    );
   }
 
   /** Preencher para baixo: aplica o produto às linhas vazias abaixo (ou troca o bloco). */
@@ -440,7 +402,6 @@
       }
       if (info.field === "description") commitDescription(info);
       if (info.field === "product") commitProduct(info, e.target);
-      if (info.field === "macroEtapa") commitMacro(info, e.target);
       if (info.field === "pace") {
         const res = commitPace(info, e.target, true);
         if (!res.ok) {
@@ -448,8 +409,7 @@
           return;
         }
       }
-      let next = ENTER_FLOW[info.field];
-      if (next === "macroEtapa" && !info.tr.querySelector('[data-field="macroEtapa"]')) next = "description";
+      const next = ENTER_FLOW[info.field];
       if (next === "__next_row__") goToNextRow(info.index);
       else if (next === "__qty__") focusQty(info.index);
       else focusCell(info.index, next);
@@ -640,21 +600,11 @@
     els.thProduct.hidden = !showProduct;
     if (showProduct && !els.colProduct.isConnected) els.colElem.before(els.colProduct);
     if (!showProduct && els.colProduct.isConnected) els.colProduct.remove();
-    // Coluna Macro-etapa (REV 1.13): opção do estudo; ocultar não apaga as macros
-    const showMacro = !!(study.settings && study.settings.macroColumn);
-    els.optMacro.checked = showMacro;
-    els.thMacro.hidden = !showMacro;
-    if (showMacro && !els.colMacro.isConnected) els.colElem.before(els.colMacro);
-    if (!showMacro && els.colMacro.isConnected) els.colMacro.remove();
-    els.tfootLabel.colSpan = 5 + (showProduct ? 1 : 0) + (showMacro ? 1 : 0);
-    const table = els.tbody.closest("table");
-    table.classList.toggle("has-product", showProduct);
-    table.classList.toggle("has-macro", showMacro);
+    els.tfootLabel.colSpan = showProduct ? 6 : 5;
     study.elements.forEach((el) => {
       const tr = els.rowTemplate.content.firstElementChild.cloneNode(true);
       tr.dataset.id = el.id;
       if (!showProduct) tr.querySelector(".cell-product").remove();
-      if (!showMacro) tr.querySelector(".cell-macro").remove();
       const qtyInput = tr.querySelector(".input-qty");
       qtyInput.dataset.field = qtyMode ? "quantity" : "frequency";
       qtyInput.setAttribute("aria-label", qtyMode ? "Quantidade" : "Frequência");
@@ -716,7 +666,6 @@
     renderFilms(computed);
     renderSummary(computed);
     renderMix(computed);
-    renderMacros(computed);
     renderCompilation(computed);
     renderKpis(computed);
     applyFilters(false);
@@ -807,52 +756,6 @@
     els.mixIssues.hidden = !notes.length;
   }
 
-  /** Resumo por macro-etapa do produto exibido (REV 1.13). */
-  function renderMacros(computed) {
-    const mac = computed.product && computed.product.macros;
-    els.macroPanel.hidden = !mac;
-    // Autocompletar e filtro: macros de todo o estudo
-    const names = [];
-    computed.rows.forEach((r) => r.macro && !names.some((n) => Calc.elementKey(n) === r.macroKey) && names.push(r.macro));
-    const sig = names.join("\n");
-    if (els.macroNames.dataset.sig !== sig) {
-      els.macroNames.dataset.sig = sig;
-      els.macroNames.replaceChildren(...names.map((n) => Object.assign(document.createElement("option"), { value: n })));
-    }
-    const want = computed.macroUsed ? [["", "Macro: todas"]].concat(names.map((n) => [Calc.elementKey(n), n]), [["__none__", "(sem macro-etapa)"]]) : [["", "Macro: todas"]];
-    const cur = Array.from(els.fltMacro.options).map((o) => [o.value, o.textContent]);
-    if (JSON.stringify(cur) !== JSON.stringify(want)) {
-      const keep = els.fltMacro.value;
-      els.fltMacro.replaceChildren(...want.map(([v, t]) => Object.assign(document.createElement("option"), { value: v, textContent: t })));
-      els.fltMacro.value = want.some(([v]) => v === keep) ? keep : "";
-    }
-    filter.macro = els.fltMacro.value;
-    els.fltMacro.hidden = !computed.macroUsed && !filter.macro;
-    if (!mac) return;
-    const ft = (m) => (m == null ? "--" : Calc.formatTime(m, computed.unit));
-    els.macroTbody.replaceChildren(
-      ...mac.list.map((m) => {
-        const tr = document.createElement("tr");
-        if (m.none) tr.className = "macro-none";
-        [m.none ? "⚠ Sem macro-etapa" : m.name, String(m.elements), ft(m.tn), `${fmt(m.sharePct, 1)}%`, ft(m.tp)].forEach((v, i) => {
-          const td = document.createElement("td");
-          td.className = i ? "cell-readonly mono" : "cell-text";
-          td.textContent = v;
-          tr.append(td);
-        });
-        return tr;
-      })
-    );
-    els.macroCount.textContent = String(mac.list.reduce((a, m) => a + m.elements, 0));
-    els.macroTn.textContent = ft(mac.sumTn);
-    els.macroShare.textContent = mac.balanced ? "100,0%" : "⚠";
-    els.macroTp.textContent = ft(mac.sumTp);
-    const name = computed.multiProduct ? `${computed.product.name}: ` : "";
-    els.macroHint.textContent = `${name}Σ macro-etapas = tempo normal do ciclo${mac.balanced ? " ✔" : " ⚠ (confira)"} • só agrupa: o cálculo dos elementos não muda`;
-    els.macroIssues.replaceChildren(...mac.issues.map((t) => Object.assign(document.createElement("div"), { textContent: `⚠ ${t}` })));
-    els.macroIssues.hidden = !mac.issues.length;
-  }
-
   /** Lista de produtos: autocompletar, seletor do resumo e filtro. */
   function renderProducts(computed) {
     const names = computed.multiProduct ? computed.products.filter((p) => p.key).map((p) => p.name) : [];
@@ -893,9 +796,9 @@
      ========================================================================== */
 
   function clearFilters(silent) {
-    Object.assign(filter, { text: "", product: "", macro: "", type: "", value: "", waste: "", film: "", errors: false });
+    Object.assign(filter, { text: "", product: "", type: "", value: "", waste: "", film: "", errors: false });
     els.fltText.value = "";
-    [els.fltProduct, els.fltMacro, els.fltType, els.fltValue, els.fltWaste, els.fltFilm].forEach((c) => (c.value = ""));
+    [els.fltProduct, els.fltType, els.fltValue, els.fltWaste, els.fltFilm].forEach((c) => (c.value = ""));
     els.fltErrors.checked = false;
     if (!silent) applyFilters(true);
   }
@@ -903,7 +806,6 @@
   const matchText = (name) => !filter.text || Calc.elementKey(name).includes(Calc.elementKey(filter.text));
   const matchValue = (v) => !filter.value || (filter.value === "none" ? !v : v === filter.value);
   const matchWaste = (w) => !filter.waste || (filter.waste === "none" ? !w : w === filter.waste);
-  const matchMacro = (k) => !filter.macro || (filter.macro === "__none__" ? !k : k === filter.macro);
 
   /**
    * Esconde as linhas da grade e do resumo que não atendem aos filtros.
@@ -923,7 +825,6 @@
         !active ||
         (matchText(el.description) &&
           (!filter.product || row.productKey === filter.product) &&
-          matchMacro(row.macroKey) &&
           (!filter.type || row.type === filter.type) &&
           matchValue(el.value) &&
           matchWaste(el.waste) &&
@@ -939,7 +840,7 @@
     Array.from(els.summaryTbody.rows).forEach((tr, i) => {
       const g = computed.summary.elements[i];
       if (!g) return;
-      const ok = !active || (matchText(g.name) && matchMacro(g.macroKey) && (!filter.type || g.type === filter.type) && matchValue(g.value) && matchWaste(g.waste));
+      const ok = !active || (matchText(g.name) && (!filter.type || g.type === filter.type) && matchValue(g.value) && matchWaste(g.waste));
       tr.classList.toggle("row-filtered-out", !ok);
       if (ok) {
         sumShown += 1;
@@ -951,7 +852,7 @@
     els.btnClearFilter.hidden = !active;
     els.btnAddRow.disabled = active;
     els.btnAddRow.title = active ? "Limpe o filtro para incluir linhas" : "Nova linha (Ctrl+Enter)";
-    [els.fltText, els.fltProduct, els.fltMacro, els.fltType, els.fltValue, els.fltWaste, els.fltFilm].forEach((c) => c.classList.toggle("is-active", !!c.value));
+    [els.fltText, els.fltProduct, els.fltType, els.fltValue, els.fltWaste, els.fltFilm].forEach((c) => c.classList.toggle("is-active", !!c.value));
     if (active) {
       const ft = (m) => Calc.formatTime(m, computed.unit);
       const cyc = computed.summary.cycleNormal;
