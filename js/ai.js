@@ -87,7 +87,7 @@
 
   /** (1) Classificação de valor e desperdício para elementos ainda não classificados. */
   function buildClassifyPrompt(study, computed, anonymize) {
-    const pending = computed.summary.elements.filter((g) => !g.value && !g.key.startsWith("#"));
+    const pending = computed.summary.elements.filter((g) => !g.value && !g.unnamed);
     const items = elementRows(study, computed, anonymize, (g) => pending.includes(g));
     const text =
       `${SYSTEM}\n\nClassifique cada elemento de trabalho quanto ao VALOR (do ponto de vista do cliente final):\n` +
@@ -103,7 +103,7 @@
 
   /** (2) Ações Kaizen (ECRS) para elementos que não agregam ou são incidentais. */
   function buildKaizenPrompt(study, computed, anonymize) {
-    const targets = computed.summary.elements.filter((g) => (g.value === "NA" || g.value === "IN") && !g.key.startsWith("#"));
+    const targets = computed.summary.elements.filter((g) => (g.value === "NA" || g.value === "IN") && !g.unnamed);
     const items = elementRows(study, computed, anonymize, (g) => targets.includes(g));
     const text =
       `${SYSTEM}\n\nPara cada elemento abaixo (que NÃO agrega valor ou é incidental), sugira UMA ação de melhoria ` +
@@ -137,7 +137,7 @@
 
   /** (4) Padronização de nomes: agrupa variações do mesmo elemento ("Transp. material"). */
   function buildNamesPrompt(study, computed, anonymize) {
-    const groups = computed.summary.elements.filter((g) => !g.key.startsWith("#"));
+    const groups = computed.summary.elements.filter((g) => !g.unnamed);
     const items = groups.map((g) => ({ elemento: anonymize ? anonymizeText(g.name, study) : g.name, ocorrencias: g.occurrences }));
     const text =
       `${SYSTEM}\n\nNa lista de elementos de trabalho de uma cronoanálise abaixo, encontre nomes DIFERENTES que descrevem a MESMA ` +

@@ -318,9 +318,11 @@
       }
       const qty = qtyMode ? row.quantity : row.frequency > 0 ? 1 / row.frequency : 1;
       const pace = Calc.parsePace(el.pace).value;
+      const nm = String(el.description || "").trim().replace(/\s+/g, " ");
       lines.push({
         pace: pace == null ? 100 : pace,
-        name: String(el.description || "").trim().replace(/\s+/g, " ") || `(linha ${row.seq})`,
+        key: (row.etapaKey ? `${row.etapaKey}|` : "") + (nm ? Calc.elementKey(nm) : `#${el.id}`),
+        name: nm || `(linha ${row.seq})`,
         start: (row.timeMinutes - row.subtractedTime) / 1440, // fração de dia (hh:mm:ss no Excel)
         end: row.timeMinutes / 1440,
         qty,
@@ -338,10 +340,13 @@
     const capacity = LIMITS.geralLast - LIMITS.geralFirst + 1;
     if (lines.length > capacity) throw new Error(`O estudo tem ${lines.length} lançamentos; o modelo comporta ${capacity} (linhas ${LIMITS.geralFirst}–${LIMITS.geralLast}).`);
 
-    // Nomes iguais aos do resumo, para os SOMASE/CONT.SE da planilha agruparem igual ao app
-    const canonical = new Map(r.summary.elements.map((g) => [g.key, g.name]));
-    lines.forEach((l) => (l.name = canonical.get(Calc.elementKey(l.name)) || l.name));
-    const elements = r.summary.elements.filter((g) => !g.key.startsWith("#"));
+    // Nomes iguais aos do resumo, para os SOMASE/CONT.SE da planilha agruparem igual ao app.
+    // Com etapas (REV 1.15), o modelo não tem a coluna: o nome leva a etapa ("Moldagem • Passar a massa").
+    const label = (g) => (r.withEtapas ? `${g.etapa} • ${g.name}` : g.name);
+    const canonical = new Map(r.summary.elements.map((g) => [g.key, label(g)]));
+    lines.forEach((l) => (l.name = canonical.get(l.key) || l.name));
+    const elements = r.summary.elements.filter((g) => !g.unnamed).map((g) => (r.withEtapas ? Object.assign({}, g, { name: label(g) }) : g));
+    if (r.withEtapas) warnings.push('O modelo B+P não tem coluna Etapa: o nome de cada elemento foi exportado com a etapa ("Etapa • Elemento").');
     const listCap = LIMITS.listLast - LIMITS.listFirst + 1;
     if (elements.length > listCap) throw new Error(`O estudo tem ${elements.length} elementos; a Listagem do modelo comporta ${listCap}.`);
     if (!rev21 && lines.some((l) => Math.abs(l.pace - 100) > 1e-9)) {

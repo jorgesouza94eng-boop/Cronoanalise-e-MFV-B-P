@@ -19,7 +19,7 @@
         <h1>Cronoanálise &amp; MFV</h1>
         <nav class="app-nav" aria-label="Módulos">
           <a href="index.html" aria-current="page">Cronoanálise</a><a href="mfv.html">MFV</a><a href="yamazumi.html">Yamazumi</a>
-        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.14</span></nav>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.15</span></nav>
       </div>
     </div>
 
@@ -193,6 +193,9 @@
           <label class="inline-check" for="opt-multi-product" title="Mostra a coluna Produto: resumo, ciclo e tempo padrão separados por produto">
             <input type="checkbox" id="opt-multi-product"> Vários produtos
           </label>
+          <label class="inline-check" for="opt-multi-etapa" title="Mostra a coluna Etapa: TP por etapa do processo (ex.: Laminação, Enrolar, Moldagem). No MFV, cada etapa vira uma etapa do fluxo">
+            <input type="checkbox" id="opt-multi-etapa"> Etapas
+          </label>
           <button type="button" id="btn-add-row" class="btn-secondary" title="Nova linha (Ctrl+Enter)">+ Nova linha</button>
           <button type="button" id="btn-to-mfv" class="btn-outline" title="Levar este estudo (ou o produto do resumo) como etapa do MFV da mesma empresa">→ MFV</button>
           <button type="button" id="btn-ai" class="btn-outline btn-ai" title="Assistente de IA (Gemini): classificação, Kaizen e constatações">✨ IA</button>
@@ -206,6 +209,7 @@
       <div class="filter-bar" id="filter-bar" role="search" aria-label="Filtrar a grade e o resumo">
         <input type="search" id="flt-text" placeholder="Filtrar elemento..." autocomplete="off" aria-label="Filtrar pelo nome do elemento">
         <select id="flt-product" aria-label="Filtrar por produto" hidden></select>
+        <select id="flt-etapa" aria-label="Filtrar por etapa" hidden></select>
         <select id="flt-operator" aria-label="Filtrar por operador" hidden></select>
         <select id="flt-type" aria-label="Filtrar por tipo">
           <option value="">Tipo: todos</option><option value="C">C — cíclico</option><option value="A">A — acíclico</option>
@@ -230,7 +234,7 @@
       <div class="table-container">
         <table class="chrono-table" id="chrono-table">
           <colgroup>
-            <col class="col-num"><col class="col-product" id="col-product"><col class="col-elem" id="col-elem"><col class="col-type"><col class="col-freq">
+            <col class="col-num"><col class="col-product" id="col-product"><col class="col-etapa" id="col-etapa"><col class="col-elem" id="col-elem"><col class="col-type"><col class="col-freq">
             <col class="col-tfinal"><col class="col-tsub"><col class="col-pace"><col class="col-tnorm">
             <col class="col-value"><col class="col-waste"><col class="col-action"><col class="col-del">
           </colgroup>
@@ -238,6 +242,7 @@
             <tr>
               <th scope="col" title="Número do elemento. Toque no número (ou Alt+N) para marcar o início de uma nova filmagem">Nº</th>
               <th scope="col" id="th-product" class="cell-product" title="Produto em análise na linha. A nova linha repete o produto da anterior">Produto</th>
+              <th scope="col" id="th-etapa" class="cell-etapa" title="Etapa do processo (ex.: Moldagem). A nova linha repete a etapa da anterior; ao confirmar, preenche as linhas vazias abaixo">Etapa</th>
               <th scope="col" title="Elementos com o MESMO NOME são agrupados no resumo (média se C, soma se A)">Elemento de trabalho (operação)</th>
               <th scope="col" title="C = cíclico (média das ocorrências) | A = acíclico (soma dos tempos). Digite C ou A">Tipo</th>
               <th scope="col" id="th-qty" title="Quantidade de unidades produzidas no trecho">Qtd.</th>
@@ -396,6 +401,7 @@
   <!-- NOMES JÁ USADOS (autocompletar: garante o mesmo nome para o mesmo elemento) -->
   <datalist id="element-names"></datalist>
   <datalist id="product-names"></datalist>
+  <datalist id="etapa-names"></datalist>
 
   <!-- MODELO DE LINHA DA GRADE -->
   <template id="row-template">
@@ -406,6 +412,8 @@
                  title="Operador da linha (Alt+1…Alt+9). Clique para trocar ou dar um nome"></button></td>
       <td class="cell-product"><input type="text" class="input-cell input-product" data-field="product" aria-label="Produto"
                  list="product-names" placeholder="Produto" autocomplete="off" enterkeyhint="next"></td>
+      <td class="cell-etapa"><input type="text" class="input-cell input-etapa" data-field="etapa" aria-label="Etapa do processo"
+                 list="etapa-names" placeholder="Etapa" autocomplete="off" enterkeyhint="next"></td>
       <td><input type="text" class="input-cell input-elem" data-field="description" aria-label="Elemento de trabalho"
                  list="element-names" placeholder="Descreva a operação..." autocomplete="off" enterkeyhint="next"></td>
       <td><select class="input-cell input-type" data-field="type" aria-label="Tipo: C cíclico ou A acíclico">

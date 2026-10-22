@@ -610,6 +610,7 @@ button:focus-visible,
 col.col-num    { width: 44px; }
 col.col-elem   { width: auto; }
 col.col-product { width: 120px; }
+col.col-etapa { width: 120px; } /* REV 1.15 */
 col.col-type   { width: 56px; }
 col.col-freq   { width: 70px; }
 col.col-tfinal { width: 96px; }

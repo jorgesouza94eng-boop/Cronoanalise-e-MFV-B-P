@@ -17,7 +17,7 @@
   "use strict";
 
   const SCHEMA_ID = "lean-chrono-estudo";
-  const SCHEMA_VERSION = 6; // v2: peças por filmagem • v3: início por filmagem e produto • v4: demanda por produto • v5: produto no mix e nome do vídeo • v6: vários operadores no mesmo estudo
+  const SCHEMA_VERSION = 7; // v2: peças por filmagem • v3: início por filmagem e produto • v4: demanda por produto • v5: produto no mix e nome do vídeo • v6: vários operadores no mesmo estudo • v7: etapa do processo por linha
 
   /** Faixa aceita para o fator de ritmo (%). */
   const PACE_MIN = 50;
@@ -245,6 +245,8 @@
     const mode = entryMode(study);
     const elements = (study && study.elements) || [];
     const multi = elements.some((e) => String(e.product || "").trim());
+    // Etapa do processo (REV 1.15): cada linha pode indicar a etapa do produto (ex.: Moldagem)
+    const withEtapas = elements.some((e) => String(e.etapa || "").trim());
     const starts = (study && study.filmStarts) || {};
     const demands = (study && study.productDemand) || {};
     const inMix = (study && study.produtoNoMix) || {}; // { chave: false } = fora da carga do posto
@@ -330,6 +332,7 @@
       }
 
       const productName = multi ? String(el.product || "").trim().replace(/\s+/g, " ") : "";
+      const etapaName = withEtapas ? String(el.etapa || "").trim().replace(/\s+/g, " ") : "";
       return {
         id: el.id,
         seq: index + 1,
@@ -339,6 +342,8 @@
         operator: op,
         product: productName,
         productKey: productName ? elementKey(productName) : "",
+        etapa: etapaName,
+        etapaKey: etapaName ? elementKey(etapaName) : withEtapas ? "#sem-etapa" : "",
         frequency: freq.value,
         quantity: qty.value,
         timeMinutes: time.minutes,
@@ -441,11 +446,13 @@
           opsIdeal: kpis.taktTime > 0 && n ? content / kpis.taktTime : null,
         };
       }
+      const etapas = withEtapas ? etapaResults(elements, rows, mode, filmInfo, p.key, pParams, multiOp, opLabel) : null;
       return Object.assign({}, p, {
         films: filmInfo,
         summary,
         operators,
         posto,
+        etapas,
         checks: studyChecks(rows, mode, filmInfo, p, operators ? operators.map((o) => ({ label: o.label, op: o.op, summary: o.summary })) : [{ label: "", op: null, summary }], multi),
         compilation: compile(summary, operators ? operators.reduce((a, o) => a + o.tn, 0) : null),
         demand: toFiniteOrNull(pParams.dailyDemandPcs),
@@ -482,6 +489,7 @@
       unit: timeUnit(study),
       rows,
       multiProduct: multi,
+      withEtapas,
       multiOperator: multiOp,
       operatorCount: opCount,
       operatorKind: settings.tipoOperadores === "linha" ? "linha" : "posto",
@@ -570,11 +578,12 @@
    *                 receber o novo valor (pede confirmação na tela).
    * Segue a ordem da grade (atravessa filmagens). Retorna null quando não há o que fazer.
    */
-  function productFillPlan(elements, idx, oldProduct) {
+  function productFillPlan(elements, idx, oldProduct, field) {
+    const f = field || "product"; // REV 1.15: o mesmo preenchimento vale para a coluna Etapa
     const list = elements || [];
     const row = list[idx];
     if (!row) return null;
-    const value = String(row.product || "").trim().replace(/\s+/g, " ");
+    const value = String(row[f] || "").trim().replace(/\s+/g, " ");
     const oldKey = elementKey(oldProduct);
     if (elementKey(value) === oldKey) return null;
     const ids = [];
@@ -582,10 +591,10 @@
     if (!oldKey) {
       if (!value) return null;
       mode = "preencher";
-      for (let i = idx + 1; i < list.length && !elementKey(list[i].product); i++) ids.push(list[i].id);
+      for (let i = idx + 1; i < list.length && !elementKey(list[i][f]); i++) ids.push(list[i].id);
     } else {
       mode = "trocar";
-      for (let i = idx + 1; i < list.length && elementKey(list[i].product) === oldKey; i++) ids.push(list[i].id);
+      for (let i = idx + 1; i < list.length && elementKey(list[i][f]) === oldKey; i++) ids.push(list[i].id);
     }
     if (!ids.length) return null;
     return { mode, value, oldValue: String(oldProduct || "").trim(), ids, from: idx + 2, to: idx + 1 + ids.length };
@@ -664,16 +673,69 @@
     };
   }
 
-  function summarize(elements, rows, mode, filmInfo, productKey, op) {
+  /**
+   * Etapas do processo de um produto (REV 1.15), na ordem em que aparecem na grade.
+   * Por etapa: TN, TP (= TN × (1 + tolerância)), espera e conteúdo (TP − espera). Com vários
+   * operadores, por operador da etapa: 1 operador → a etapa é dele; 2+ → posto da etapa
+   * (ciclo = maior TP, conteúdo = Σ). Nunca soma tempos de operadores diferentes.
+   */
+  function etapaResults(elements, rows, mode, filmInfo, productKey, pParams, multiOp, opLabel) {
+    const order = [];
+    rows.forEach((r) => {
+      if (!r.valid || !r.hasReading || r.productKey !== productKey) return;
+      if (!order.some((e) => e.key === r.etapaKey)) order.push({ key: r.etapaKey, name: r.etapa || "(sem etapa)" });
+    });
+    const tolOk = (() => {
+      const t = toFiniteOrNull(pParams.tolerancePct);
+      return t != null && t >= 0 && t < 100 ? t : null;
+    })();
+    const tpOf = (tn) => (tolOk != null ? tn * (1 + tolOk / 100) : null);
+    const part = (op, ek) => {
+      const sm = summarize(elements, rows, mode, filmInfo, productKey, op, ek);
+      const tp = tpOf(sm.cycleNormal);
+      const factor = tp != null && sm.cycleNormal > EPS ? tp / sm.cycleNormal : 1;
+      const wait = sm.elements.filter((g) => g.waste === "espera").reduce((a, g) => a + g.cycleTime, 0) * factor;
+      const base = tp != null ? tp : sm.cycleNormal;
+      return { summary: sm, tn: sm.cycleNormal, tp, wait, content: base - wait, elementCount: sm.elements.length };
+    };
+    return order.map((e, i) => {
+      if (!multiOp) return Object.assign({ key: e.key, name: e.name, order: i + 1, operators: null, n: 1, operator: 0, cycle: null }, part(null, e.key), { cycleOp: 0 });
+      const ops = [];
+      rows.forEach((r) => r.valid && r.hasReading && r.productKey === productKey && r.etapaKey === e.key && !ops.includes(r.operator) && ops.push(r.operator));
+      ops.sort((a, b) => a - b);
+      const list = ops.map((op) => Object.assign({ op, label: opLabel(op) }, part(op, e.key)));
+      const top = list.reduce((m, o) => (!m || o.tn > m.tn ? o : m), null);
+      const tn = top ? top.tn : 0;
+      return {
+        key: e.key,
+        name: e.name,
+        order: i + 1,
+        operators: list,
+        n: list.length,
+        operator: list.length === 1 ? list[0].op : 0, // etapa feita por um só operador
+        cycleOp: top ? top.op : 0,
+        tn,
+        tp: tpOf(tn),
+        wait: list.reduce((a, o) => a + o.wait, 0),
+        content: list.reduce((a, o) => a + o.content, 0),
+        elementCount: list.reduce((a, o) => a + o.elementCount, 0),
+        summary: null,
+      };
+    });
+  }
+
+  function summarize(elements, rows, mode, filmInfo, productKey, op, etapaKey) {
     const perUnitA = !!(filmInfo && filmInfo.acyclic === "por-unidade");
     const groups = new Map();
     rows.forEach((row, i) => {
       if (!row.valid || !row.hasReading) return;
       if (productKey != null && row.productKey !== productKey) return;
       if (op != null && row.operator !== op) return;
+      if (etapaKey != null && row.etapaKey !== etapaKey) return;
       const el = elements[i];
       const name = String(el.description || "").trim().replace(/\s+/g, " ");
-      const key = name ? elementKey(name) : `#${el.id}`;
+      // Com etapas (REV 1.15), o mesmo nome em etapas diferentes é outro elemento: TP do produto = Σ etapas
+      const key = (row.etapaKey ? `${row.etapaKey}|` : "") + (name ? elementKey(name) : `#${el.id}`);
       let g = groups.get(key);
       if (!g) {
         g = {
@@ -683,6 +745,8 @@
           value: "",
           waste: "",
           firstSeq: row.seq,
+          etapa: row.etapa || (row.etapaKey ? "(sem etapa)" : ""),
+          unnamed: !name,
           occurrences: 0,
           sumSubtracted: 0,
           sumNormal: 0,
@@ -882,7 +946,8 @@
         maximumFractionDigits: d,
       });
     }
-    return formatters[d].format(n);
+    // REV 1.15: tira o resíduo da conta binária antes de arredondar (0,7499999… → 0,75 → "0,8")
+    return formatters[d].format(Number(n.toPrecision(12)));
   }
 
   /* ==========================================================================
@@ -947,6 +1012,7 @@
         kaizen: "",
         newVideo: false,
         product: "",
+        etapa: "", // REV 1.15: etapa do processo (opcional)
         operador: 1, // REV 1.14: operador da linha (1 = único operador)
       },
       overrides || {}
@@ -1041,6 +1107,7 @@
         entryMode: ENTRY_MODES.includes(raw.settings && raw.settings.entryMode) ? raw.settings.entryMode : "frequencia",
         timeUnit: TIME_UNITS[raw.settings && raw.settings.timeUnit] ? raw.settings.timeUnit : "min",
         multiProduct: !!(raw.settings && raw.settings.multiProduct === true),
+        multiEtapa: !!(raw.settings && raw.settings.multiEtapa === true), // REV 1.15: mostra a coluna Etapa
         product: raw.settings && typeof raw.settings.product === "string" ? raw.settings.product : "",
         // Vários operadores (REV 1.14): ausente = 1 operador (como antes)
         numOperadores: raw.settings && Number.isInteger(raw.settings.numOperadores) && raw.settings.numOperadores >= 1 ? raw.settings.numOperadores : 1,
@@ -1071,6 +1138,7 @@
             kaizen: str(e.kaizen),
             newVideo: e.newVideo === true,
             product: str(e.product),
+            etapa: str(e.etapa),
             operador: Number.isInteger(e.operador) && e.operador >= 1 ? e.operador : 1,
           })
         ),
@@ -1192,9 +1260,25 @@
               })),
             }
           : undefined,
+        // Etapas do processo (REV 1.15), por produto
+        etapas: r.withEtapas
+          ? r.products.map((p) => ({
+              produto: p.name,
+              etapas: (p.etapas || []).map((e) => ({
+                ordem: e.order,
+                etapa: e.name,
+                tempoNormalMin: round(e.tn, 6),
+                tempoPadraoMin: round(e.tp, 6),
+                esperaMin: round(e.wait, 6),
+                conteudoMin: round(e.content, 6),
+                operadores: e.operators ? e.operators.map((o) => o.label) : undefined,
+              })),
+            }))
+          : undefined,
         avisos: r.warnings.concat(r.checks),
         summary: r.summary.elements.map((g) => ({
           seq: g.seq,
+          etapa: g.etapa || undefined,
           element: g.name,
           type: g.type,
           occurrences: g.occurrences,
@@ -1212,6 +1296,7 @@
           seq: row.seq,
           film: row.film,
           operador: row.operator,
+          etapa: row.etapa || undefined,
           type: row.type,
           subtractedTimeMin: round(row.subtractedTime, 4),
           normalTimeMin: round(row.normalTime, 4),
@@ -1253,6 +1338,7 @@
     const multi = r.multiProduct;
     const P = (v) => (multi ? [v] : []); // coluna Produto só com vários produtos
     const O = (v) => (r.multiOperator ? [v] : []); // coluna Operador só com 2+ operadores (REV 1.14)
+    const E = (v) => (r.withEtapas ? [v] : []); // coluna Etapa só quando usada (REV 1.15)
 
     const lines = [];
     lines.push(["Cliente", q(study.clientName)].join(";"));
@@ -1268,6 +1354,7 @@
         "Vídeo",
         ...O("Operador"),
         ...P("Produto"),
+        ...E("Etapa"),
         "Elemento",
         "Tipo",
         qtyMode ? "Quantidade" : "Frequência (texto)",
@@ -1292,6 +1379,7 @@
           q(r.filmList[row.film - 1].video),
           ...O(q(r.operatorLabel(row.operator))),
           ...P(q(row.product || "(sem produto)")),
+          ...E(q(row.etapa || "(sem etapa)")),
           q(el.description),
           row.type === "A" ? "Acíclico" : "Cíclico",
           // Fórmula ="1/50" impede que o Excel converta a fração em data (ex.: 1/5 → 01/mai).
@@ -1313,13 +1401,14 @@
     lines.push("");
     lines.push("RESUMO POR ELEMENTO (Listagem de Elementos)");
     lines.push(
-      ["Nº", ...P("Produto"), "Elemento", "Tipo", "Ocorrências", qtyMode ? "Qtd total" : "", `Tempo total (${u})`, `Tempo no ciclo (${u})`, "% do ciclo", "Valor", "Desperdício", "Ação"].join(";")
+      ["Nº", ...P("Produto"), ...E("Etapa"), "Elemento", "Tipo", "Ocorrências", qtyMode ? "Qtd total" : "", `Tempo total (${u})`, `Tempo no ciclo (${u})`, "% do ciclo", "Valor", "Desperdício", "Ação"].join(";")
     );
     (multi ? r.products : [r.product]).forEach((pr) => pr.summary.elements.forEach((g) => {
       lines.push(
         [
           g.seq,
           ...P(q(pr.name)),
+          ...E(q(g.etapa)),
           q(g.name),
           g.type === "A" ? "Acíclico" : "Cíclico",
           g.occurrences,
@@ -1360,6 +1449,18 @@
       lines.push([`TC ponderado pelo mix (${u}/pç)`, nt(r.mix.weightedTP)].join(";"));
       lines.push(["Status do mix", q(MIX_STATUS[r.mix.status] + (r.mix.partial ? " (mix parcial)" : ""))].join(";"));
       r.mix.issues.forEach((t) => lines.push(["Aviso", q(t)].join(";")));
+    }
+    if (r.withEtapas) {
+      lines.push("");
+      lines.push("ETAPAS DO PROCESSO");
+      lines.push([...P("Produto"), "Nº", "Etapa", ...O("Operador(es)"), `Tempo normal (${u}/pç)`, `Tempo padrão (${u}/pç)`, `Espera (${u}/pç)`, `Conteúdo (${u}/pç)`].join(";"));
+      r.products.forEach((pr) =>
+        (pr.etapas || []).forEach((e) =>
+          lines.push(
+            [...P(q(pr.name)), e.order, q(e.name), ...O(q(e.operators ? e.operators.map((o) => o.label).join(", ") : "")), nt(e.tn), nt(e.tp), nt(e.wait), nt(e.content)].join(";")
+          )
+        )
+      );
     }
     if (r.multiOperator) {
       lines.push("");

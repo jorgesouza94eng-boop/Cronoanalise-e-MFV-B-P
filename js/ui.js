@@ -20,12 +20,13 @@
   let opMenu = null; // menu aberto da etiqueta do operador (REV 1.14)
 
   /** Filtros da grade e do resumo: só exibição (não são gravados e não alteram cálculos). */
-  const filter = { text: "", product: "", operator: "", type: "", value: "", waste: "", film: "", errors: false };
-  const filterActive = () => !!(filter.text || filter.product || filter.operator || filter.type || filter.value || filter.waste || filter.film || filter.errors);
+  const filter = { text: "", product: "", etapa: "", operator: "", type: "", value: "", waste: "", film: "", errors: false };
+  const filterActive = () => !!(filter.text || filter.product || filter.etapa || filter.operator || filter.type || filter.value || filter.waste || filter.film || filter.errors);
 
   /** Ordem do fluxo rápido com Enter. Frequência e Kaizen ficam fora (acesso por Tab). */
   const ENTER_FLOW = {
-    product: "description",
+    product: "etapa", // sem a coluna Etapa, vai para o elemento (focusCell)
+    etapa: "description",
     description: "videoTime",
     type: "__qty__",
     quantity: "videoTime",
@@ -95,6 +96,11 @@
       multiProduct: $("opt-multi-product"),
       thProduct: $("th-product"),
       colProduct: $("col-product"),
+      multiEtapa: $("opt-multi-etapa"),
+      thEtapa: $("th-etapa"),
+      colEtapa: $("col-etapa"),
+      etapaNames: $("etapa-names"),
+      fltEtapa: $("flt-etapa"),
       colElem: $("col-elem"),
       tfootLabel: $("tfoot-label"),
       productNames: $("product-names"),
@@ -181,6 +187,11 @@
       if (!ok) els.multiProduct.checked = !els.multiProduct.checked;
     });
     els.summaryProduct.addEventListener("change", () => h.onProductSelect(els.summaryProduct.value));
+    // Etapas do processo (coluna Etapa, REV 1.15)
+    els.multiEtapa.addEventListener("change", () => {
+      const ok = h.onMultiEtapaToggle(els.multiEtapa.checked);
+      if (!ok) els.multiEtapa.checked = !els.multiEtapa.checked;
+    });
 
     // Carga do posto: demanda de cada produto
     els.mixTbody.addEventListener("input", (e) => {
@@ -203,6 +214,7 @@
     const onFilter = () => {
       filter.text = els.fltText.value.trim();
       filter.product = els.fltProduct.value;
+      filter.etapa = els.fltEtapa.value;
       filter.operator = els.fltOperator.value;
       filter.type = els.fltType.value;
       filter.value = els.fltValue.value;
@@ -212,7 +224,7 @@
       applyFilters(true);
     };
     els.fltText.addEventListener("input", onFilter);
-    [els.fltProduct, els.fltOperator, els.fltType, els.fltValue, els.fltWaste, els.fltFilm, els.fltErrors].forEach((c) => c.addEventListener("change", onFilter));
+    [els.fltProduct, els.fltEtapa, els.fltOperator, els.fltType, els.fltValue, els.fltWaste, els.fltFilm, els.fltErrors].forEach((c) => c.addEventListener("change", onFilter));
     // Vários operadores (REV 1.14)
     els.opCount.addEventListener("change", () => {
       const res = h.onOperatorCountChange(els.opCount.value);
@@ -271,7 +283,7 @@
     // Produto: guarda o valor ao entrar no campo (para saber se foi preenchido ou trocado)
     // e seleciona o texto: digitar substitui o produto (inclusive o que acabou de ser preenchido)
     els.tbody.addEventListener("focusin", (e) => {
-      if (e.target.dataset && e.target.dataset.field === "product") {
+      if (e.target.dataset && (e.target.dataset.field === "product" || e.target.dataset.field === "etapa")) {
         e.target.dataset.before = e.target.value;
         e.target.select();
       }
@@ -344,23 +356,24 @@
     }
     if (info.field === "pace") commitPace(info, e.target, true);
     if (info.field === "description") commitDescription(info);
-    if (info.field === "product") commitProduct(info, e.target);
+    if (info.field === "product" || info.field === "etapa") commitProduct(info, e.target);
   }
 
-  /** Preencher para baixo: aplica o produto às linhas vazias abaixo (ou troca o bloco). */
+  /** Preencher para baixo: aplica o produto (ou a etapa) às linhas vazias abaixo (ou troca o bloco). */
   function commitProduct(info, input) {
+    const field = input.dataset.field === "etapa" ? "etapa" : "product";
     const before = input.dataset.before == null ? input.value : input.dataset.before;
     input.dataset.before = input.value; // Enter + saída do campo não repetem a ação
-    const plan = h.onProductCommit(info.id, before, filterActive());
+    const plan = h.onProductCommit(info.id, before, filterActive(), field);
     if (!plan) return;
     plan.ids.forEach((rid) => {
-      const other = els.tbody.querySelector(`tr[data-id="${rid}"] [data-field="product"]`);
+      const other = els.tbody.querySelector(`tr[data-id="${rid}"] [data-field="${field}"]`);
       if (other) {
         other.value = plan.value;
         other.dataset.before = plan.value;
       }
     });
-    toast(`${plan.value ? `"${plan.value}" aplicado` : "Produto removido"} nas linhas ${plan.from} a ${plan.to}.`, "ok");
+    toast(`${plan.value ? `"${plan.value}" aplicado` : field === "etapa" ? "Etapa removida" : "Produto removido"} nas linhas ${plan.from} a ${plan.to}.`, "ok");
   }
 
   /** Elemento já classificado em outra linha: copia tipo, valor e desperdício. */
@@ -435,7 +448,7 @@
         }
       }
       if (info.field === "description") commitDescription(info);
-      if (info.field === "product") commitProduct(info, e.target);
+      if (info.field === "product" || info.field === "etapa") commitProduct(info, e.target);
       if (info.field === "pace") {
         const res = commitPace(info, e.target, true);
         if (!res.ok) {
@@ -631,7 +644,8 @@
   function focusCell(index, field) {
     const tr = els.tbody.rows[index];
     if (!tr) return;
-    const input = tr.querySelector(`[data-field="${field}"]`);
+    // Sem a coluna Etapa, o Enter do Produto vai direto para o elemento
+    const input = tr.querySelector(`[data-field="${field}"]`) || (field === "etapa" ? tr.querySelector('[data-field="description"]') : null);
     if (input) {
       input.focus();
       if (typeof input.select === "function") input.select();
@@ -682,11 +696,18 @@
     els.thProduct.hidden = !showProduct;
     if (showProduct && !els.colProduct.isConnected) els.colElem.before(els.colProduct);
     if (!showProduct && els.colProduct.isConnected) els.colProduct.remove();
-    els.tfootLabel.colSpan = showProduct ? 6 : 5;
+    // Coluna Etapa (REV 1.15): aparece com "Etapas" marcado ou quando alguma linha tem etapa
+    const showEtapa = !!(study.settings && study.settings.multiEtapa) || study.elements.some((e) => String(e.etapa || "").trim());
+    els.multiEtapa.checked = showEtapa;
+    els.thEtapa.hidden = !showEtapa;
+    if (showEtapa && !els.colEtapa.isConnected) els.colElem.before(els.colEtapa);
+    if (!showEtapa && els.colEtapa.isConnected) els.colEtapa.remove();
+    els.tfootLabel.colSpan = 5 + (showProduct ? 1 : 0) + (showEtapa ? 1 : 0);
     study.elements.forEach((el) => {
       const tr = els.rowTemplate.content.firstElementChild.cloneNode(true);
       tr.dataset.id = el.id;
       if (!showProduct) tr.querySelector(".cell-product").remove();
+      if (!showEtapa) tr.querySelector(".cell-etapa").remove();
       const qtyInput = tr.querySelector(".input-qty");
       qtyInput.dataset.field = qtyMode ? "quantity" : "frequency";
       qtyInput.setAttribute("aria-label", qtyMode ? "Quantidade" : "Frequência");
@@ -900,6 +921,17 @@
     if (multi) els.summaryProduct.value = computed.product.key;
     options(els.fltProduct, computed.multiProduct ? computed.products : [], [["", "Produto: todos"]]);
     filter.product = els.fltProduct.value;
+    // Etapas (REV 1.15): autocompletar e filtro com as etapas já usadas
+    const etapas = [];
+    computed.rows.forEach((r) => r.etapaKey && !etapas.some((e) => e.key === r.etapaKey) && etapas.push({ key: r.etapaKey, name: r.etapa || "(sem etapa)" }));
+    const esig = etapas.filter((e) => !e.key.startsWith("#")).map((e) => e.name).join("\n");
+    if (els.etapaNames.dataset.sig !== esig) {
+      els.etapaNames.dataset.sig = esig;
+      els.etapaNames.replaceChildren(...etapas.filter((e) => !e.key.startsWith("#")).map((e) => Object.assign(document.createElement("option"), { value: e.name })));
+    }
+    els.fltEtapa.hidden = !computed.withEtapas;
+    options(els.fltEtapa, computed.withEtapas ? etapas : [], [["", "Etapa: todas"]]);
+    filter.etapa = els.fltEtapa.value;
     const films = [["", "Filmagem: todas"]].concat(computed.filmList.map((f) => [String(f.film), f.video ? `F${f.film} — ${f.video}` : `F${f.film}`]));
     const curFilms = Array.from(els.fltFilm.options).map((o) => [o.value, o.textContent]);
     if (JSON.stringify(curFilms) !== JSON.stringify(films)) {
@@ -916,9 +948,9 @@
      ========================================================================== */
 
   function clearFilters(silent) {
-    Object.assign(filter, { text: "", product: "", operator: "", type: "", value: "", waste: "", film: "", errors: false });
+    Object.assign(filter, { text: "", product: "", etapa: "", operator: "", type: "", value: "", waste: "", film: "", errors: false });
     els.fltText.value = "";
-    [els.fltProduct, els.fltOperator, els.fltType, els.fltValue, els.fltWaste, els.fltFilm].forEach((c) => (c.value = ""));
+    [els.fltProduct, els.fltEtapa, els.fltOperator, els.fltType, els.fltValue, els.fltWaste, els.fltFilm].forEach((c) => (c.value = ""));
     els.fltErrors.checked = false;
     if (!silent) applyFilters(true);
   }
@@ -945,6 +977,7 @@
         !active ||
         (matchText(el.description) &&
           (!filter.product || row.productKey === filter.product) &&
+          (!filter.etapa || row.etapaKey === filter.etapa) &&
           (!filter.operator || String(row.operator) === filter.operator) &&
           (!filter.type || row.type === filter.type) &&
           matchValue(el.value) &&
@@ -1197,7 +1230,7 @@
       typeTd.appendChild(tag);
       tr.append(
         cell(String(g.seq).padStart(2, "0"), "cell-num"),
-        cell((g.conflicts.length ? "⚠ " : "") + (g.opLabel ? `${g.opLabel.split(" ")[0]} • ` : "") + g.name, "cell-text", conflictMsg),
+        cell((g.conflicts.length ? "⚠ " : "") + (g.opLabel ? `${g.opLabel.split(" ")[0]} • ` : "") + (g.etapa ? `[${g.etapa}] ` : "") + g.name, "cell-text", conflictMsg),
         typeTd,
         cell(String(g.occurrences), "cell-readonly mono"),
         cell(qtyMode ? fmt(g.sumQuantity, g.sumQuantity % 1 ? 2 : 0) : "—", "cell-readonly mono"),
@@ -1230,11 +1263,19 @@
           computed.product.operators.map((o) => `${o.label.split(" ")[0]}: TN ${ft(o.tn)} • TP ${ft(o.tp)} • espera ${ft(o.wait)} • conteúdo ${ft(o.content)}`).join(" | ")
       );
     }
+    // Etapas do processo (REV 1.15): TP de cada etapa do produto exibido
+    const pe = computed.product && computed.product.etapas;
+    if (pe && pe.length) {
+      notes.unshift(
+        `Etapas (${pe.length}): ` +
+          pe.map((e) => `${e.order}. ${e.name} TP ${e.tp != null ? ft(e.tp) : "--"}${e.operators && e.operators.length ? ` (${e.operators.map((o) => o.label.split(" ")[0]).join("+")})` : ""}`).join(" | ")
+      );
+    }
     els.summaryNote.textContent = notes.join(" • ");
     els.summaryNote.classList.toggle("has-conflict", computed.summary.conflictCount > 0);
 
     // Autocompletar com os nomes já usados (mesmo nome = mesmo elemento no resumo)
-    const names = computed.summary.elements.filter((g) => !g.key.startsWith("#")).map((g) => g.name);
+    const names = Array.from(new Set(computed.summary.elements.filter((g) => !g.unnamed).map((g) => g.name)));
     const sig = names.join("\n");
     if (els.names.dataset.sig !== sig) {
       els.names.dataset.sig = sig;

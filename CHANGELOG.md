@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.15** | 22/10/2026 | Coluna Etapa na cronoanálise: TP por etapa do processo, que vira etapa do MFV já ponderada |
 | **REV 1.14** | 22/10/2026 | Vários operadores no mesmo estudo, MFV com produto estratificado e avisos de consistência |
 | *REV 1.13 (revertida)* | 22/10/2026 | Desfeita a pedido do consultor; o app voltou à REV 1.12 |
 | **REV 1.12** | 21/10/2026 | "Considerar no mix" por produto, demanda geral não repetida no mix e nome do vídeo por filmagem |
@@ -19,6 +20,43 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.15 — 22/10/2026
+
+Coluna **Etapa** na cronoanálise, para o produto estratificado em etapas do processo (ex.: Laminação, Queijo, Enrolar), sem precisar de um estudo por etapa nem usar a coluna Produto como etapa. Decisões do consultor: ponderação **marcada** nas etapas que vêm da coluna Etapa; **operador automático**; correção do service worker incluída.
+
+### Cronoanálise
+- Caixa **"Etapas"** (ao lado de "Vários produtos") mostra a coluna **Etapa** antes do elemento. Sem a caixa marcada e sem etapa nas linhas, a grade e os resultados ficam iguais aos da REV 1.14.
+- A linha nova repete a etapa da anterior; ao confirmar uma etapa, ela é **preenchida para baixo** nas linhas vazias (ou o bloco é trocado, com confirmação), como no Produto. Enter: Produto → Etapa → Elemento.
+- **TP por etapa**, por produto, na ordem em que as etapas aparecem na grade (nota do Resumo: "Etapas (3): 1. Laminação TP 5,0 | 2. Queijo TP 3,0 | 3. Enrolar TP 13,0"). O TP do produto = Σ das etapas.
+- O mesmo elemento em etapas diferentes é outro elemento no resumo ("[Laminação] Pegar bandeja" e "[Enrolar] Pegar bandeja"). Linhas sem etapa ficam em "(sem etapa)".
+- Filtro **Etapa** (só exibição).
+- Com vários operadores: por etapa e por operador. Etapa de um só operador é dele; etapa de 2+ operadores vira posto (ciclo = maior TP, conteúdo = Σ). Nunca soma tempos de operadores diferentes.
+- A demanda continua por produto (a do estudo ou a do quadro Carga do posto) e o mix por produto continua valendo.
+
+### MFV
+- O estudo com etapas aparece como "(N etapa(s))" e vira **uma etapa do fluxo por etapa do processo**, na ordem da grade, com:
+  - **Ponderar pela demanda do produto já marcado** (TP × demanda do produto ÷ demanda da família);
+  - **operador automático**: "Op1" (ou o operador da etapa); etapa de 2+ operadores entra como posto (TC = ciclo, Nº ops = N, conteúdo). Se outro estudo já usa "Op1", recebe "Op1 B", "Op1 C"… (o consultor pode renomear para juntar ou separar as cargas).
+- "Atualizar TCs" atualiza o TP, o conteúdo, o Nº ops e a demanda de cada etapa. Etapa renomeada ou removida no estudo mantém o último TC, com aviso.
+- **Contagem dupla:** etapas diferentes do mesmo estudo não são contagem dupla. Continuam sendo: a mesma etapa duas vezes, o produto inteiro junto com uma etapa dele, o Mix junto com outra etapa, e produtos diferentes do mesmo posto **sem** ponderação e operador.
+- Avisos de qualidade do estudo aparecem só na 1ª etapa dele (antes repetiam em todas).
+- MFV versão 6 com o campo `studyEtapa` por etapa (MFVs da REV 1.14 abrem iguais).
+
+### Excel, CSV e JSON
+- Excel simples: coluna "Etapa" na GERAL e quadro "Etapas do processo" na Análise. CSV: coluna "Etapa" e bloco "ETAPAS DO PROCESSO". JSON: campo `etapa` por linha, `settings.multiEtapa` e `results.etapas`.
+- Excel no modelo B+P: o modelo não tem coluna Etapa; o nome de cada elemento vai com a etapa ("Laminação • Abrir a massa"), para as fórmulas da planilha agruparem igual ao app (aviso na exportação).
+
+### Correções
+- **Service worker (v23):** ao atualizar, baixa os arquivos direto do servidor (sem o cache HTTP do navegador). Evita a página nova com o código antigo (colunas do MFV deslocadas, visto na REV 1.14).
+- Números exibidos sem o resíduo da conta binária (0,7499999… aparecia "0,7"; agora "0,8"). Os cálculos não mudam.
+- Mensagem do Novo MFV conta as etapas criadas (antes contava os estudos).
+
+### Arquivos e compatibilidade
+- Estudo passa para a **versão 7** (campo `etapa`). Estudos da REV 1.14 abrem iguais. Um estudo salvo na REV 1.15 não abre em app da REV 1.14.
+- Testes: `tests/etapas-rev115.test.js` (E1–E8) e `tests/e2e.rev115.js`.
 
 ---
 

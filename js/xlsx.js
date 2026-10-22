@@ -280,6 +280,7 @@
       H(qtyMode ? "Quantidade" : "Frequência"), H("Valor"), H("Tipo"), H("Tempo/un (s)"), H("Tempo (s)"),
       H("Ritmo (%)"), H("Tempo normal (s)"), H("Desperdício"), H("Ação Kaizen (ECRS)"), H("Erros"), H("Vídeo"),
       ...(r.multiOperator ? [H("Operador")] : []),
+      ...(r.withEtapas ? [H("Etapa")] : []),
     ]);
     study.elements.forEach((el, i) => {
       const row = r.rows[i];
@@ -291,6 +292,7 @@
         N(row.hasReading ? sec(row.normalTime) : ""), T(Calc.WASTES[el.waste] || ""), T(el.kaizen), T(row.errors.join(" | ")),
         T(r.filmList[row.film - 1].video),
         ...(r.multiOperator ? [T(r.operatorLabel(row.operator))] : []),
+        ...(r.withEtapas ? [T(row.etapa || "(sem etapa)")] : []),
       ]);
     });
     const geralLast = geral.length;
@@ -407,6 +409,23 @@
         }
       });
     }
+    // Etapas do processo (REV 1.15): TP de cada etapa, por produto
+    if (r.withEtapas) {
+      analise.push(null, [{ v: "Etapas do processo", s: "subtitle" }]);
+      analise.push([H(multi ? "Produto • etapa" : "Etapa"), H("Tempo normal (s/pç)"), H("Tempo padrão (s/pç)"), H("Espera (s/pç)"), H("Conteúdo (s/pç)"), H("Operador(es)")]);
+      r.products.forEach((pr) =>
+        (pr.etapas || []).forEach((e) =>
+          analise.push([
+            T(`${multi ? `${pr.name} • ` : ""}${e.order}. ${e.name}`),
+            N(sec(e.tn)),
+            e.tp == null ? T("") : N(sec(e.tp)),
+            N(sec(e.wait)),
+            N(sec(e.content)),
+            T(e.operators ? e.operators.map((o) => o.label).join(", ") : ""),
+          ])
+        )
+      );
+    }
     r.warnings.concat(r.checks).forEach((t) => analise.push([T("Aviso"), T(t)]));
     const lastCol = (n) => colName(n - 1);
 
@@ -414,9 +433,9 @@
       {
         name: "GERAL",
         rows: geral,
-        cols: (multi ? [6, 18, 42, 13, 13, 10, 11, 13, 7, 13, 11, 10, 15, 24, 32, 30, 24] : [6, 42, 13, 13, 10, 11, 13, 7, 13, 11, 10, 15, 24, 32, 30, 24]).concat(r.multiOperator ? [16] : []),
+        cols: (multi ? [6, 18, 42, 13, 13, 10, 11, 13, 7, 13, 11, 10, 15, 24, 32, 30, 24] : [6, 42, 13, 13, 10, 11, 13, 7, 13, 11, 10, 15, 24, 32, 30, 24]).concat(r.multiOperator ? [16] : []).concat(r.withEtapas ? [18] : []),
         merges: ["A1:H1"],
-        autoFilter: `A${geralHeader}:${lastCol((multi ? 17 : 16) + (r.multiOperator ? 1 : 0))}${Math.max(geralLast, geralHeader + 1)}`,
+        autoFilter: `A${geralHeader}:${lastCol((multi ? 17 : 16) + (r.multiOperator ? 1 : 0) + (r.withEtapas ? 1 : 0))}${Math.max(geralLast, geralHeader + 1)}`,
       },
       {
         name: "Listagem de Elementos",

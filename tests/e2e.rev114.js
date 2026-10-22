@@ -46,12 +46,12 @@ function bancada() {
   // ---- Cronoanálise
   await p.goto(base + "index.html");
   await p.waitForSelector("#study-dialog[open]");
-  check(await txt(".app-header .app-rev") === "REV 1.14", "rótulo da revisão REV 1.14");
+  check(/^REV 1\.1[4-9]$/.test(await txt(".app-header .app-rev")), "rótulo da revisão (REV 1.14 ou posterior)");
   await p.setInputFiles("#input-import-json", { name: "e.json", mimeType: "application/json", buffer: Buffer.from(C.serializeStudy(bancada())) });
   await p.waitForFunction(() => window.LeanApp && LeanApp.state.study && LeanApp.state.study.processName === "Bancada");
   const tags = await p.$$eval("#chrono-tbody .op-tag", (t) => t.map((x) => (x.hidden ? "" : x.textContent)));
   check(tags.join(",") === "Op2,Op1,Op2,Op1,Op1,Op2", "etiqueta do operador no nº da linha: " + tags.join(","));
-  check(await p.$$eval("#chrono-table thead th", (t) => t.length) === 13, "nenhuma coluna nova na grade");
+  check(await p.$$eval("#chrono-table thead th:not(#th-etapa)", (t) => t.length) === 13 && (await p.isHidden("#th-etapa")), "nenhuma coluna nova na grade (Etapa escondida sem a opção)");
   const tsub = await p.$$eval("#chrono-tbody [data-out='tsub']", (c) => c.map((x) => x.textContent.trim()));
   check(tsub.join("|") === "20,0|30,0|70,0|80,0|10,0|30,0", "tempo subtraído pelo mesmo operador: " + tsub.join("|"));
   check(await p.isVisible("#op-hint") && (await txt("#op-hint")).includes("a Qtd de cada um é a produção do posto"), "dica fixa da atividade em paralelo");

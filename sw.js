@@ -2,8 +2,10 @@
  * Service worker — mantém o aplicativo disponível offline (chão de fábrica sem sinal).
  * Estratégia: cache primeiro, com atualização em segundo plano.
  * Ao alterar qualquer arquivo do aplicativo, incremente CACHE_VERSION.
+ * REV 1.15: os arquivos são baixados direto do servidor (sem o cache HTTP do navegador), para a
+ * página e os scripts chegarem sempre na mesma versão.
  */
-const CACHE_VERSION = "lean-chrono-v22";
+const CACHE_VERSION = "lean-chrono-v23";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -27,7 +29,7 @@ const APP_SHELL = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_VERSION).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil(caches.open(CACHE_VERSION).then((cache) => cache.addAll(APP_SHELL.map((url) => new Request(url, { cache: "reload" })))));
   self.skipWaiting();
 });
 
@@ -46,7 +48,7 @@ self.addEventListener("fetch", (event) => {
 
   event.respondWith(
     caches.match(req, { ignoreSearch: true }).then((cached) => {
-      const network = fetch(req)
+      const network = fetch(req.url, { cache: "no-cache", credentials: "same-origin" })
         .then((res) => {
           if (res && res.ok) {
             const copy = res.clone();

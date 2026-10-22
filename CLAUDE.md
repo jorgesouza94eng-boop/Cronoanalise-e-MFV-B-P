@@ -53,7 +53,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - HTML/CSS/JS puro, **sem build e sem servidor**. Funciona por `file://`, por servidor local e pelo GitHub Pages.
 - Scripts clássicos no padrão UMD (`window.LeanX` no navegador e `module.exports` nos testes do Node). **Não usar módulos ES** (quebram no `file://`).
 - Armazenamento local-first: IndexedDB (`LeanChronoDB`) e pasta do OneDrive pela File System Access API, com debounce de 3 s e proteção contra conflito (revisão + cópia `_conflito_`).
-- Arquivos: `Crono_*.json` (estudo, versão 6), `MFV_*.json` (MFV, versão 6) e `Yamazumi_*.json` (grupo de estudos, versão 1) — REV 1.14.
+- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6) e `Yamazumi_*.json` (grupo de estudos, versão 1) — REV 1.15.
 - A revisão aparece no cabeçalho das 3 páginas (`.app-rev`); um teste confere com a versão do `package.json`.
 
 | Arquivo | Função |
@@ -128,3 +128,12 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 - **Etapa não medida:** fora de todos os cálculos, tracejada no GBO, aviso de fluxo incompleto; na EP vai só para as premissas.
 - Tempo de processamento (lead time) = Σ TP original, sem a ponderação.
 - Exemplo de conferência (M1–M9): 520 min/dia, família 800/dia (Pão 600, Enroladinho 200), takt 39 s; TPs 6,72 | 4,67 | 3,07 | 11,85 (×200/800) e 4,76 (×600/800) → carga do Op1 10,15 s (26,0% do takt), capacidade 3.075/dia; EP 0,166 | 0,115 | 0,076 | 0,292 | 0,352.
+
+## Regra implementada na REV 1.15: coluna Etapa (etapas do processo)
+
+- Cada linha pode ter `etapa` (caixa "Etapas"). TP por etapa, por produto, na ordem da grade; TP do produto = Σ etapas. O mesmo elemento em etapas diferentes é outro elemento. Sem etapa nas linhas, tudo igual à REV 1.14.
+- Com vários operadores: etapa de 1 operador é dele; etapa de 2+ operadores = posto da etapa (ciclo = maior TP, conteúdo = Σ). Nunca somar tempos de operadores diferentes.
+- MFV: 1 etapa do fluxo por etapa do processo, com "Ponderar pela demanda do produto" marcado e operador automático (Op1; outro estudo com Op1 recebe "Op1 B"). Etapas diferentes do mesmo estudo não são contagem dupla.
+- Modelo B+P de cronoanálise: sem coluna Etapa; o nome do elemento vai como "Etapa • Elemento".
+- Service worker: instala e atualiza com `cache: "reload"`/`"no-cache"` (página e scripts sempre da mesma versão).
+

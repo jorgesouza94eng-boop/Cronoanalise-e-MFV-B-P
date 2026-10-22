@@ -108,6 +108,7 @@
         studyId: "",
         studyProduct: "", // chave do produto quando o estudo tem vários produtos
         studyOperator: 0, // REV 1.14: operador do estudo (tipo LINHA); 0 = o estudo inteiro (posto)
+        studyEtapa: "", // REV 1.15: chave da etapa do processo no estudo ("" = o produto inteiro)
         contentStudyMin: null, // REV 1.14: conteúdo do posto quando o estudo tem 2+ operadores (tipo POSTO)
         studyOperators: null, // nº de operadores do estudo na última atualização
         studyFileName: "",
@@ -226,6 +227,7 @@
             studyId: str(s.studyId),
             studyProduct: str(s.studyProduct),
             studyOperator: Number.isInteger(s.studyOperator) && s.studyOperator > 0 ? s.studyOperator : 0,
+            studyEtapa: str(s.studyEtapa),
             contentStudyMin: Number.isFinite(s.contentStudyMin) ? s.contentStudyMin : null,
             studyOperators: Number.isFinite(s.studyOperators) ? s.studyOperators : null,
             studyFileName: str(s.studyFileName),
@@ -719,7 +721,7 @@
       const info = lookup(s);
       const add = (id, product, via, op) => {
         if (!uses.has(id)) uses.set(id, []);
-        uses.get(id).push({ seq, name, product, via, op: op || 0 });
+        uses.get(id).push({ seq, name, product, via, op: op || 0, etapa: s.studyEtapa || "", weighted: !!s.weighted, tag: String(s.operatorTag || "").trim() });
       };
       if (s.studyId) add(s.studyId, s.studyProduct || "", "etapa", s.studyOperator);
       if (s.groupId && info && info.studyIds) info.studyIds.forEach((id) => add(id, null, "grupo"));
@@ -737,13 +739,30 @@
     });
     uses.forEach((all) => {
       if (all.length < 2) return;
-      // Tipo LINHA: etapas de operadores diferentes do mesmo estudo são válidas
-      const whole = all.filter((u) => !u.op);
-      const byOp = {};
-      all.filter((u) => u.op).forEach((u) => (byOp[u.op] = (byOp[u.op] || []).concat([u])));
-      const repeatedOp = Object.values(byOp).find((l) => l.length > 1);
-      if (whole.length < 2 && !(whole.length && Object.keys(byOp).length) && !repeatedOp) return;
-      const list = repeatedOp && whole.length < 2 && !(whole.length && Object.keys(byOp).length) ? repeatedOp : all;
+      // Partes válidas do mesmo estudo: operadores diferentes (tipo LINHA, REV 1.14) e etapas do
+      // processo diferentes (REV 1.15). Contagem dupla: a mesma parte duas vezes, o produto inteiro
+      // junto com uma parte dele, o Mix junto com outra etapa, ou produtos diferentes do mesmo posto
+      // sem a ponderação pela demanda (com ponderação e operador/etapa, a carga é somada corretamente).
+      let list = null;
+      const mixUses = all.filter((u) => u.product === MIX_KEY);
+      const others = all.filter((u) => u.product !== MIX_KEY);
+      if (all.some((u) => u.via === "grupo") || mixUses.length > 1 || (mixUses.length && others.length)) list = all;
+      else {
+        const byPart = new Map();
+        others.forEach((u) => {
+          const k = `${u.product}|${u.etapa}|${u.op}`;
+          byPart.set(k, (byPart.get(k) || []).concat([u]));
+        });
+        const repeated = Array.from(byPart.values()).find((l) => l.length > 1);
+        const products = Array.from(new Set(others.map((u) => u.product)));
+        const wholeAndPart = products
+          .map((p) => others.filter((u) => u.product === p))
+          .find((l) => l.some((u) => !u.etapa && !u.op) && l.some((u) => u.etapa || u.op));
+        if (repeated) list = repeated;
+        else if (wholeAndPart) list = wholeAndPart;
+        else if (products.length > 1 && !others.every((u) => u.weighted && (u.tag || u.etapa || u.op))) list = others;
+      }
+      if (!list) return;
       const steps = list.map((u) => `${u.seq}. ${u.name}`).join(" e ");
       const viaGroup = list.some((u) => u.via === "grupo");
       const mix = list.some((u) => u.product === MIX_KEY) && list.some((u) => u.product != null && u.product !== MIX_KEY);

@@ -322,6 +322,21 @@
         p && p.operators
           ? { nOps: p.posto.n, kind: r.operatorKind, contentMin: p.posto.content, opList: p.operators.map((o) => ({ op: o.op, label: o.label, tcMin: o.tp })) }
           : {};
+      // Etapas do processo (REV 1.15): 1 etapa do MFV por etapa do produto. Etapa de um operador só
+      // leva o operador (carga somada no MFV); etapa de 2+ operadores vira posto (ciclo, N, conteúdo).
+      const etapasOf = (p) =>
+        p && p.etapas && p.etapas.length
+          ? {
+              etapaList: p.etapas.map((e) => ({
+                key: e.key,
+                name: e.name,
+                tcMin: e.tp != null ? e.tp : e.tn > 0 ? e.tn : null,
+                nOps: e.n,
+                contentMin: e.n > 1 ? e.content : null,
+                opTag: e.n > 1 ? "" : `Op${e.operator || 1}`,
+              })),
+            }
+          : { etapaList: null };
       const mixOps = () => {
         if (!r.multiOperator || !r.mix || r.mix.weightedTP == null) return {};
         const inc = r.products.filter((p) => p.inMix !== false && p.demandOwn && p.demand > 0 && p.posto);
@@ -354,14 +369,15 @@
         // REV 1.14 (Fase 2): demanda própria do produto para a ponderação (estudo de 1 produto = demanda do estudo)
         ownDemand: !r.multiProduct && r.product && r.product.demand > 0 ? r.product.demand : null,
         ...opsOf(r.product),
+        ...(r.multiProduct ? { etapaList: null } : etapasOf(r.product)),
         // Mix sem TC (incompleto ou sem produto no mix): a etapa Mix já existente mantém o último TC e avisa
         mixProblem: r.mix && r.mix.weightedTP == null ? r.mix.issues[0] || "mix incompleto" : "",
         products: r.multiProduct
           ? r.products
               .map((p) =>
-                Object.assign({ key: p.key, name: p.name, tcMin: tc(p.kpis), ownDemand: p.demandOwn && p.demand > 0 ? p.demand : null }, quality(p.key), opsOf(p))
+                Object.assign({ key: p.key, name: p.name, tcMin: tc(p.kpis), ownDemand: p.demandOwn && p.demand > 0 ? p.demand : null }, quality(p.key), opsOf(p), etapasOf(p))
               )
-              .concat(r.mix && r.mix.weightedTP != null ? [Object.assign({ key: MIX_KEY, name: "Mix (TC ponderado)", tcMin: r.mix.weightedTP, ownDemand: null }, quality(MIX_KEY), mixOps())] : [])
+              .concat(r.mix && r.mix.weightedTP != null ? [Object.assign({ key: MIX_KEY, name: "Mix (TC ponderado)", tcMin: r.mix.weightedTP, ownDemand: null, etapaList: null }, quality(MIX_KEY), mixOps())] : [])
           : [],
       });
     };
@@ -393,6 +409,7 @@
               kind: p.kind,
               contentMin: p.contentMin,
               opList: p.opList,
+              etapaList: p.etapaList,
             })
           )
         );
@@ -450,7 +467,14 @@
       const any = state.studies.find((x) => x.id === step.studyId);
       if (any && any.mixProblem) return { warnings: [`mix incompleto na Cronoanálise (${any.mixProblem}); TC mantido do último cálculo`], demand: null };
     }
-    return st ? { warnings: st.warnings || [], demand: st.demand, netTime: st.netTime } : null;
+    if (!st) return null;
+    // Etapas do mesmo estudo (REV 1.15): os avisos de qualidade do estudo aparecem só na 1ª delas
+    const first = step.studyEtapa && state.doc ? state.doc.steps.find((x) => x.studyEtapa && x.studyId === step.studyId && (x.studyProduct || "") === (step.studyProduct || "")) : null;
+    const warnings = first && first.id !== step.id ? [] : (st.warnings || []).slice();
+    if (step.studyEtapa && !(st.etapaList || []).some((e) => e.key === step.studyEtapa)) {
+      warnings.push("etapa não encontrada no estudo (renomeada ou removida na Cronoanálise); TC mantido do último cálculo");
+    }
+    return { warnings, demand: st.demand, netTime: st.netTime };
   }
 
   /** Avisos de contagem dupla que surgiriam ao incluir estas etapas (pede confirmação). */
@@ -565,6 +589,7 @@
       const st = findStudy(s);
       if (!st) return;
       const v = linkedValues(s, st);
+      if (!v) return;
       const contentNow = Number.isFinite(v.content) ? v.content : null;
       const demandNow = st.ownDemand > 0 ? st.ownDemand : null;
       if (demandNow !== s.studyDemand) {
@@ -678,6 +703,21 @@
    * 1 etapa (TC = ciclo do posto, Nº ops = N, conteúdo do posto); tipo LINHA = 1 etapa por operador.
    */
   function stepsFromStudy(st) {
+    // Etapas do processo (REV 1.15): uma etapa por etapa do produto, já ponderada pela demanda
+    if (st.etapaList && st.etapaList.length && st.product !== MIX_KEY) {
+      return st.etapaList.map((e) =>
+        Object.assign(stepFromStudy(st), {
+          name: st.productName ? `${st.productName} • ${e.name}` : e.name,
+          studyEtapa: e.key,
+          tcStudyMin: e.tcMin,
+          weighted: true,
+          operatorTag: e.opTag,
+          contentStudyMin: e.nOps > 1 ? e.contentMin : null,
+          operators: String(e.nOps > 1 ? e.nOps : 1),
+          studyOperators: e.nOps > 1 ? e.nOps : null,
+        })
+      );
+    }
     if (!(st.nOps > 1)) return [stepFromStudy(st)];
     if (st.kind === "linha") {
       return st.opList.map((o) =>
@@ -687,8 +727,36 @@
     return [Object.assign(stepFromStudy(st), { contentStudyMin: st.contentMin, operators: String(st.nOps), studyOperators: st.nOps })];
   }
 
+  /**
+   * Operador automático das etapas do processo (REV 1.15): "Op1" de estudos diferentes não é,
+   * a priori, a mesma pessoa. Se o nome já é usado por etapas de outro estudo, recebe um sufixo
+   * ("Op1 B", "Op1 C"…); o consultor pode renomear para juntar ou separar as cargas.
+   */
+  function withUniqueTags(existing, newSteps) {
+    const owner = new Map(); // nome do operador → estudo
+    existing.forEach((s) => s.operatorTag && !owner.has(s.operatorTag.toLowerCase()) && owner.set(s.operatorTag.toLowerCase(), s.studyId || s.id));
+    const rename = new Map(); // "estudo|Op1" → nome final
+    newSteps.forEach((s) => {
+      if (!s.operatorTag || !s.studyEtapa) return;
+      const k = `${s.studyId}|${s.operatorTag.toLowerCase()}`;
+      if (!rename.has(k)) {
+        let tag = s.operatorTag;
+        for (let i = 1; owner.has(tag.toLowerCase()) && owner.get(tag.toLowerCase()) !== s.studyId; i++) tag = `${s.operatorTag} ${String.fromCharCode(65 + i)}`;
+        rename.set(k, tag);
+        owner.set(tag.toLowerCase(), s.studyId);
+      }
+      s.operatorTag = rename.get(k);
+    });
+    return newSteps;
+  }
+
   /** TC (e conteúdo) atuais de uma etapa ligada ao estudo, inclusive a de um operador (LINHA). */
   function linkedValues(step, st) {
+    if (step.studyEtapa) {
+      const e = (st.etapaList || []).find((x) => x.key === step.studyEtapa);
+      if (!e) return null; // etapa sumiu do estudo: mantém o último TC (com aviso)
+      return { tc: e.tcMin, content: e.nOps > 1 ? e.contentMin : null, n: e.nOps > 1 ? e.nOps : null };
+    }
     if (step.studyOperator) {
       const o = (st.opList || []).find((x) => x.op === step.studyOperator);
       return { tc: o ? o.tcMin : null, content: null, n: null };
@@ -764,7 +832,7 @@
       toast(`"${exists.name}" já é etapa deste MFV.`, "ok");
       return;
     }
-    state.doc.steps.push(...stepsFromStudy(st));
+    state.doc.steps.push(...withUniqueTags(state.doc.steps, stepsFromStudy(st)));
     markChanged({ render: true });
     toast(`Etapa adicionada: ${st.processName}${st.productName ? ` • ${st.productName}` : ""} (TC ${st.tcMin ? ft(st.tcMin) + " " + Calc.TIME_UNITS[unitOf()].label : "sem tempo padrão"}). Preencha nº de operadores e uptime.`, "ok", 7000);
   }
@@ -1169,6 +1237,7 @@
 
   /** " (posto, 2 op.)" / " (linha, 3 op.)" para estudos com vários operadores. */
   function opsTag(st) {
+    if (st.etapaList && st.etapaList.length && st.product !== MIX_KEY) return ` (${st.etapaList.length} etapa(s))`;
     return st.nOps > 1 ? ` (${st.kind === "linha" ? "linha" : "posto"}, ${st.nOps} op.)` : "";
   }
 
@@ -1176,7 +1245,8 @@
     const st = findStudy(s);
     const op = st && s.studyOperator ? ((st.opList || []).find((o) => o.op === s.studyOperator) || { label: `Op${s.studyOperator}` }).label : "";
     const base = st && st.productName ? `${st.processName || st.fileName} • ${st.productName}` : st ? st.processName || st.fileName : s.studyFileName || "estudo não encontrado";
-    return op ? `${base} • ${op}` : base;
+    const etapa = st && s.studyEtapa ? ((st.etapaList || []).find((e) => e.key === s.studyEtapa) || { name: "etapa?" }).name : "";
+    return [base, etapa, op].filter(Boolean).join(" • ");
   }
 
   /** Atualiza só os valores calculados (mantém o foco do teclado). */
@@ -1455,7 +1525,7 @@
       }
       const st = state.studies.find((x) => x.key === value);
       if (!st) return toast("Escolha um estudo na lista.", "warn");
-      const newSteps = stepsFromStudy(st);
+      const newSteps = withUniqueTags(state.doc.steps, stepsFromStudy(st));
       if (!confirmNoDouble(state.doc, newSteps)) return;
       state.doc.steps.push(...newSteps);
       if (!state.doc.clientName && st.clientName) state.doc.clientName = st.clientName;
@@ -1610,7 +1680,8 @@
       state.checkOrder = [];
       await flushSave();
       const doc = M.createMfv({ clientName: client, family });
-      doc.steps = chosen.flatMap(stepsFromStudy);
+      doc.steps = [];
+      chosen.forEach((st) => doc.steps.push(...withUniqueTags(doc.steps, stepsFromStudy(st))));
       const pg = state.pendingGroupId && state.groups.find((g) => g.id === state.pendingGroupId);
       state.pendingGroupId = null;
       if (pg) doc.steps.push(...stepsFromGroup(pg));
@@ -1619,7 +1690,7 @@
       await Store.setKV("lastMfvId", doc.id);
       dlg.close();
       if (state.folder === "granted") queueWrite();
-      toast(`MFV criado: ${doc.fileName}${chosen.length ? ` com ${chosen.length} etapa(s) dos estudos. Preencha nº de operadores e uptime.` : ""}`, "ok", 6000);
+      toast(`MFV criado: ${doc.fileName}${chosen.length ? ` com ${doc.steps.length} etapa(s) de ${chosen.length} estudo(s). Preencha nº de operadores e uptime.` : ""}`, "ok", 6000);
     });
     $("doc-list").addEventListener("click", async (e) => {
       const btn = e.target.closest("[data-action]");

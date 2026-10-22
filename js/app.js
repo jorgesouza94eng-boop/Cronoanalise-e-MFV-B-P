@@ -171,25 +171,39 @@
       return true;
     },
 
+    /** Liga/desliga a coluna Etapa (REV 1.15). Desligar com etapas preenchidas pede confirmação. */
+    onMultiEtapaToggle(on) {
+      if (!state.study) return false;
+      const settings = state.study.settings || (state.study.settings = {});
+      if (!on && state.study.elements.some((e) => String(e.etapa || "").trim())) {
+        if (!root.confirm("Remover a etapa de todas as linhas? O TP volta a ser só do produto inteiro.")) return false;
+        state.study.elements.forEach((e) => (e.etapa = ""));
+      }
+      settings.multiEtapa = !!on;
+      markChanged({ rerender: true });
+      return true;
+    },
+
     /**
      * Produto confirmado numa linha (oldValue = valor antes da edição): preenche as linhas
      * vazias abaixo ou, se o produto foi trocado, pergunta se troca o bloco seguido.
      * Retorna { ids, value, from, to } das linhas alteradas, ou null.
      */
-    onProductCommit(id, oldValue, filtered) {
+    onProductCommit(id, oldValue, filtered, field) {
       if (!state.study || filtered) return null; // com filtro, só a linha editada muda
+      const f = field === "etapa" ? "etapa" : "product";
       const els = state.study.elements;
       const idx = els.findIndex((e) => e.id === id);
-      const plan = Calc.productFillPlan(els, idx, oldValue);
+      const plan = Calc.productFillPlan(els, idx, oldValue, f);
       if (!plan) return null;
       if (plan.mode === "trocar") {
         const ok = root.confirm(
-          `Trocar também as linhas ${plan.from} a ${plan.to}, que estavam como "${plan.oldValue}", para "${plan.value || "(sem produto)"}"?\n\n` +
+          `Trocar também as linhas ${plan.from} a ${plan.to}, que estavam como "${plan.oldValue}", para "${plan.value || (f === "etapa" ? "(sem etapa)" : "(sem produto)")}"?\n\n` +
             "OK (Enter) = sim, trocar o bloco\nCancelar (Esc) = só esta linha"
         );
         if (!ok) return null;
       }
-      plan.ids.forEach((rid) => (findElement(rid).product = plan.value));
+      plan.ids.forEach((rid) => (findElement(rid)[f] = plan.value));
       markChanged();
       return plan;
     },
@@ -407,7 +421,8 @@
       const inheritedPace = last && !Calc.parsePace(last.pace).error ? last.pace : "100";
       // ...e o produto (o vídeo costuma seguir no mesmo produto).
       // ...e o operador (REV 1.14).
-      els.push(Calc.createElement({ pace: inheritedPace, product: last ? last.product || "" : "", operador: last ? last.operador || 1 : 1 }));
+      // ...e a etapa (REV 1.15).
+      els.push(Calc.createElement({ pace: inheritedPace, product: last ? last.product || "" : "", etapa: last ? last.etapa || "" : "", operador: last ? last.operador || 1 : 1 }));
       markChanged({ rerender: true });
       return els.length - 1;
     },

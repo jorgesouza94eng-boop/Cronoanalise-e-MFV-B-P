@@ -160,6 +160,15 @@ Quando 2 ou mais pessoas aparecem no **mesmo vídeo** trabalhando no mesmo produ
 
 Limitação: os operadores precisam produzir as mesmas peças do trecho filmado. Filmagens separadas de cada operador continuam como estudos separados (Yamazumi/grupo Posto).
 
+### Etapas do processo (REV 1.15)
+
+Para o produto feito em várias etapas (ex.: Enroladinho: Laminação → Queijo → Enrolar):
+
+1. Marque **Etapas** (ao lado de "Vários produtos"): aparece a coluna **Etapa** antes do elemento.
+2. Digite a etapa na 1ª linha dela e confirme: o app preenche as linhas vazias abaixo. Na linha em que a etapa muda, digite a nova etapa (o app pergunta se troca o bloco seguinte).
+3. O resumo mostra o **TP de cada etapa** ("Etapas (3): 1. Laminação TP 5,0 | …"); o TP do produto é a soma.
+4. No **MFV**, o estudo vira uma etapa do fluxo por etapa do processo, já com **Ponderar pela demanda do produto** marcado e o **Operador** preenchido (Op1).
+
 ### Filtros da grade e do resumo (REV 1.3)
 
 A barra de filtros fica acima da grade: **nome do elemento**, **produto**, **tipo C/A**, **valor**, **desperdício**, **filmagem** e **só linhas com erro**. Os filtros podem ser combinados.
