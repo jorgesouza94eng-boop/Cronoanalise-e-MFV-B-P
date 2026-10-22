@@ -1904,7 +1904,9 @@
     status("Consultando o Gemini...");
     $("btn-mfv-ai-generate").disabled = true;
     try {
-      const text = await AI.generate(settings, prompt.text, {});
+      const text = await AI.generate(settings, prompt.text, {
+        onRetry: (n, total) => status(`Servidor do Gemini ocupado, tentando de novo (${n}/${total})...`),
+      });
       $("mfv-ai-text").value = AI.restoreNames(text, { clientName: state.doc.clientName, processName: state.doc.family });
       status("Revise e edite o texto antes de aplicar. Confira os números com o MFV.");
     } catch (err) {

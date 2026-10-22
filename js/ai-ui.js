@@ -109,7 +109,10 @@
     document.querySelectorAll("[data-ai]").forEach((b) => (b.disabled = true));
     setStatus(`Consultando o Gemini (${prompt.count} elemento(s))...`);
     try {
-      const text = await AI.generate(settings, prompt.text, { json: kind !== "notes" && kind !== "ask" });
+      const text = await AI.generate(settings, prompt.text, {
+        json: kind !== "notes" && kind !== "ask",
+        onRetry: (n, total) => setStatus(`Servidor do Gemini ocupado, tentando de novo (${n}/${total})...`),
+      });
       if (kind === "classify") showItems(kind, AI.parseClassify(text, prompt.names, study, anon));
       else if (kind === "kaizen") showItems(kind, AI.parseKaizen(text, prompt.names, study, anon));
       else if (kind === "names") showItems(kind, AI.parseNames(text, prompt.names, study, anon));

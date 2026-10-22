@@ -324,6 +324,11 @@
     if (res.status === 400 && /API key/i.test(detail)) return new Error("Chave de API inválida");
     if (res.status === 403) return new Error("Chave sem permissão para a API do Gemini (verifique no AI Studio)");
     if (res.status === 429) return new Error("Limite de uso da chave atingido; tente de novo em instantes");
+    if (res.status === 503) {
+      const e = new Error("Gemini sobrecarregado no momento (erro 503). Tente em alguns minutos ou escolha outro modelo em ✨ IA → configuração.");
+      e.status = 503;
+      return e;
+    }
     return new Error(`Erro ${res.status} da API do Gemini${detail ? `: ${detail}` : ""}`);
   }
 
@@ -348,21 +353,38 @@
     return sorted.length ? sorted[0].id : "";
   }
 
+  /** Esperas antes das novas tentativas quando o Gemini responde 503 (servidor sobrecarregado). REV 1.17 */
+  const RETRY_DELAYS_MS = [3000, 8000];
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  /**
+   * Gera o texto. Erro 503 (modelo sobrecarregado, em geral passageiro): tenta de novo sozinho
+   * mais 2 vezes (após ~3 s e ~8 s), avisando por options.onRetry(tentativa, total). Os demais
+   * erros (chave, limite 429, filtro) não são repetidos.
+   */
   async function generate(settings, prompt, options, fetchImpl) {
     const f = fetchImpl || fetch;
+    const o = options || {};
     if (!settings || !settings.apiKey) throw new Error("Cadastre a chave de API do Gemini");
     if (!settings.model) throw new Error("Escolha um modelo do Gemini");
     const body = {
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: Object.assign({ temperature: 0.3 }, options && options.json ? { responseMimeType: "application/json" } : {}),
+      generationConfig: Object.assign({ temperature: 0.3 }, o.json ? { responseMimeType: "application/json" } : {}),
     };
-    const res = await f(`${API_BASE}/models/${encodeURIComponent(settings.model)}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": settings.apiKey },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw await httpError(res);
-    return responseText(await res.json());
+    const delays = o.retryDelays || RETRY_DELAYS_MS;
+    const wait = o.sleep || sleep;
+    for (let attempt = 0; ; attempt++) {
+      const res = await f(`${API_BASE}/models/${encodeURIComponent(settings.model)}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": settings.apiKey },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) return responseText(await res.json());
+      const err = await httpError(res);
+      if (err.status !== 503 || attempt >= delays.length) throw err;
+      if (typeof o.onRetry === "function") o.onRetry(attempt + 2, delays.length + 1);
+      await wait(delays[attempt]);
+    }
   }
 
   return {
@@ -383,5 +405,6 @@
     listModels,
     pickDefaultModel,
     generate,
+    RETRY_DELAYS_MS,
   };
 });

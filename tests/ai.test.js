@@ -86,6 +86,24 @@ function fakeFetch(handler) {
   return f;
 }
 
+test("API (REV 1.17): erro 503 tenta de novo mais 2 vezes e avisa; persistindo, mensagem em português", async () => {
+  let n = 0;
+  const flaky = fakeFetch(() => (++n < 3 ? { status: 503, body: { error: { message: "high demand" } } } : { status: 200, body: { candidates: [{ content: { parts: [{ text: "ok" }] } }] } }));
+  const waits = [];
+  const retries = [];
+  const opts = { sleep: async (ms) => waits.push(ms), onRetry: (a, t) => retries.push(`${a}/${t}`) };
+  assert.equal(await A.generate({ apiKey: "K", model: "m" }, "x", opts, flaky), "ok");
+  assert.equal(flaky.calls.length, 3);
+  assert.deepEqual(waits, [3000, 8000]);
+  assert.deepEqual(retries, ["2/3", "3/3"]);
+  const down = fakeFetch(() => ({ status: 503, body: { error: { message: "high demand" } } }));
+  await assert.rejects(A.generate({ apiKey: "K", model: "m" }, "x", { sleep: async () => {} }, down), /Gemini sobrecarregado no momento \(erro 503\).*outro modelo/);
+  assert.equal(down.calls.length, 3, "1 + 2 novas tentativas");
+  const quota = fakeFetch(() => ({ status: 429, body: {} }));
+  await assert.rejects(A.generate({ apiKey: "K", model: "m" }, "x", { sleep: async () => {} }, quota), /Limite de uso/);
+  assert.equal(quota.calls.length, 1, "429 (limite da chave) não é repetido");
+});
+
 test("API: lista modelos de texto da chave e sugere um 'flash' estável", async () => {
   const f = fakeFetch(() => ({
     status: 200,

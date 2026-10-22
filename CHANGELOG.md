@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.17** | 22/10/2026 | IA: nova tentativa automática quando o Gemini está sobrecarregado (erro 503) |
 | **REV 1.16** | 22/10/2026 | Arquivar estudos, MFVs e grupos (tirar da lista sem apagar) |
 | **REV 1.15** | 22/10/2026 | Coluna Etapa na cronoanálise: TP por etapa do processo, que vira etapa do MFV já ponderada |
 | **REV 1.14** | 22/10/2026 | Vários operadores no mesmo estudo, MFV com produto estratificado e avisos de consistência |
@@ -21,6 +22,15 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.17 — 22/10/2026
+
+- **Assistente de IA (Gemini):** quando o Google responde **503** (modelo sobrecarregado, em geral passageiro), o app tenta de novo sozinho mais **2 vezes**, depois de ~3 s e ~8 s. Durante a espera, mostra "Servidor do Gemini ocupado, tentando de novo (2/3)...". Vale para a Cronoanálise (✨ IA) e para o Resumo executivo do MFV.
+- Se o 503 persistir, a mensagem fica em português: "Gemini sobrecarregado no momento (erro 503). Tente em alguns minutos ou escolha outro modelo em ✨ IA → configuração."
+- Os outros erros (chave inválida, limite da chave 429, filtro) não são repetidos. Nenhum cálculo muda, e o envio de dados e a anonimização continuam iguais.
+- Service worker v25. Teste: `tests/ai.test.js` (nova tentativa, mensagem e 429 sem repetição).
 
 ---
 

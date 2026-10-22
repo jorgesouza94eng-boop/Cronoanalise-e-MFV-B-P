@@ -1,6 +1,6 @@
 {
   "name": "lean-chrono-mfv",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "description": "Cronoanálise de vídeo e apoio ao Mapa de Fluxo de Valor — aplicação web local-first, sem backend e sem build.",
   "private": true,
   "scripts": {
