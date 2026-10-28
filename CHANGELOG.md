@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.18** | 28/10/2026 | Classificação copiada para as linhas do mesmo elemento |
 | **REV 1.17** | 22/10/2026 | IA: nova tentativa automática quando o Gemini está sobrecarregado (erro 503) |
 | **REV 1.16** | 22/10/2026 | Arquivar estudos, MFVs e grupos (tirar da lista sem apagar) |
 | **REV 1.15** | 22/10/2026 | Coluna Etapa na cronoanálise: TP por etapa do processo, que vira etapa do MFV já ponderada |
@@ -22,6 +23,18 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.18 — 28/10/2026
+
+- **Classificação copiada para as linhas do mesmo elemento:** ao escolher o **Tipo**, o **Valor** ou o **Desperdício** numa linha, as outras linhas com o mesmo nome de elemento (no mesmo produto e na mesma etapa) recebem a mesma classificação.
+  - Linhas **sem classificação**: preenchidas na hora, com o aviso "… aplicado em N linha(s) de "Elemento" (03, 07)".
+  - Linhas **já classificadas com outro valor**: o app pergunta ("… também aparece nas linhas 04 (Agrega) … Trocar essas linhas?"). OK troca; Cancelar mantém.
+  - Valor vazio ("—") não é copiado, para não apagar as outras linhas. Com **filtro ativo**, só a linha editada muda (como no Produto e na Etapa).
+  - Evita a "classificação divergente", em que valia só a 1ª ocorrência.
+- Continua valendo a cópia no sentido inverso (REV 1.0): ao digitar o nome de um elemento já classificado, a linha nova copia tipo, valor e desperdício.
+- Nenhum cálculo muda. Service worker v26. Testes: `tests/classificacao-rev118.test.js` e `tests/e2e.rev118.js`.
 
 ---
 

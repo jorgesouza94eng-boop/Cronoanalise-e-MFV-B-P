@@ -53,7 +53,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - HTML/CSS/JS puro, **sem build e sem servidor**. Funciona por `file://`, por servidor local e pelo GitHub Pages.
 - Scripts clássicos no padrão UMD (`window.LeanX` no navegador e `module.exports` nos testes do Node). **Não usar módulos ES** (quebram no `file://`).
 - Armazenamento local-first: IndexedDB (`LeanChronoDB`) e pasta do OneDrive pela File System Access API, com debounce de 3 s e proteção contra conflito (revisão + cópia `_conflito_`).
-- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6) e `Yamazumi_*.json` (grupo de estudos, versão 1) — REV 1.17. Itens arquivados ficam na subpasta `_Arquivo` (fora das listas).
+- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6) e `Yamazumi_*.json` (grupo de estudos, versão 1) — REV 1.18. Itens arquivados ficam na subpasta `_Arquivo` (fora das listas).
 - A revisão aparece no cabeçalho das 3 páginas (`.app-rev`); um teste confere com a versão do `package.json`.
 
 | Arquivo | Função |
@@ -136,4 +136,8 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 - MFV: 1 etapa do fluxo por etapa do processo, com "Ponderar pela demanda do produto" marcado e operador automático (Op1; outro estudo com Op1 recebe "Op1 B"). Etapas diferentes do mesmo estudo não são contagem dupla.
 - Modelo B+P de cronoanálise: sem coluna Etapa; o nome do elemento vai como "Etapa • Elemento".
 - Service worker: instala e atualiza com `cache: "reload"`/`"no-cache"` (página e scripts sempre da mesma versão).
+
+## Regra implementada na REV 1.18: classificação do mesmo elemento
+
+- Ao mudar tipo, valor ou desperdício de uma linha, as linhas com o mesmo nome (mesmo produto e mesma etapa) recebem a mesma classificação: vazias direto, já classificadas com outro valor só com confirmação. Valor vazio não é copiado; com filtro ativo, só a linha editada.
 

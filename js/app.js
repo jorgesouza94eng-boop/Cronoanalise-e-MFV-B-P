@@ -367,6 +367,34 @@
       return { type: el.type, value: el.value, waste: el.waste };
     },
 
+    /**
+     * Tipo, valor ou desperdício confirmado numa linha (REV 1.18): copia para as outras linhas do
+     * mesmo elemento — as sem classificação direto; as já classificadas com outro valor, só se o
+     * consultor confirmar. Com filtro ativo, só a linha editada muda. Retorna { ids, field, value }.
+     */
+    onClassificationCommit(id, field, filtered) {
+      if (!state.study || filtered) return null;
+      const els = state.study.elements;
+      const plan = Calc.classificationPlan(els, els.findIndex((e) => e.id === id), field);
+      if (!plan) return null;
+      const label = (v) =>
+        field === "value" ? (Calc.VALUES[v] ? Calc.VALUES[v].label : v) : field === "waste" ? Calc.WASTES[v] || v : v === "A" ? "A (acíclico)" : "C (cíclico)";
+      const nome = { type: "tipo", value: "valor", waste: "desperdício" }[field];
+      const targets = plan.fill.slice();
+      if (plan.conflict.length) {
+        const lines = plan.conflict.map((c) => `${String(c.seq).padStart(2, "0")} (${label(c.value)})`).join(", ");
+        const ok = root.confirm(
+          `"${plan.name}" também aparece nas linhas ${lines} com outro ${nome}.\n\n` +
+            `Trocar essas linhas para "${label(plan.value)}"?\n\nOK (Enter) = sim, deixar todas iguais\nCancelar (Esc) = manter como estão`
+        );
+        if (ok) targets.push(...plan.conflict);
+      }
+      if (!targets.length) return null;
+      targets.forEach((t) => (findElement(t.id)[field] = plan.value));
+      markChanged();
+      return { ids: targets.map((t) => t.id), seqs: targets.map((t) => t.seq), field, value: plan.value, label: label(plan.value), name: plan.name };
+    },
+
     /** Configurações do estudo: modo de lançamento e unidade de exibição. */
     onSettingChange(key, value) {
       if (!state.study) return;

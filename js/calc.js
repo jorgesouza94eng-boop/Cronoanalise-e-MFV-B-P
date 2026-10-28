@@ -600,6 +600,33 @@
     return { mode, value, oldValue: String(oldProduct || "").trim(), ids, from: idx + 2, to: idx + 1 + ids.length };
   }
 
+  /**
+   * Classificação copiada para as linhas do mesmo elemento (REV 1.18): ao mudar o tipo, o valor
+   * ou o desperdício de uma linha, as outras linhas com o mesmo nome (no mesmo produto e na mesma
+   * etapa) recebem a mesma classificação. fill = linhas sem classificação (preenchidas direto);
+   * conflict = linhas já classificadas com outro valor (o app pergunta antes de trocar).
+   * Valor vazio ("—") não é copiado. Retorna null quando não há o que fazer.
+   */
+  function classificationPlan(elements, idx, field) {
+    const list = elements || [];
+    const row = list[idx];
+    if (!row || !["type", "value", "waste"].includes(field)) return null;
+    const value = row[field] || "";
+    const key = elementKey(row.description);
+    if (!value || !key) return null;
+    const same = (e) => e !== row && elementKey(e.description) === key && elementKey(e.product) === elementKey(row.product) && elementKey(e.etapa) === elementKey(row.etapa);
+    const fill = [];
+    const conflict = [];
+    list.forEach((e, i) => {
+      if (!same(e)) return;
+      const cur = e[field] || "";
+      if (cur === value) return;
+      (cur ? conflict : fill).push({ id: e.id, seq: i + 1, value: cur });
+    });
+    if (!fill.length && !conflict.length) return null;
+    return { field, value, name: String(row.description || "").trim(), fill, conflict };
+  }
+
   /** Agrupa as linhas válidas pelo nome do elemento (equivale à aba "Listagem de Elementos"). */
   /**
    * Compilação (aba "Compilação e Soluções"): por valor agregado e por desperdício,
@@ -1540,6 +1567,7 @@
     computeKpis,
     computeMix,
     productFillPlan,
+    classificationPlan,
     operatorStudy,
     formatNumber,
     generateId,

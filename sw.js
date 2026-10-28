@@ -5,7 +5,7 @@
  * REV 1.15: os arquivos são baixados direto do servidor (sem o cache HTTP do navegador), para a
  * página e os scripts chegarem sempre na mesma versão.
  */
-const CACHE_VERSION = "lean-chrono-v25";
+const CACHE_VERSION = "lean-chrono-v26";
 const APP_SHELL = [
   "./",
   "./index.html",

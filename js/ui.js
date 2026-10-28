@@ -288,6 +288,19 @@
         e.target.select();
       }
     });
+    // Tipo, valor ou desperdício escolhido: copia para as linhas do mesmo elemento (REV 1.18)
+    els.tbody.addEventListener("change", (e) => {
+      const info = rowInfo(e.target);
+      if (!info || !["type", "value", "waste"].includes(info.field)) return;
+      const res = h.onClassificationCommit(info.id, info.field, filterActive());
+      if (!res) return;
+      res.ids.forEach((rid) => {
+        const other = els.tbody.querySelector(`tr[data-id="${rid}"] [data-field="${res.field}"]`);
+        if (other) other.value = res.value;
+      });
+      const seqs = res.seqs.map((n) => String(n).padStart(2, "0")).join(", ");
+      toast(`"${res.label}" aplicado em ${res.ids.length} linha(s) de "${res.name}" (${seqs}).`, "ok", 5000);
+    });
     els.tbody.addEventListener("keydown", onGridKeyDown);
     els.tbody.addEventListener("click", onGridClick);
 
