@@ -18,10 +18,11 @@
   const Calc = root.LeanCalc;
 
   const DB_NAME = "LeanChronoDB";
-  const DB_VERSION = 3;
+  const DB_VERSION = 4; // v4: planos de ação (REV 1.19)
   const STORE_STUDIES = "studies"; // { id, study, diskRevision, dirty, exportedAt }
   const STORE_MFV = "mfv"; // mesmo formato de registro, para os documentos de MFV
   const STORE_GROUPS = "grupos"; // mesmo formato, para os grupos do Yamazumi (REV 1.9)
+  const STORE_PLANS = "planos"; // mesmo formato, para os planos de ação 5W2H (REV 1.19)
   const STORE_KV = "kv"; // chave → valor (handle da pasta, último estudo aberto…)
   const LS_PREFIX = "leanChrono:";
 
@@ -64,6 +65,9 @@
         }
         if (!db.objectStoreNames.contains(STORE_GROUPS)) {
           db.createObjectStore(STORE_GROUPS, { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains(STORE_PLANS)) {
+          db.createObjectStore(STORE_PLANS, { keyPath: "id" });
         }
         if (!db.objectStoreNames.contains(STORE_KV)) db.createObjectStore(STORE_KV);
       };
@@ -148,7 +152,7 @@
 
   /** Prefixo das chaves no localStorage/memória: "study:" (estudos) ou "mfv:". */
   const keyPrefix = (store) =>
-    store === STORE_MFV ? "mfv:" : store === STORE_GROUPS ? "grupo:" : "study:";
+    store === STORE_MFV ? "mfv:" : store === STORE_GROUPS ? "grupo:" : store === STORE_PLANS ? "plano:" : "study:";
 
   async function listLocal(store) {
     const st = store || STORE_STUDIES;
@@ -492,6 +496,7 @@
     fsSupported,
     STORE_MFV,
     STORE_GROUPS,
+    STORE_PLANS,
     init,
     getBackend: () => backend,
     getKV,

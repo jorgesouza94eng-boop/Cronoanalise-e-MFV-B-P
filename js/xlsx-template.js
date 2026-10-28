@@ -244,6 +244,13 @@
       if (target) sheetPath.set(name, target.startsWith("/") ? target.slice(1) : `xl/${target.replace(/^\.\//, "")}`);
     }
     const expect = options && options.expect;
+    // Plano de ação 5W2H (REV 1.19): aba "5W2H" com o cabeçalho O que / Como / Quem…
+    const planoSheet = Array.from(sheetPath.keys()).find((n) => norm(n) === "5w2h");
+    if (planoSheet && !sheetPath.has(SHEETS.geral) && !sheetPath.has("EP")) {
+      if (expect === "crono" || expect === "mfv") throw new Error("Este arquivo é o modelo do Plano de Ação (5W2H): carregue-o na página Plano de Ação.");
+      return recognizePlano({ entries, byName, text, workbook, rels, sheetPath, name: planoSheet });
+    }
+    if (expect === "plano") throw new Error('Este arquivo não é o modelo do Plano de Ação (aba "5W2H" não encontrada).');
     if (sheetPath.has("EP") && !sheetPath.has(SHEETS.geral)) {
       if (expect === "crono") throw new Error("Este arquivo é o modelo do MFV: carregue-o na página do MFV.");
       return recognizeMfv({ entries, byName, text, workbook, sheetPath });
@@ -410,27 +417,29 @@
   }
 
   /** Monta o arquivo: abas alteradas sem compressão; todo o resto copiado byte a byte. */
-  function buildOutput(tpl, untouchedSheets) {
+  function buildOutput(tpl, untouchedSheets, extra) {
     const enc = new TextEncoder();
-    const changed = new Map();
+    const changed = new Map(extra && extra.replace ? extra.replace : []);
     Object.values(tpl.sheets).forEach((sh) => {
       if (!sh || (untouchedSheets || []).includes(sh)) return;
       changed.set(sh.path, dropCachedFormulaValues(joinRows(sh.parts)));
     });
     // Excel recalcula todas as fórmulas (e os gráficos) ao abrir
+    const wbXml = changed.get("xl/workbook.xml") || tpl.workbook;
     changed.set(
       "xl/workbook.xml",
-      /<calcPr\b/.test(tpl.workbook)
-        ? tpl.workbook.replace(/<calcPr\b([^>]*?)\s*(\/?)>/, (m, a, sl) =>
+      /<calcPr\b/.test(wbXml)
+        ? wbXml.replace(/<calcPr\b([^>]*?)\s*(\/?)>/, (m, a, sl) =>
             `<calcPr${a.replace(/\s+(?:fullCalcOnLoad|calcCompleted)="[^"]*"/g, "")} fullCalcOnLoad="1"${sl ? "/" : ""}>`
           )
-        : tpl.workbook.replace("</workbook>", '<calcPr fullCalcOnLoad="1"/></workbook>')
+        : wbXml.replace("</workbook>", '<calcPr fullCalcOnLoad="1"/></workbook>')
     );
     const files = tpl.entries.map((e) =>
       changed.has(e.name)
         ? { name: e.name, data: enc.encode(changed.get(e.name)) }
         : { name: e.name, raw: { method: e.method, compressed: e.compressed, crc: e.crc, size: e.size } }
     );
+    ((extra && extra.add) || []).forEach((f) => files.push({ name: f.name, data: enc.encode(f.xml) }));
     return Xlsx.zip(files);
   }
 
@@ -606,9 +615,169 @@
   }
 
 
+  /* ==========================================================================
+     MODELO DO PLANO DE AÇÃO (5W2H) — REV 1.19
+     ========================================================================== */
+
+  const PLANO = { first: 8, last: 24 }; // linhas das ações no modelo (17 ações por arquivo)
+  const PLANO_EXTRA = "Plano (app)"; // aba acrescentada com os campos do app (o modelo não é alterado)
+
+  async function recognizePlano(wb) {
+    const sst = parseSharedStrings(await wb.text("xl/sharedStrings.xml"));
+    const path = wb.sheetPath.get(wb.name);
+    const parts = splitRows(await wb.text(path));
+    const checks = { A6: "o que", B6: "como", C6: "quem", D6: "quando", F6: "onde", G6: "por que", H6: "quanto", I6: "% completo" };
+    const bad = Object.entries(checks).filter(([ref, label]) => norm(getCell(parts, ref, sst)) !== label);
+    if (bad.length) throw new Error(`Layout diferente do modelo 5W2H (${bad.slice(0, 3).map(([r, l]) => `${r} ≠ "${l}"`).join("; ")}).`);
+    return {
+      kind: "plano-5w2h",
+      entries: wb.entries,
+      sst,
+      sheets: { plano: { name: wb.name, path, parts } },
+      workbook: wb.workbook,
+      rels: wb.rels,
+      contentTypes: await wb.text("[Content_Types].xml"),
+      macro: wb.byName.has("xl/vbaProject.bin"),
+    };
+  }
+
+  function getPlanoLib() {
+    if (typeof self !== "undefined" && self.LeanPlano) return self.LeanPlano;
+    return require("./plano-calc.js"); // Node (testes)
+  }
+
+  /** Aba simples (texto e números, sem estilos do modelo) para os campos do app. */
+  function plainSheetXml(rows) {
+    const cell = (v, ref) =>
+      v == null || v === ""
+        ? ""
+        : typeof v === "number" && Number.isFinite(v)
+          ? `<c r="${ref}"><v>${v}</v></c>`
+          : `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${Xlsx.esc(v)}</t></is></c>`;
+    const body = rows.map((r, i) => `<row r="${i + 1}">${r.map((v, j) => cell(v, `${Xlsx.colName(j)}${i + 1}`)).join("")}</row>`).join("");
+    return (
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      `<sheetData>${body}</sheetData></worksheet>`
+    );
+  }
+
+  /** Acrescenta uma aba nova ao modelo (workbook, relações e tipos de conteúdo). */
+  function addSheet(tpl, name, xml) {
+    const used = new Set(tpl.entries.map((e) => e.name));
+    let n = 1;
+    while (used.has(`xl/worksheets/sheet${n}.xml`)) n++;
+    const path = `xl/worksheets/sheet${n}.xml`;
+    const ids = Array.from(tpl.workbook.matchAll(/\bsheetId="(\d+)"/g)).map((m) => Number(m[1]));
+    const sheetId = (ids.length ? Math.max(...ids) : 0) + 1;
+    let rid = "rIdPlanoApp";
+    while (tpl.rels.includes(`Id="${rid}"`)) rid += "x";
+    const workbook = tpl.workbook.replace("</sheets>", `<sheet name="${Xlsx.esc(name)}" sheetId="${sheetId}" r:id="${rid}"/></sheets>`);
+    const rels = tpl.rels.replace(
+      "</Relationships>",
+      `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${n}.xml"/></Relationships>`
+    );
+    const ct = tpl.contentTypes.replace(
+      "</Types>",
+      `<Override PartName="/${path}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`
+    );
+    return {
+      replace: [
+        ["xl/workbook.xml", workbook],
+        ["xl/_rels/workbook.xml.rels", rels],
+        ["[Content_Types].xml", ct],
+      ],
+      add: [{ name: path, xml }],
+    };
+  }
+
+  /**
+   * Preenche o modelo 5W2H com até 17 ações (part = 0, 1, … para planos maiores; cada arquivo
+   * leva as ações daquela parte). Cabeçalho: B3 criação, D3 responsável, G3 objetivo, J3 meta,
+   * B4 revisão, D4 responsável, G4 indicador. Ações: A O que | B Como | C Quem | D início |
+   * E fim | F Onde | G Por que | H Quanto | I % completo. A aba "Plano (app)" leva todas as
+   * ações com Status, ECRS, desperdício, ferramenta, prioridade e origem.
+   */
+  function fillPlanoTemplate(tpl, doc, options) {
+    const P = getPlanoLib();
+    const r = P.computePlan(doc, options && options.today);
+    const per = PLANO.last - PLANO.first + 1;
+    const part = (options && options.part) || 0;
+    const slice = doc.actions.slice(part * per, part * per + per);
+    const num = (v) => {
+      const n = Calc.parseNumber(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const warnings = [];
+    const u = new Map([
+      ["B3", P.excelDate(doc.createdDate)],
+      ["D3", doc.owner || null],
+      ["G3", doc.objective || null],
+      ["J3", num(doc.targetPct) != null ? num(doc.targetPct) / 100 : null],
+      ["B4", P.excelDate(doc.reviewDate)],
+      ["D4", doc.reviewOwner || null],
+      ["G4", doc.indicator || null],
+    ]);
+    for (let n = PLANO.first; n <= PLANO.last; n++) {
+      const a = slice[n - PLANO.first];
+      const pct = a ? num(a.pct) : null;
+      u.set(`A${n}`, a ? a.what || null : null);
+      u.set(`B${n}`, a ? a.how || null : null);
+      u.set(`C${n}`, a ? a.who || null : null);
+      u.set(`D${n}`, a ? P.excelDate(a.start) : null);
+      u.set(`E${n}`, a ? P.excelDate(a.end) : null);
+      u.set(`F${n}`, a ? a.where || null : null);
+      u.set(`G${n}`, a ? a.why || null : null);
+      u.set(`H${n}`, a ? num(a.cost) : null);
+      u.set(`I${n}`, pct != null ? pct / 100 : null);
+    }
+    applyUpdates(tpl.sheets.plano.parts, u, new Set(Array.from(u.keys())));
+    const parts = Math.max(1, Math.ceil(doc.actions.length / per));
+    if (parts > 1) warnings.push(`O plano tem ${doc.actions.length} ações; o modelo comporta ${per}. Arquivo ${part + 1} de ${parts}: ações ${part * per + 1} a ${part * per + slice.length}.`);
+    const missing = doc.actions.filter((a) => !a.who || !a.end).length;
+    if (missing && part === 0) warnings.push(`${missing} ação(ões) sem Quem ou sem prazo (Fim): complete antes de apresentar o plano.`);
+    // Aba extra com os campos do app (todas as ações)
+    const head = ["Nº", "Prioridade", "O que", "Como", "Quem", "Início", "Fim", "Onde", "Por que", "Quanto (R$)", "% completo", "Status", "Tipo ECRS", "Desperdício", "Ferramenta Lean", "Origem (estudo • elemento)"];
+    const rows = [
+      [`PLANO DE AÇÃO (5W2H) — ${doc.clientName || ""} — exportado do Lean Chrono em ${new Date().toLocaleDateString("pt-BR")}`],
+      [`Objetivo: ${doc.objective || "--"} | Meta: ${doc.targetPct || "--"}% | Indicador: ${doc.indicator || "--"}`],
+      [],
+      head,
+    ].concat(
+      doc.actions.map((a, i) => [
+        i + 1,
+        a.priority || "",
+        a.what,
+        a.how,
+        a.who,
+        P.formatDate(a.start),
+        P.formatDate(a.end),
+        a.where,
+        a.why,
+        num(a.cost),
+        num(a.pct),
+        P.STATUS[r.actions[i].status],
+        P.ECRS[a.ecrs] || "",
+        Calc.WASTES[a.waste] || "",
+        P.TOOLS[a.tool] || "",
+        a.origin ? [a.origin.processName, a.origin.product, a.origin.etapa, a.origin.element].filter(Boolean).join(" • ") : "",
+      ])
+    );
+    rows.push([], [`Status: ${Object.keys(P.STATUS).map((k) => `${P.STATUS[k]} ${r.count[k]}`).join(" | ")} | % médio ${r.pctMean == null ? "--" : Calc.formatNumber(r.pctMean, 1)}% | Σ Quanto R$ ${Calc.formatNumber(r.costTotal, 2)}`]);
+    const extra = addSheet(tpl, PLANO_EXTRA, plainSheetXml(rows));
+    return { bytes: buildOutput(tpl, [], extra), warnings, parts, actions: slice.length };
+  }
+
+  function exportPlanoFileName(doc, templateName, part, parts) {
+    const ext = /\.xlsm$/i.test(templateName || "") ? "xlsm" : "xlsx";
+    const date = new Date().toISOString().slice(0, 10);
+    return `5W2H_${Calc.slugify(doc.clientName, "Cliente")}_${date}${parts > 1 ? `_parte${part + 1}` : ""}.${ext}`;
+  }
+
   /** O preenchimento altera as linhas do modelo carregado: sempre parte dos bytes originais. */
   async function fillFromBytes(templateBytes, docOrStudy, options) {
     const tpl = await loadTemplate(templateBytes, options);
+    if (tpl.kind === "plano-5w2h") return fillPlanoTemplate(tpl, docOrStudy, options);
     return tpl.kind === "mfv-rev1" ? fillMfvTemplate(tpl, docOrStudy) : fillTemplate(tpl, docOrStudy);
   }
 
@@ -637,6 +806,8 @@
     fillFromBytes,
     exportFileName,
     exportMfvFileName,
+    fillPlanoTemplate,
+    exportPlanoFileName,
     parseSharedStrings,
     dropCachedFormulaValues,
   };

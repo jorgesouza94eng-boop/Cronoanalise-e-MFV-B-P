@@ -745,8 +745,8 @@ select.input-type.is-acyclic {
   background: var(--bg-surface);
 }
 
-/* Navegação entre módulos (Cronoanálise | MFV) */
-.app-nav { display: flex; gap: 4px; margin-top: 2px; }
+/* Navegação entre módulos (Cronoanálise | MFV | Yamazumi | Plano de Ação) */
+.app-nav { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
 .app-nav a {
   font-size: 11px;
   color: var(--text-on-dark-muted);
@@ -1510,3 +1510,44 @@ body.no-doc .app-workspace, body.no-doc .client-context { display: none !importa
 .gbo-load span { position: absolute; left: 0; top: -18px; font-size: 11px; font-weight: 700; color: #b91c1c; background: var(--bg-surface); padding: 0 4px; }
 .link-check.link-operador { color: var(--status-ok-text); }
 .link-check.link-gargalo { color: var(--status-danger-text); font-weight: 700; }
+
+/* ==========================================================================
+   PLANO DE AÇÃO 5W2H (REV 1.19)
+   ========================================================================== */
+.pl-params { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.pl-wide { grid-column: span 2; }
+.pl-table { min-width: 1900px; }
+.pl-table td { vertical-align: top; }
+.pl-table .input-cell { width: 100%; min-width: 70px; }
+.pl-table textarea.pl-text { min-width: 170px; min-height: 44px; resize: vertical; font: inherit; font-size: 13px; padding: 4px 6px; line-height: 1.35; }
+.pl-table input[type="date"] { min-width: 128px; }
+.pl-table td.pl-status { white-space: nowrap; padding: 6px 10px; font-weight: 700; font-size: 12px; }
+.pl-table td.pl-nao-iniciada { color: var(--text-muted); }
+.pl-table td.pl-andamento { color: var(--status-info-text); }
+.pl-table td.pl-concluida { color: var(--status-ok-text); background: var(--status-ok-bg); }
+.pl-table td.pl-atrasada { color: var(--status-danger-text); background: var(--status-danger-bg); }
+.pl-table tr.row-error td:first-child { color: var(--status-danger-text); font-weight: 700; }
+.pl-origin { min-width: 170px; padding: 6px 8px; font-size: 12px; }
+.pl-origin span, .pl-origin small { display: block; }
+.pl-origin small { color: var(--text-muted); }
+.pl-origin.is-changed { background: var(--status-warn-bg, #fef3c7); }
+.pl-origin.is-changed span::before { content: "⚠ "; color: var(--status-warn-text); }
+.pl-candidates li label { display: flex; gap: 10px; align-items: flex-start; padding: 6px 4px; cursor: pointer; }
+.pl-candidates li label.is-disabled { opacity: 0.55; cursor: default; }
+.pl-cand-main { display: flex; flex-direction: column; gap: 2px; }
+.pl-cand-main small { color: var(--text-muted); }
+.pl-new-grid { grid-template-columns: 1fr auto; }
+@media (max-width: 760px) {
+  .pl-wide { grid-column: auto; }
+  .pl-new-grid { grid-template-columns: 1fr; }
+}
+@media print {
+  .pl-table { min-width: 0; font-size: 10px; }
+  .pl-table td:last-child, .pl-table th:last-child, .section-toolbar { display: none !important; }
+  .pl-table textarea.pl-text { border: none; resize: none; min-width: 0; }
+  .pl-status { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+.dashboard-section.pl-head { grid-template-columns: 1fr; }
+.pl-params input[type="text"] { font-family: inherit; }
+#crono-dialog .form-hint { margin: 12px 20px 4px; }
+#crono-dialog .pl-candidates { margin: 4px 20px 8px; max-height: 50vh; }

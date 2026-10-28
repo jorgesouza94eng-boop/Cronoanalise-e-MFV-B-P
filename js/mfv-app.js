@@ -16,6 +16,7 @@
   const Calc = root.LeanCalc;
   const M = root.LeanMfv;
   const Y = root.LeanYamazumi;
+  const P = root.LeanPlano;
   const Store = root.LeanStorage;
   const STORE = Store.STORE_MFV;
   const IO = { normalize: M.normalizeMfv, serialize: M.serializeMfv };
@@ -304,8 +305,44 @@
      ESTUDOS DE CRONOANÁLISE (ORIGEM DO TC)
      ========================================================================== */
 
+  /**
+   * Planos de ação 5W2H (REV 1.19), só para referência no payback: Σ Quanto das ações do plano
+   * do cliente. Não entra no investimento (o consultor decide o que digitar).
+   */
+  async function loadPlans() {
+    if (!P) return;
+    const map = new Map();
+    const add = (d) => {
+      const prev = map.get(d.id);
+      if (!prev || String(prev.updatedAt) < String(d.updatedAt)) map.set(d.id, d);
+    };
+    try {
+      (await Store.listLocal(Store.STORE_PLANS)).forEach((r) => r && r.study && add(r.study));
+      if (await Store.folderReady()) (await Store.listFolderStudies({ pattern: P.FILE_PATTERN, normalize: P.normalizePlan })).studies.forEach(add);
+    } catch (err) {
+      console.warn("Planos de ação não lidos:", err);
+    }
+    state.plans = Array.from(map.values());
+  }
+
+  /** Texto de referência do plano de ação do cliente (Σ Quanto), ao lado dos investimentos. */
+  function updatePlanRef() {
+    const box = $("pb-plan-ref");
+    if (!box || !state.doc) return;
+    const key = Calc.elementKey(state.doc.clientName);
+    const plans = (state.plans || []).filter((d) => key && Calc.elementKey(d.clientName) === key);
+    box.hidden = !plans.length;
+    if (!plans.length) return;
+    const parts = plans.map((d) => {
+      const c = P.computePlan(d);
+      return c.costInformed ? `${money(c.costTotal)} (${c.actions.filter((a) => a.cost != null).length} de ${c.total} ações com Quanto)` : `Quanto não informado (${c.total} ações)`;
+    });
+    box.textContent = `Referência do Plano de Ação 5W2H: Σ Quanto ${parts.join(" • ")}. Não é somado: digite aqui só o que o cliente investiu de fato.`;
+  }
+
   /** Lê os estudos do navegador e da pasta e calcula o tempo padrão de cada um. */
   async function loadStudies() {
+    await loadPlans();
     const map = new Map();
     const docs = new Map();
     const add = (study, fileName) => {
@@ -1034,6 +1071,7 @@
 
   /** Produtividade real e payback (só valores calculados; mantém o foco). */
   function updateProductivity(r) {
+    updatePlanRef();
     const p = r.productivity;
     const pb = r.payback;
     $("prod-tbody").querySelectorAll("tr[data-id]").forEach((tr, i) => {

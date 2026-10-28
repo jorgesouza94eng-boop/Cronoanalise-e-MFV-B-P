@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="Plano de ação 5W2H do cliente, com as ações Kaizen (ECRS) da cronoanálise, status e prazos — funciona 100% offline.">
+  <title>Plano de Ação 5W2H | Lean Chrono &amp; MFV</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-mfv page-plano no-doc">
+
+  <header class="app-header">
+    <div class="brand-area">
+      <div class="brand-badge">LEAN</div>
+      <div class="brand-titles">
+        <h1>Plano de Ação — 5W2H</h1>
+        <nav class="app-nav" aria-label="Módulos">
+          <a href="index.html">Cronoanálise</a><a href="mfv.html">MFV</a><a href="yamazumi.html">Yamazumi</a><a href="plano.html" aria-current="page">Plano de Ação</a>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.19</span></nav>
+      </div>
+    </div>
+
+    <div class="client-context">
+      <div class="input-inline">
+        <label for="pl-client">Empresa / Cliente</label>
+        <input type="text" id="pl-client" data-doc="clientName" placeholder="Nome da indústria..." autocomplete="off">
+      </div>
+    </div>
+
+    <div class="storage-controls">
+      <span id="sync-status" class="status-pill status-offline" role="status" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span><span class="status-text">Iniciando...</span>
+      </span>
+      <button id="btn-docs" class="btn-header" type="button" title="Abrir, criar ou importar planos de ação">Planos</button>
+      <button id="btn-connect-folder" class="btn-primary" type="button" hidden>
+        <span class="btn-label">Conectar pasta (OneDrive)</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Nenhum documento aberto: a janela pode ser fechada e o menu continua acessível -->
+  <section id="empty-state" class="empty-state" aria-label="Nenhum plano aberto">
+    <p class="empty-title">Nenhum plano de ação aberto.</p>
+    <p class="form-hint">Abra ou crie um, ou vá para outro módulo pelo menu acima.</p>
+    <button type="button" class="btn-primary" id="btn-empty-open">Abrir ou criar plano</button>
+  </section>
+
+  <div id="conflict-banner" class="conflict-banner" role="alert" hidden>
+    <div class="conflict-text"><strong>Conflito de versões.</strong> <span id="conflict-detail"></span></div>
+    <div class="conflict-actions">
+      <button type="button" id="btn-conflict-disk" class="btn-outline">Usar versão da pasta</button>
+      <button type="button" id="btn-conflict-local" class="btn-danger">Manter minha versão (sobrescrever)</button>
+    </div>
+  </div>
+
+  <main class="app-workspace">
+
+    <!-- CABEÇALHO DO PLANO (= cabeçalho do modelo 5W2H) -->
+    <section class="dashboard-section pl-head" aria-label="Cabeçalho do plano">
+      <div class="shift-params-card">
+        <div class="card-header-mini">Objetivo, meta e responsáveis</div>
+        <div class="params-grid pl-params">
+          <div class="param-field pl-wide">
+            <label for="pl-objective">Objetivo</label>
+            <input type="text" id="pl-objective" data-doc="objective" autocomplete="off">
+          </div>
+          <div class="param-field">
+            <label for="pl-target">Meta (%)</label>
+            <input type="text" id="pl-target" data-doc="targetPct" inputmode="decimal" autocomplete="off">
+          </div>
+          <div class="param-field">
+            <label for="pl-indicator">Indicador</label>
+            <input type="text" id="pl-indicator" data-doc="indicator" autocomplete="off">
+          </div>
+          <div class="param-field">
+            <label for="pl-created">Data da criação</label>
+            <input type="date" id="pl-created" data-doc="createdDate">
+          </div>
+          <div class="param-field">
+            <label for="pl-owner">Responsável</label>
+            <input type="text" id="pl-owner" data-doc="owner" autocomplete="off">
+          </div>
+          <div class="param-field">
+            <label for="pl-review">Data da revisão</label>
+            <input type="date" id="pl-review" data-doc="reviewDate">
+          </div>
+          <div class="param-field">
+            <label for="pl-review-owner">Responsável pela revisão</label>
+            <input type="text" id="pl-review-owner" data-doc="reviewOwner" autocomplete="off">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESUMO -->
+    <section class="kpi-grid" aria-label="Resumo do plano">
+      <div class="kpi-card">
+        <span class="kpi-title">Ações</span>
+        <div class="kpi-value-group"><strong id="kpi-total">--</strong></div>
+        <span class="kpi-caption" id="kpi-total-cap">--</span>
+      </div>
+      <div class="kpi-card status-card" id="kpi-late-card">
+        <span class="kpi-title">Atrasadas</span>
+        <div class="kpi-value-group"><strong id="kpi-late">--</strong></div>
+        <span class="kpi-caption" id="kpi-late-cap">Fim já passou e % &lt; 100</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Concluídas</span>
+        <div class="kpi-value-group"><strong id="kpi-done">--</strong></div>
+        <span class="kpi-caption">% completo = 100</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">% médio do plano</span>
+        <div class="kpi-value-group"><strong id="kpi-pct">--</strong><span class="kpi-unit">%</span></div>
+        <span class="kpi-caption" id="kpi-next">--</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Σ Quanto</span>
+        <div class="kpi-value-group"><strong id="kpi-cost">--</strong></div>
+        <span class="kpi-caption">Custo das ações (referência para o payback no MFV)</span>
+      </div>
+    </section>
+
+    <!-- AÇÕES -->
+    <section class="timesheet-section summary-section" aria-label="Ações do plano">
+      <div class="section-toolbar">
+        <div class="toolbar-left">
+          <h2>Ações (5W2H)</h2>
+          <span class="keyboard-hint">O que • Como • Quem • Quando • Onde • Por que • Quanto (R$) • % completo — status calculado pelas datas e pelo %</span>
+        </div>
+        <div class="toolbar-actions">
+          <select id="flt-status" aria-label="Filtrar por status">
+            <option value="">Status: todos</option><option value="nao-iniciada">Não iniciada</option><option value="andamento">Em andamento</option>
+            <option value="atrasada">Atrasada</option><option value="concluida">Concluída</option>
+          </select>
+          <button type="button" id="btn-from-crono" class="btn-secondary" title="Escolher ações da coluna 'Ação sugerida / Kaizen (ECRS)' dos estudos deste cliente">+ Ações da cronoanálise</button>
+          <button type="button" id="btn-add-action" class="btn-outline">+ Ação manual</button>
+        </div>
+      </div>
+      <div class="table-container summary-container">
+        <table class="chrono-table pl-table">
+          <colgroup>
+            <col style="width:44px"><col style="width:56px"><col style="width:210px"><col style="width:260px"><col style="width:110px">
+            <col style="width:136px"><col style="width:136px"><col style="width:160px"><col style="width:230px"><col style="width:104px">
+            <col style="width:74px"><col style="width:112px"><col style="width:118px"><col style="width:140px"><col style="width:150px">
+            <col style="width:180px"><col style="width:100px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Nº</th>
+              <th title="Prioridade (1 = maior). Ações da cronoanálise: pelo % do ciclo (Pareto)">Prior.</th>
+              <th>O que</th>
+              <th>Como</th>
+              <th>Quem</th>
+              <th>Início</th>
+              <th>Fim</th>
+              <th>Onde</th>
+              <th>Por que</th>
+              <th>Quanto (R$)</th>
+              <th>%</th>
+              <th>Status</th>
+              <th>Tipo ECRS</th>
+              <th>Desperdício</th>
+              <th>Ferramenta Lean</th>
+              <th>Origem</th>
+              <th><span class="sr-only">Ações</span></th>
+            </tr>
+          </thead>
+          <tbody id="actions-tbody"></tbody>
+        </table>
+      </div>
+      <div id="pl-warnings" class="info-banner link-checks" role="status" hidden></div>
+    </section>
+
+    <!-- OBSERVAÇÕES E EXPORTAÇÃO -->
+    <section class="dashboard-section mfv-bottom" aria-label="Observações e exportação">
+      <div class="shift-params-card notes-card">
+        <div class="card-header-mini">Observações</div>
+        <textarea id="pl-notes" data-doc="notes" rows="4" placeholder="Ex.: ações priorizadas com a diretoria em 29/10; recursos aprovados..."></textarea>
+        <div class="notes-actions">
+          <button type="button" id="btn-export-xlsx" class="btn-secondary">Exportar Excel</button>
+          <button type="button" id="btn-print" class="btn-outline">Imprimir</button>
+          <button type="button" id="btn-export-json" class="btn-outline">Exportar JSON</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- AÇÕES DA CRONOANÁLISE -->
+  <dialog id="crono-dialog" class="study-dialog" aria-labelledby="crono-dialog-title">
+    <div class="dialog-header">
+      <h2 id="crono-dialog-title">Ações da cronoanálise</h2>
+      <button type="button" class="btn-icon-close" id="btn-close-crono" aria-label="Fechar">&times;</button>
+    </div>
+    <p class="form-hint" id="crono-hint">Ações digitadas na coluna "Ação sugerida / Kaizen (ECRS)" dos estudos deste cliente, da maior para a menor parcela do ciclo (Pareto). Marque as que entram no plano: Quem, Quando, Quanto e % ficam para você preencher.</p>
+    <ul class="study-check-list pl-candidates" id="crono-list"></ul>
+    <div class="dialog-footer">
+      <button type="button" id="btn-crono-all" class="btn-outline">Marcar todas</button>
+      <button type="button" id="btn-crono-add" class="btn-primary">Incluir selecionadas</button>
+    </div>
+  </dialog>
+
+  <!-- GERENCIADOR DE PLANOS -->
+  <dialog id="doc-dialog" class="study-dialog" aria-labelledby="doc-dialog-title">
+    <div class="dialog-header">
+      <h2 id="doc-dialog-title">Planos de ação</h2>
+      <nav class="app-nav dialog-nav" aria-label="Ir para outro módulo"><a href="index.html">Cronoanálise</a><a href="mfv.html">MFV</a><a href="yamazumi.html">Yamazumi</a><a href="plano.html" aria-current="page">Plano de Ação</a></nav>
+      <button type="button" class="btn-icon-close" id="btn-close-dialog" aria-label="Fechar">&times;</button>
+    </div>
+    <form id="new-doc-form" class="new-study-form" autocomplete="off">
+      <div class="card-header-mini">Novo plano (1 arquivo por cliente)</div>
+      <div class="new-study-grid pl-new-grid">
+        <div class="param-field"><label for="new-client">Empresa / Cliente</label><input type="text" id="new-client" list="client-list" required></div>
+        <button type="submit" class="btn-primary">Criar plano</button>
+      </div>
+      <p class="form-hint" id="new-doc-hint">Depois de criar, use "+ Ações da cronoanálise" para trazer as ações Kaizen (ECRS) dos estudos deste cliente.</p>
+    </form>
+    <datalist id="client-list"></datalist>
+    <div class="study-list-header">
+      <div class="card-header-mini">Planos salvos</div>
+      <span id="doc-source" class="study-source"></span>
+    </div>
+    <ul id="doc-list" class="study-list" aria-label="Planos salvos"></ul>
+    <div class="template-block">
+      <div class="card-header-mini">Modelo Excel (Plano de Ação 5W2H)</div>
+      <p id="template-info-plano" class="form-hint">Nenhum modelo carregado.</p>
+      <div class="template-actions">
+        <label class="btn-outline file-button" title="Escolha a sua planilha 5W2H (aba 5W2H)">
+          Carregar modelo
+          <input type="file" id="input-template-plano" accept=".xlsx,.xlsm" hidden>
+        </label>
+        <button type="button" id="btn-remove-template-plano" class="btn-outline" hidden>Remover modelo</button>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <label class="btn-outline file-button">Importar JSON
+        <input type="file" id="input-import" accept=".json,application/json" hidden>
+      </label>
+    </div>
+  </dialog>
+
+  <datalist id="who-list"></datalist>
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+
+  <!-- Scripts clássicos (sem módulos ES) para funcionar também via file:// -->
+  <script src="js/calc.js"></script>
+  <script src="js/xlsx.js"></script>
+  <script src="js/xlsx-template.js"></script>
+  <script src="js/plano-calc.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/plano-app.js"></script>
+</body>
+</html>

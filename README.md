@@ -390,6 +390,17 @@ Use quando **um produto depende de mais de uma pessoa** (posto com 2 operadores 
 4. **Comparar com:** escolha o grupo da outra situação para ver o antes × depois (T1 × T3), com a variação de cada indicador.
 5. **→ MFV:** inclui o grupo no MFV da empresa. No posto, o TC é o ciclo, e os operadores ideais do MFV usam o conteúdo de trabalho. O takt do grupo vale só no Yamazumi.
 
+## 2.1.2 Plano de Ação 5W2H (`plano.html`, REV 1.19)
+
+Um plano por cliente, no formato do modelo 5W2H do B+P.
+
+1. Em **Planos**, informe a empresa (a mesma grafia dos estudos é sugerida) e crie o plano. O objetivo vem preenchido com "Aumentar a produtividade (pç/HH) em 20%"; confira meta, indicador, datas e responsáveis.
+2. **"+ Ações da cronoanálise":** traz as ações digitadas na coluna "Ação sugerida / Kaizen (ECRS)" dos estudos do cliente, da maior para a menor parcela do ciclo. Marque as que entram. O app preenche O que, Como, Onde, Por que, tipo ECRS, desperdício e prioridade; **Quem, Quando, Quanto e % completo são seus**.
+3. **"+ Ação manual"** para ações que não vêm da cronoanálise (GD, 5S, layout…).
+4. O **status** sai do % e das datas (Concluída, Atrasada, Em andamento, Não iniciada). ⚠ na origem = a ação mudou na cronoanálise; confira o texto.
+5. **Exportar Excel:** com o modelo 5W2H carregado, preenche a aba 5W2H (17 ações por arquivo) e acrescenta a aba "Plano (app)". Sem modelo, gera um Excel simples.
+6. No **MFV**, o Σ Quanto do plano aparece como referência no payback, sem ser somado ao investimento.
+
 ## 2.2 Assistente de IA (Gemini), opcional
 
 O botão **✨ IA** na barra da grade abre o assistente. Ele precisa de **internet** e de uma **chave de API do Google AI Studio** (aistudio.google.com → ícone 🔑 → *Create API key*).
@@ -517,6 +528,9 @@ js/mfv-app.js         Tela e salvamento do MFV (mesma pasta e proteção contra 
 yamazumi.html         Página do Yamazumi (grupos de estudos)
 js/yamazumi-calc.js   Motor do Yamazumi: classes de valor, ciclo, conteúdo, balanceamento, T1 × T3
 js/yamazumi-app.js    Tela e salvamento dos grupos
+plano.html            Página do Plano de Ação 5W2H (um plano por cliente)
+js/plano-calc.js      Motor do plano: status, resumo, ações Kaizen da cronoanálise, Excel simples
+js/plano-app.js       Tela e salvamento dos planos
 sw.js                 Service worker (offline)
 manifest.webmanifest  Instalação como app (PWA)
 tests/                Testes automatizados
@@ -529,8 +543,8 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 154 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA e Yamazumi (Node 18+, sem dependências)
-npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.5 e Yamazumi (REV 1.9) — requer o servidor local
+npm test             # 208 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
+npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.19 (Yamazumi, Plano de Ação…) — requer o servidor local
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

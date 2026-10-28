@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.19** | 28/10/2026 | Plano de Ação 5W2H por cliente, com as ações Kaizen da cronoanálise |
 | **REV 1.18** | 28/10/2026 | Classificação copiada para as linhas do mesmo elemento |
 | **REV 1.17** | 22/10/2026 | IA: nova tentativa automática quando o Gemini está sobrecarregado (erro 503) |
 | **REV 1.16** | 22/10/2026 | Arquivar estudos, MFVs e grupos (tirar da lista sem apagar) |
@@ -23,6 +24,24 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.19 — 28/10/2026
+
+Opção **A** do consultor: novo módulo **Plano de Ação (5W2H)** (`plano.html`), no menu das 4 páginas.
+
+- **Um plano por cliente** (`Plano_<cliente>_<data>_<id>.json`, formato v1), salvo no navegador e na pasta do OneDrive como os outros módulos (revisão, cópia `_conflito_`, Arquivar para `_Arquivo`).
+- **Cabeçalho = cabeçalho do modelo 5W2H do B+P:** objetivo (padrão "Aumentar a produtividade (pç/HH) em 20%"), meta (%), indicador, data da criação, responsável, data da revisão e responsável pela revisão.
+- **Colunas do 5W2H:** O que, Como, Quem, Quando (início e fim), Onde, Por que, Quanto (R$) e % completo (digitado). **Campos extras:** prioridade, status, tipo ECRS, desperdício atacado, ferramenta Lean e origem.
+- **"+ Ações da cronoanálise":** lista as ações digitadas na coluna "Ação sugerida / Kaizen (ECRS)" dos estudos do cliente (o mesmo elemento com a mesma ação em várias linhas = 1 ação), **da maior para a menor parcela do ciclo** (Pareto). As marcadas viram ações com O que ("Eliminar — Buscar bandeja"), Como (texto da ação), Onde (processo — produto — etapa — operador), Por que (valor / desperdício e s/pç com o % do ciclo), tipo ECRS, desperdício e prioridade. **Quem, Quando, Quanto e % ficam em branco** para o consultor (nada é inventado). Ação já incluída aparece desabilitada.
+- **Status calculado** (não digitado): Concluída (% = 100), Atrasada (fim já passou e % < 100), Em andamento (% > 0 ou início já chegou), Não iniciada. % fora de 0–100 é aviso e não conclui a ação. Filtro por status.
+- **Indicadores:** nº de ações, atrasadas, concluídas, % médio do plano, próximo prazo e **Σ Quanto**.
+- **Origem conferida:** se a ação ou o elemento mudar (ou sair) da cronoanálise, a ação mostra ⚠ e um aviso; o texto do plano não é alterado sozinho.
+- **MFV:** no payback, ao lado de "Investimentos do cliente", aparece a **referência** do Σ Quanto do plano do mesmo cliente. **Não é somado** ao investimento: o consultor digita só o que o cliente investiu de fato.
+- **Exportar Excel:** com o **modelo 5W2H** do consultor (Planos → Modelo Excel, guardado também em `_Modelos`), preenche a aba 5W2H (cabeçalho e linhas 8 a 24, **17 ações por arquivo**; mais ações = mais arquivos `_parte2`…), sem alterar o layout, e acrescenta a aba **"Plano (app)"** com todas as ações e os campos extras. Sem modelo: Excel simples com todas as colunas. Também Imprimir e Exportar JSON.
+- Os cálculos da cronoanálise, do MFV e do payback não mudam. Menu dos módulos quebra linha no celular. IndexedDB v4 (store "planos"). Service worker v27.
+- Testes: `tests/plano-rev119.test.js` (status, resumo, ECRS, ações da cronoanálise, JSON, Excel e modelo 5W2H sintético) e `tests/e2e.rev119.js`.
 
 ---
 

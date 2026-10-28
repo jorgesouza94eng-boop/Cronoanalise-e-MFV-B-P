@@ -5,12 +5,13 @@
  * REV 1.15: os arquivos são baixados direto do servidor (sem o cache HTTP do navegador), para a
  * página e os scripts chegarem sempre na mesma versão.
  */
-const CACHE_VERSION = "lean-chrono-v26";
+const CACHE_VERSION = "lean-chrono-v27";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./mfv.html",
   "./yamazumi.html",
+  "./plano.html",
   "./style.css",
   "./icon.svg",
   "./manifest.webmanifest",
@@ -21,6 +22,8 @@ const APP_SHELL = [
   "./js/mfv-app.js",
   "./js/yamazumi-calc.js",
   "./js/yamazumi-app.js",
+  "./js/plano-calc.js",
+  "./js/plano-app.js",
   "./js/storage.js",
   "./js/ui.js",
   "./js/app.js",

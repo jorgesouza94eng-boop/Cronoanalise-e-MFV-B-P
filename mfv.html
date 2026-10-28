@@ -17,8 +17,8 @@
       <div class="brand-titles">
         <h1>MFV — Estado presente</h1>
         <nav class="app-nav" aria-label="Módulos">
-          <a href="index.html">Cronoanálise</a><a href="mfv.html" aria-current="page">MFV</a><a href="yamazumi.html">Yamazumi</a>
-        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.18</span></nav>
+          <a href="index.html">Cronoanálise</a><a href="mfv.html" aria-current="page">MFV</a><a href="yamazumi.html">Yamazumi</a><a href="plano.html">Plano de Ação</a>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.19</span></nav>
       </div>
     </div>
 
@@ -340,6 +340,7 @@
             <div class="param-field">
               <label for="pb-investment" title="Investimentos do cliente nas ações de melhoria (somente se houver)">Investimentos do cliente (R$)</label>
               <input type="text" id="pb-investment" data-doc="paybackInvestment" inputmode="decimal" placeholder="0,00" autocomplete="off">
+              <small class="form-hint" id="pb-plan-ref" hidden></small>
             </div>
             <div class="param-field">
               <label for="pb-monthly-prod">Produção mensal T1 (<span class="product-unit-label">pç</span>)</label>
@@ -389,7 +390,7 @@
   <dialog id="doc-dialog" class="study-dialog" aria-labelledby="doc-dialog-title">
     <div class="dialog-header">
       <h2 id="doc-dialog-title">Mapas de Fluxo de Valor</h2>
-      <nav class="app-nav dialog-nav" aria-label="Ir para outro módulo"><a href="index.html">Cronoanálise</a><a href="mfv.html" aria-current="page">MFV</a><a href="yamazumi.html">Yamazumi</a></nav>
+      <nav class="app-nav dialog-nav" aria-label="Ir para outro módulo"><a href="index.html">Cronoanálise</a><a href="mfv.html" aria-current="page">MFV</a><a href="yamazumi.html">Yamazumi</a><a href="plano.html">Plano de Ação</a></nav>
       <button type="button" class="btn-icon-close" id="btn-close-dialog" aria-label="Fechar">&times;</button>
     </div>
     <form id="new-doc-form" class="new-study-form" autocomplete="off">
@@ -456,6 +457,7 @@
   <script src="js/xlsx-template.js"></script>
   <script src="js/mfv-calc.js"></script>
   <script src="js/yamazumi-calc.js"></script>
+  <script src="js/plano-calc.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/ai.js"></script>
   <script src="js/mfv-app.js"></script>

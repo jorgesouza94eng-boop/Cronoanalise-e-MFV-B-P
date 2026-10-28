@@ -53,8 +53,8 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - HTML/CSS/JS puro, **sem build e sem servidor**. Funciona por `file://`, por servidor local e pelo GitHub Pages.
 - Scripts clássicos no padrão UMD (`window.LeanX` no navegador e `module.exports` nos testes do Node). **Não usar módulos ES** (quebram no `file://`).
 - Armazenamento local-first: IndexedDB (`LeanChronoDB`) e pasta do OneDrive pela File System Access API, com debounce de 3 s e proteção contra conflito (revisão + cópia `_conflito_`).
-- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6) e `Yamazumi_*.json` (grupo de estudos, versão 1) — REV 1.18. Itens arquivados ficam na subpasta `_Arquivo` (fora das listas).
-- A revisão aparece no cabeçalho das 3 páginas (`.app-rev`); um teste confere com a versão do `package.json`.
+- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6), `Yamazumi_*.json` (grupo de estudos, versão 1) e `Plano_*.json` (plano de ação 5W2H, versão 1) — REV 1.19. Itens arquivados ficam na subpasta `_Arquivo` (fora das listas).
+- A revisão aparece no cabeçalho das 4 páginas (`.app-rev`); um teste confere com a versão do `package.json`.
 
 | Arquivo | Função |
 |---|---|
@@ -63,6 +63,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 | `js/ui.js`, `js/app.js` | Tela e orquestração da cronoanálise |
 | `js/mfv-app.js` | Tela e salvamento do MFV (inclui etapas de grupo Posto/Linha) |
 | `js/yamazumi-calc.js`, `js/yamazumi-app.js` | Yamazumi: grupos de estudos, barras por classe de valor, balanceamento, T1 × T3 |
+| `js/plano-calc.js`, `js/plano-app.js` | Plano de Ação 5W2H por cliente (ações Kaizen da cronoanálise, status, modelo 5W2H) |
 | `js/xlsx.js`, `js/xlsx-template.js` | Excel simples e preenchimento dos modelos B+P do consultor |
 | `js/ai.js`, `js/ai-ui.js` | Assistente Gemini (opcional) |
 | `js/storage.js` | IndexedDB, pasta e importação/exportação |
@@ -141,3 +142,10 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 
 - Ao mudar tipo, valor ou desperdício de uma linha, as linhas com o mesmo nome (mesmo produto e mesma etapa) recebem a mesma classificação: vazias direto, já classificadas com outro valor só com confirmação. Valor vazio não é copiado; com filtro ativo, só a linha editada.
 
+
+## Regra implementada na REV 1.19: Plano de Ação 5W2H
+
+- Um plano por cliente. Ações da cronoanálise = coluna "Ação sugerida / Kaizen (ECRS)": 1 ação por elemento + texto (por produto e etapa), ordenadas pelo % do ciclo (Pareto). Quem, Quando, Quanto e % ficam para o consultor (nunca preenchidos pelo app).
+- Status calculado: % = 100 → Concluída; fim < hoje → Atrasada; % > 0 ou início ≤ hoje → Em andamento; senão Não iniciada. % fora de 0–100 não conclui.
+- Σ Quanto é só referência no payback do MFV: **não é somado** ao investimento (decisão do consultor).
+- Modelo 5W2H do B+P: só preenchido (cabeçalho B3/D3/G3/J3, B4/D4/G4; ações nas linhas 8–24, 17 por arquivo); os campos extras vão na aba "Plano (app)".
