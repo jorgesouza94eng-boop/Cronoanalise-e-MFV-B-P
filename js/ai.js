@@ -101,18 +101,184 @@
     return { text, count: items.length, names: pending.map((g) => g.name) };
   }
 
-  /** (2) Ações Kaizen (ECRS) para elementos que não agregam ou são incidentais. */
-  function buildKaizenPrompt(study, computed, anonymize) {
-    const targets = computed.summary.elements.filter((g) => (g.value === "NA" || g.value === "IN") && !g.unnamed);
-    const items = elementRows(study, computed, anonymize, (g) => targets.includes(g));
+  /* --------------------------------------------------------------------------
+     (2) AÇÕES KAIZEN (ECRS) — REV 1.20
+     Todos os produtos, etapas e operadores do estudo; cada elemento com um id (a resposta
+     volta pelo id, não pelo nome); regras de decisão; ferramenta Lean; justificativa com
+     dado do estudo; "sem_acao" quando os dados não bastam; esquema JSON obrigatório.
+     -------------------------------------------------------------------------- */
+
+  const ECRS_LIST = ["Eliminar", "Combinar", "Reorganizar", "Simplificar"];
+  const CONFIDENCE = ["alta", "media", "baixa"];
+
+  /** Regras práticas de Lean (desperdício → ferramenta) enviadas no pedido. */
+  const KAIZEN_RULES = [
+    'Movimentação (buscar, pegar longe, andar) → abastecimento no ponto de uso, layout ou 5S ("5s", "layout").',
+    'Transporte → aproximar processos, layout e fluxo contínuo ("layout", "fluxo").',
+    'Espera → balanceamento, abastecimento puxado e trabalho padronizado ("kanban", "padronizado", "fluxo").',
+    'Processamento excessivo → simplificar o método ou eliminar etapa redundante ("padronizado").',
+    'Defeitos / retrabalho → qualidade na fonte e poka-yoke ("pokayoke").',
+    'Estoque / superprodução → kanban e fluxo contínuo ("kanban", "fluxo").',
+    'Acíclico de preparação (setup, troca, ajuste, limpeza) → TRF/SMED, passando a atividade para o tempo externo ("smed").',
+    'Busca de ferramenta ou material → 5S, quadro de sombras, kit pronto ("5s").',
+    'Controle, apontamento e reuniões → gestão à vista e gerenciamento diário ("gd").',
+  ];
+
+  const KAIZEN_SCHEMA = {
+    type: "OBJECT",
+    properties: {
+      itens: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            id: { type: "INTEGER" },
+            sem_acao: { type: "BOOLEAN" },
+            ecrs: { type: "STRING", enum: ECRS_LIST },
+            ferramenta: { type: "STRING", enum: Object.keys(Calc.LEAN_TOOLS) },
+            acao: { type: "STRING" },
+            justificativa: { type: "STRING" },
+            confianca: { type: "STRING", enum: CONFIDENCE },
+            falta_observar: { type: "STRING" },
+          },
+          required: ["id", "sem_acao"],
+        },
+      },
+    },
+    required: ["itens"],
+  };
+
+  /**
+   * Elementos que vão para a IA, de todos os produtos (e operadores) do estudo, na ordem da
+   * grade. Ficam de fora os que já têm ação digitada e, sem includeAll, os de "Agrega" e os
+   * sem classificação. Retorna { targets, stats: { sent, withAction, ag, unclassified } }.
+   */
+  function kaizenTargets(study, computed, opts) {
+    const all = !!(opts && opts.includeAll);
+    const r = computed;
+    const els = study.elements || [];
+    const opOf = (row) => (r.multiOperator ? row.operator : "");
+    const withAction = new Set();
+    r.rows.forEach((row, i) => {
+      const el = els[i];
+      if (el && String(el.kaizen || "").trim()) withAction.add(`${row.productKey}|${opOf(row)}|${Calc.elementGroupKey(row, el)}`);
+    });
+    const targets = [];
+    const stats = { sent: 0, withAction: 0, ag: 0, unclassified: 0 };
+    r.products.forEach((p) => {
+      const lists = p.operators ? p.operators.map((o) => ({ op: o.op, label: o.label, list: o.summary.elements })) : [{ op: null, label: "", list: p.summary.elements }];
+      lists.forEach(({ op, label, list }) => {
+        const named = list.filter((g) => !g.unnamed).sort((a, b) => a.firstSeq - b.firstSeq);
+        named.forEach((g, i) => {
+          if (withAction.has(`${p.key}|${op == null ? "" : op}|${g.key}`)) return (stats.withAction += 1);
+          if (!all && g.value !== "NA" && g.value !== "IN") return g.value === "AG" ? (stats.ag += 1) : (stats.unclassified += 1);
+          targets.push({
+            id: targets.length + 1,
+            productKey: p.key,
+            product: r.multiProduct ? p.name || "" : "",
+            kpis: p.kpis,
+            op,
+            opLabel: label,
+            groupKey: g.key,
+            name: g.name,
+            etapa: g.etapa || "",
+            order: i + 1,
+            prev: i > 0 ? named[i - 1].name : "",
+            next: i < named.length - 1 ? named[i + 1].name : "",
+            group: g,
+          });
+        });
+      });
+    });
+    stats.sent = targets.length;
+    return { targets, stats };
+  }
+
+  /** Texto do que foi (e do que não foi) enviado à IA. */
+  function kaizenStatsText(stats) {
+    if (!stats) return "";
+    const out = [];
+    if (stats.withAction) out.push(`${stats.withAction} já com ação (não são substituídos)`);
+    if (stats.ag) out.push(`${stats.ag} "Agrega"`);
+    if (stats.unclassified) out.push(`${stats.unclassified} sem classificação`);
+    const hint = stats.ag || stats.unclassified ? ' — marque "Incluir Agrega e sem classificação" para enviá-los' : "";
+    return out.length ? `Fora do pedido: ${out.join(", ")}${hint}.` : "";
+  }
+
+  /**
+   * Pedido de ações Kaizen. opts: { includeAll } ou { targets } (só esses elementos, ex.: os
+   * que a IA não respondeu na 1ª vez). Retorna { text, count, targets, stats, schema, temperature }.
+   */
+  function buildKaizenPrompt(study, computed, anonymize, opts) {
+    const o = opts || {};
+    const sel = o.targets ? { targets: o.targets, stats: null } : kaizenTargets(study, computed, o);
+    const targets = sel.targets;
+    const an = (t) => (t ? (anonymize ? anonymizeText(t, study) : t) : null);
+    const unit = computed.unit;
+    const conv = (v) => (v == null || !Number.isFinite(v) ? null : Number(Calc.toUnit(v, unit).toFixed(2)));
+    const products = new Map();
+    targets.forEach((t) => {
+      if (products.has(t.productKey)) return;
+      const k = t.kpis || {};
+      const tp = conv(k.standardTime);
+      const takt = conv(k.taktTime);
+      products.set(t.productKey, {
+        produto: an(t.product) || "(produto único)",
+        takt,
+        tempo_padrao: tp,
+        diferenca_tp_menos_takt: tp != null && takt != null ? Number((tp - takt).toFixed(2)) : null,
+        situacao: Calc.STATUS_LABELS[k.status] || null,
+      });
+    });
+    const context = {
+      posto: anonymize ? "[POSTO]" : study.processName || "",
+      cliente: anonymize ? "[CLIENTE]" : study.clientName || "",
+      unidade_tempo: Calc.TIME_UNITS[unit].label,
+      filmagens: computed.filmCount,
+      produtos: Array.from(products.values()),
+    };
+    const items = targets.map((t) => ({
+      id: t.id,
+      produto: an(t.product),
+      etapa: an(t.etapa),
+      operador: t.opLabel || null,
+      ordem: t.order,
+      anterior: an(t.prev),
+      seguinte: an(t.next),
+      elemento: an(t.name),
+      tipo: t.group.type === "A" ? "acíclico" : "cíclico",
+      ocorrencias: t.group.occurrences,
+      tempo_no_ciclo: conv(t.group.cycleTime),
+      percentual_do_ciclo: Number(t.group.sharePct.toFixed(1)),
+      valor: t.group.value ? Calc.VALUES[t.group.value].label : "sem classificação",
+      desperdicio: t.group.waste ? Calc.WASTES[t.group.waste] : null,
+    }));
+    const tools = Object.keys(Calc.LEAN_TOOLS).map((k) => `"${k}" (${Calc.LEAN_TOOLS[k]})`).join(", ");
     const text =
-      `${SYSTEM}\n\nPara cada elemento abaixo (que NÃO agrega valor ou é incidental), sugira UMA ação de melhoria ` +
-      `pelo método ECRS (Eliminar, Combinar, Reorganizar, Simplificar), de baixo custo e aplicável no chão de fábrica ` +
-      `(ex.: layout, kanban, SMED, 5S, poka-yoke, padronização, abastecimento no ponto de uso).\n\n` +
-      `Contexto do posto: ${JSON.stringify(studyContext(study, computed, anonymize))}\nElementos: ${JSON.stringify(items)}\n\n` +
-      `Responda SOMENTE com JSON no formato {"itens":[{"elemento":"...","ecrs":"Eliminar|Combinar|Reorganizar|Simplificar","acao":"até 25 palavras"}]}, ` +
-      `usando exatamente o mesmo texto de "elemento" recebido.`;
-    return { text, count: items.length, names: targets.map((g) => g.name) };
+      `${SYSTEM}\n\nTAREFA: para CADA elemento da lista, sugerir UMA ação de melhoria pelo método ECRS, tentando nesta ordem: ` +
+      `Eliminar → Combinar → Reorganizar → Simplificar (use a primeira que for viável).\n\n` +
+      `REGRAS:\n` +
+      `1. Baixo custo e implementação rápida (dias, não meses), realidade de pequena e média indústria; sem automação nem compra de máquina.\n` +
+      `2. Ação = verbo no infinitivo + o quê + onde (ex.: "Instalar suporte de bandejas ao lado da bancada de enrolar"). Máximo de 25 palavras.\n` +
+      `3. Use a sequência ("anterior" e "seguinte": mesmo produto e operador, na ordem da cronoanálise): se o elemento puder ser feito junto com o vizinho, ` +
+      `sugira Combinar; se a ordem gerar ida e volta ou espera, sugira Reorganizar.\n` +
+      `4. Escolha a ferramenta pelas regras abaixo, entre: ${tools}.\n` +
+      KAIZEN_RULES.map((t) => `   - ${t}\n`).join("") +
+      `5. A justificativa (até 15 palavras) deve citar um dado recebido: tempo no ciclo, % do ciclo, ocorrências ou diferença para o takt.\n` +
+      `6. Não invente medidas, distâncias, quantidades ou custos. Se os dados não bastarem para uma ação concreta, responda ` +
+      `"sem_acao": true e diga em "falta_observar" o que observar no chão de fábrica.\n` +
+      `7. Elemento "Agrega" transforma o produto: nunca sugira eliminá-lo; no máximo Simplificar (método, dispositivo, padronização).\n` +
+      `8. Confiança: "alta" quando o dado e o desperdício apontam claramente a ação; "media" quando depende de confirmar no posto; ` +
+      `"baixa" quando é só uma hipótese.\n` +
+      `9. Priorize a profundidade nos elementos de maior % do ciclo e, quando o tempo padrão passa do takt, nos que ajudam a ficar abaixo dele.\n\n` +
+      `EXEMPLO BOM: {"id":3,"sem_acao":false,"ecrs":"Eliminar","ferramenta":"5s","acao":"Fixar as facas em quadro de sombras na bancada de corte",` +
+      `"justificativa":"Busca de faca: 4,2 s/pç, 12% do ciclo, 9 ocorrências","confianca":"alta"}\n` +
+      `EXEMPLO RUIM (não faça): "Melhorar a organização do posto" (genérica, sem o quê nem onde).\n\n` +
+      `CONTEXTO: ${JSON.stringify(context)}\nELEMENTOS: ${JSON.stringify(items)}\n\n` +
+      `Responda SOMENTE com JSON {"itens":[{"id":1,"sem_acao":false,"ecrs":"Eliminar|Combinar|Reorganizar|Simplificar",` +
+      `"ferramenta":"chave da lista","acao":"...","justificativa":"...","confianca":"alta|media|baixa","falta_observar":""}]}, ` +
+      `com exatamente um item para cada id recebido (${targets.length} no total).`;
+    return { text, count: targets.length, targets, stats: sel.stats, schema: KAIZEN_SCHEMA, temperature: 0.2 };
   }
 
   /** (3) Rascunho de constatações e soluções (aba "Compilação e Soluções"). */
@@ -257,17 +423,48 @@
       .filter(Boolean);
   }
 
-  function parseKaizen(text, originalNames, study, anonymize) {
+  /**
+   * Lê as ações Kaizen pelo id (REV 1.20). Item com "sem_acao" volta como { noAction, why }.
+   * Retorna [{ id, target, name, text, tool, why, confidence, noAction }], na ordem dos ids.
+   */
+  function parseKaizen(text, targets, study) {
     const data = extractJson(text);
-    const list = Array.isArray(data.itens) ? data.itens : [];
-    return matchNames(list, originalNames, study, anonymize)
-      .map(({ it, name }) => {
-        const action = String(it.acao || "").trim();
-        if (!action) return null;
-        const ecrs = ["Eliminar", "Combinar", "Reorganizar", "Simplificar"].find((e) => new RegExp(`^${e}`, "i").test(String(it.ecrs || "")));
-        return { name, text: `${ecrs ? ecrs + ": " : ""}${action}`.slice(0, 240) };
-      })
-      .filter(Boolean);
+    const byId = new Map(targets.map((t) => [t.id, t]));
+    const seen = new Set();
+    const clean = (v, max) => restoreNames(String(v == null ? "" : v).replace(/\s+/g, " "), study).slice(0, max);
+    const out = [];
+    (Array.isArray(data.itens) ? data.itens : []).forEach((it) => {
+      const id = Number(it && it.id);
+      const t = byId.get(id);
+      if (!t || seen.has(id)) return;
+      if (it.sem_acao === true) {
+        seen.add(id);
+        out.push({ id, target: t, name: t.name, noAction: true, text: "", tool: "", confidence: "", why: clean(it.falta_observar || it.justificativa, 200) });
+        return;
+      }
+      const action = clean(it.acao, 220);
+      if (!action) return;
+      seen.add(id);
+      const ecrs = ECRS_LIST.find((e) => new RegExp(`^${e}`, "i").test(String(it.ecrs || "")));
+      const conf = String(it.confianca || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+      out.push({
+        id,
+        target: t,
+        name: t.name,
+        noAction: false,
+        text: `${ecrs ? ecrs + ": " : ""}${action}`.slice(0, 240),
+        tool: Calc.LEAN_TOOLS[it.ferramenta] ? it.ferramenta : "",
+        why: clean(it.justificativa, 200),
+        confidence: CONFIDENCE.includes(conf) ? conf : "",
+      });
+    });
+    return out.sort((a, b) => a.id - b.id);
+  }
+
+  /** Elementos enviados que a IA não respondeu. */
+  function missingTargets(targets, items) {
+    const ids = new Set(items.map((i) => i.id));
+    return targets.filter((t) => !ids.has(t.id));
   }
 
   /**
@@ -360,7 +557,7 @@
   /**
    * Gera o texto. Erro 503 (modelo sobrecarregado, em geral passageiro): tenta de novo sozinho
    * mais 2 vezes (após ~3 s e ~8 s), avisando por options.onRetry(tentativa, total). Os demais
-   * erros (chave, limite 429, filtro) não são repetidos.
+   * erros (chave, limite 429, filtro) não são repetidos. options: { json, schema, temperature }.
    */
   async function generate(settings, prompt, options, fetchImpl) {
     const f = fetchImpl || fetch;
@@ -369,7 +566,11 @@
     if (!settings.model) throw new Error("Escolha um modelo do Gemini");
     const body = {
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: Object.assign({ temperature: 0.3 }, o.json ? { responseMimeType: "application/json" } : {}),
+      generationConfig: Object.assign(
+        { temperature: o.temperature != null ? o.temperature : 0.3 },
+        o.json ? { responseMimeType: "application/json" } : {},
+        o.json && o.schema ? { responseSchema: o.schema } : {}
+      ),
     };
     const delays = o.retryDelays || RETRY_DELAYS_MS;
     const wait = o.sleep || sleep;
@@ -380,6 +581,12 @@
         body: JSON.stringify(body),
       });
       if (res.ok) return responseText(await res.json());
+      // Modelo que não aceita o esquema JSON (REV 1.20): repete uma vez sem o esquema
+      if (res.status === 400 && body.generationConfig.responseSchema) {
+        delete body.generationConfig.responseSchema;
+        attempt -= 1;
+        continue;
+      }
       const err = await httpError(res);
       if (err.status !== 503 || attempt >= delays.length) throw err;
       if (typeof o.onRetry === "function") o.onRetry(attempt + 2, delays.length + 1);
@@ -400,6 +607,9 @@
     parseNames,
     parseClassify,
     parseKaizen,
+    kaizenTargets,
+    kaizenStatsText,
+    missingTargets,
     restoreNames,
     extractJson,
     listModels,

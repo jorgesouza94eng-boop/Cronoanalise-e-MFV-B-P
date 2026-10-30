@@ -24,17 +24,7 @@
   const FILE_PATTERN = /^Plano_.+\.json$/i;
 
   const ECRS = { eliminar: "Eliminar", combinar: "Combinar", reorganizar: "Reorganizar", simplificar: "Simplificar" };
-  const TOOLS = {
-    "5s": "5S",
-    smed: "TRF / SMED",
-    pokayoke: "Qualidade na fonte / Poka-Yoke",
-    padronizado: "Trabalho padronizado",
-    fluxo: "Fluxo contínuo",
-    kanban: "Kanban",
-    gd: "Gerenciamento diário (GD)",
-    layout: "Layout",
-    outra: "Outra",
-  };
+  const TOOLS = Calc.LEAN_TOOLS; // mesma lista da sugestão Kaizen da IA (REV 1.20)
   const STATUS = { "nao-iniciada": "Não iniciada", andamento: "Em andamento", concluida: "Concluída", atrasada: "Atrasada" };
 
   const str = (v) => (v == null ? "" : String(v));
@@ -257,7 +247,11 @@
         kaizen,
       };
       const key = originKey(origin);
-      if (map.has(key)) return;
+      const tool = TOOLS[el.kaizenTool] ? el.kaizenTool : "";
+      if (map.has(key)) {
+        if (!map.get(key).tool && tool) map.get(key).tool = tool;
+        return;
+      }
       const prod = r.products.find((p) => p.key === row.productKey) || r.product;
       const gKey = (row.etapaKey ? `${row.etapaKey}|` : "") + Calc.elementKey(name);
       const g = prod.summary.elements.find((x) => x.key === gKey && (x.op == null || x.op === row.operator));
@@ -270,6 +264,7 @@
         cycleTime: g ? g.cycleTime : null,
         sharePct: g ? g.sharePct : null,
         unit: r.unit,
+        tool, // ferramenta Lean sugerida pela IA (REV 1.20), se houver
         operator: r.multiOperator ? r.operatorLabel(row.operator).split(" ")[0] : "",
       });
     });
@@ -295,6 +290,7 @@
       why,
       ecrs: p.ecrs,
       waste: Calc.WASTES[c.waste] ? c.waste : "",
+      tool: TOOLS[c.tool] ? c.tool : "",
       priority: Number.isInteger(priority) && priority > 0 ? priority : null,
       origin: Object.assign({}, c.origin),
     });

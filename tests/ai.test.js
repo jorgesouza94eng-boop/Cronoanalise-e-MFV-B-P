@@ -54,12 +54,69 @@ test("classificação: desperdício inválido é descartado; Agrega não leva de
   assert.deepEqual(out.map((o) => [o.value, o.waste]), [["AG", ""], ["IN", ""]]);
 });
 
-test("Kaizen: pede ações só para Não agrega/Incidental e lê ECRS", () => {
+test("Kaizen (REV 1.20): por padrão só Não agrega/Incidental; opção inclui Agrega e sem classificação; ação já digitada fica de fora", () => {
   const s = study();
   const p = A.buildKaizenPrompt(s, C.computeStudy(s), true);
-  assert.deepEqual(p.names.sort(), ["Anotar OP", "Transporte de material"]);
-  const out = A.parseKaizen('{"itens":[{"elemento":"Transporte de material","ecrs":"eliminar","acao":"Abastecer no ponto de uso com kanban"}]}', p.names, s, true);
-  assert.deepEqual(out, [{ name: "Transporte de material", text: "Eliminar: Abastecer no ponto de uso com kanban" }]);
+  assert.deepEqual(p.targets.map((t) => [t.id, t.name]), [[1, "Transporte de material"], [2, "Anotar OP"]]);
+  assert.deepEqual(p.stats, { sent: 2, withAction: 0, ag: 1, unclassified: 1 });
+  assert.match(A.kaizenStatsText(p.stats), /1 "Agrega", 1 sem classificação — marque "Incluir Agrega/);
+  assert.equal(p.temperature, 0.2);
+  assert.ok(p.schema.properties.itens.items.properties.ferramenta.enum.includes("smed"));
+  assert.ok(!/Laje Forte/i.test(p.text), "cliente não enviado");
+  const all = A.buildKaizenPrompt(s, C.computeStudy(s), true, { includeAll: true });
+  assert.equal(all.count, 4);
+  assert.ok(all.text.includes('"elemento":"Procurando peças da [CLIENTE]"') && all.text.includes('"valor":"sem classificação"'));
+  s.elements[3].kaizen = "Simplificar: quadro de OP";
+  const p2 = A.buildKaizenPrompt(s, C.computeStudy(s), true, { includeAll: true });
+  assert.equal(p2.count, 3);
+  assert.equal(p2.stats.withAction, 1);
+});
+
+test("Kaizen (REV 1.20): todos os produtos e etapas; mesmo nome em etapas diferentes = elementos distintos; vizinhos e takt no pedido", () => {
+  const s = C.createStudy({ clientName: "Empresa Teste", processName: "Bancada" });
+  s.shiftParams = { shiftTimeMin: 480, plannedStopsMin: 0, dailyDemandPcs: 200, tolerancePct: 0 };
+  s.elements = [
+    ["Pão", "Laminação", "Abrir a massa", "C", "10", "40", "AG"],
+    ["Pão", "Laminação", "Pegar bandeja", "A", "1", "50", "NA"],
+    ["Pão", "Enrolar", "Enrolar", "C", "10", "150", "AG"],
+    ["Pão", "Enrolar", "Pegar bandeja", "A", "1", "200", "NA"],
+    ["Rosca", "", "Pegar bandeja", "A", "1", "220", "NA"],
+    ["Rosca", "", "Modelar", "C", "10", "300", "AG"],
+  ].map(([product, etapa, description, type, quantity, videoTime, value]) => C.createElement({ product, etapa, description, type, quantity, videoTime, value, waste: value === "NA" ? "movimentacao" : "" }));
+  s.filmPieces = { inicio: "10" };
+  const p = A.buildKaizenPrompt(s, C.computeStudy(s), true);
+  assert.deepEqual(
+    p.targets.map((t) => [t.product, t.etapa, t.name, t.prev, t.next]),
+    [
+      ["Pão", "Laminação", "Pegar bandeja", "Abrir a massa", "Enrolar"],
+      ["Pão", "Enrolar", "Pegar bandeja", "Enrolar", ""],
+      ["Rosca", "(sem etapa)", "Pegar bandeja", "", "Modelar"],
+    ]
+  );
+  assert.equal(new Set(p.targets.map((t) => `${t.productKey}|${t.groupKey}`)).size, 3);
+  assert.ok(p.text.includes('"produto":"Rosca"') && p.text.includes('"diferenca_tp_menos_takt"'));
+  assert.ok(p.text.includes("exatamente um item para cada id recebido (3 no total)"));
+});
+
+test("Kaizen (REV 1.20): resposta lida pelo id; sem ação, ferramenta e confiança; ids inválidos/repetidos descartados; faltantes", () => {
+  const s = study();
+  const p = A.buildKaizenPrompt(s, C.computeStudy(s), true);
+  const reply = JSON.stringify({
+    itens: [
+      { id: 1, sem_acao: false, ecrs: "eliminar", ferramenta: "layout", acao: "Levar o material do [CLIENTE] para junto da bancada", justificativa: "Transporte 20 s/pç", confianca: "média" },
+      { id: 1, sem_acao: false, ecrs: "Combinar", acao: "repetido" },
+      { id: 9, sem_acao: false, acao: "id inventado" },
+    ],
+  });
+  const out = A.parseKaizen(reply, p.targets, s);
+  assert.equal(out.length, 1);
+  assert.deepEqual([out[0].name, out[0].text, out[0].tool, out[0].confidence], ["Transporte de material", "Eliminar: Levar o material do Laje Forte para junto da bancada", "layout", "media"]);
+  assert.deepEqual(A.missingTargets(p.targets, out).map((t) => t.name), ["Anotar OP"]);
+  const again = A.buildKaizenPrompt(s, C.computeStudy(s), true, { targets: A.missingTargets(p.targets, out) });
+  assert.equal(again.count, 1);
+  assert.ok(again.text.includes('"id":2'));
+  const none = A.parseKaizen('{"itens":[{"id":2,"sem_acao":true,"falta_observar":"Medir quantas OPs por turno","ferramenta":"inexistente"}]}', p.targets, s);
+  assert.deepEqual([none[0].noAction, none[0].why, none[0].tool], [true, "Medir quantas OPs por turno", ""]);
 });
 
 test("constatações: pedido com números da compilação, anotações anonimizadas e retorno com os nomes reais", () => {
@@ -130,6 +187,18 @@ test("API: generateContent com JSON e tratamento de erros", async () => {
   const body = JSON.parse(ok.calls[0].init.body);
   assert.equal(body.generationConfig.responseMimeType, "application/json");
   assert.match(ok.calls[0].url, /models\/gemini-x-flash:generateContent$/);
+
+  // REV 1.20: esquema JSON e temperatura; modelo que recusa o esquema → repete sem ele
+  const schema = { type: "OBJECT", properties: {} };
+  let first = true;
+  const noSchema = fakeFetch((url, init) =>
+    JSON.parse(init.body).generationConfig.responseSchema && first ? ((first = false), { status: 400, body: { error: { message: "schema" } } }) : { status: 200, body: { candidates: [{ content: { parts: [{ text: "{}" }] } }] } }
+  );
+  assert.equal(await A.generate({ apiKey: "K", model: "m" }, "x", { json: true, schema, temperature: 0.2 }, noSchema), "{}");
+  assert.equal(noSchema.calls.length, 2);
+  const g1 = JSON.parse(noSchema.calls[0].init.body).generationConfig;
+  assert.deepEqual([g1.temperature, g1.responseSchema], [0.2, schema]);
+  assert.equal(JSON.parse(noSchema.calls[1].init.body).generationConfig.responseSchema, undefined);
 
   const bad = fakeFetch(() => ({ status: 400, body: { error: { message: "API key not valid" } } }));
   await assert.rejects(A.generate({ apiKey: "K", model: "m" }, "x", {}, bad), /Chave de API inválida/);

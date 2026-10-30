@@ -43,7 +43,7 @@ const check = (cond, msg) => { console.log((cond ? "  OK  " : "  FALHA ") + msg)
         { elemento: "Anotar OP", valor: "IN", desperdicio: "processamento", justificativa: "Controle necessário" },
       ] });
     } else if (prompt.includes('"ecrs"')) {
-      text = JSON.stringify({ itens: [{ elemento: "Procurando peças do [CLIENTE]", ecrs: "Eliminar", acao: "Endereçar peças com 5S" }] });
+      text = JSON.stringify({ itens: [{ id: 1, sem_acao: false, ecrs: "Eliminar", ferramenta: "5s", acao: "Endereçar peças com 5S", justificativa: "Busca no ciclo", confianca: "alta" }] });
     } else {
       text = "PRINCIPAIS CONSTATAÇÕES:\n• Movimentação domina o ciclo no [CLIENTE].\nSOLUÇÕES PROPOSTAS:\n1. 5S e endereçamento.";
     }

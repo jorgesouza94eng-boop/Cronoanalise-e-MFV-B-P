@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.20** | 30/10/2026 | IA: sugestão Kaizen para todos os produtos e etapas, com pedido mais assertivo |
 | **REV 1.19** | 28/10/2026 | Plano de Ação 5W2H por cliente, com as ações Kaizen da cronoanálise |
 | **REV 1.18** | 28/10/2026 | Classificação copiada para as linhas do mesmo elemento |
 | **REV 1.17** | 22/10/2026 | IA: nova tentativa automática quando o Gemini está sobrecarregado (erro 503) |
@@ -24,6 +25,35 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.20 — 30/10/2026
+
+Decisão do consultor: **A + B1 + prompt novo** para o botão "Sugerir ações Kaizen (ECRS)" do assistente de IA.
+
+**A — correções (antes, alguns elementos ficavam sem sugestão):**
+- Vão para a IA os elementos de **todos os produtos, etapas e operadores** do estudo. Antes, ia só o produto (e o operador) selecionado no Resumo.
+- Cada elemento leva um **número (id)** e a resposta volta pelo id. Antes, a ligação era pelo nome, e o mesmo nome em etapas ou produtos diferentes recebia uma ação só, na 1ª linha.
+- A ação é gravada no **elemento certo** (mesmo produto, operador, etapa e nome), na 1ª linha dele. Ação já digitada continua não sendo substituída.
+- Se a IA deixar elementos sem resposta, o app **pede de novo só esses** (1 vez). Se ainda faltar algum, a mensagem lista quais.
+- A mensagem informa o que ficou fora do pedido: elementos já com ação, "Agrega" e sem classificação.
+
+**B1 — caixa "Kaizen: incluir também os elementos Agrega e os sem classificação"** (desmarcada por padrão). Sem ela, vão só os Não agrega e Incidental, como antes.
+
+**Prompt novo (mais assertivo):**
+- Contexto completo: produto, etapa, operador, posição na sequência, elemento anterior e seguinte, tipo, ocorrências, tempo no ciclo, % do ciclo, valor e desperdício. Por produto: takt, tempo padrão, diferença TP − takt e situação.
+- Regras: ordem ECRS (Eliminar → Combinar → Reorganizar → Simplificar); baixo custo e sem automação; ação = verbo + o quê + onde (até 25 palavras); uso dos vizinhos para Combinar e Reorganizar; tabela desperdício → ferramenta (práticas usuais de Lean, não regra oficial do B+P); justificativa citando dado do estudo; proibido inventar medidas e custos; Agrega nunca é eliminado.
+- Exemplo de ação boa e de ação ruim.
+- Resposta com ferramenta Lean (lista do Plano 5W2H), justificativa, confiança (alta / média / baixa) e **"sem ação"** com o que falta observar, em vez de ação inventada.
+- Esquema JSON obrigatório do Gemini (`responseSchema`) e temperatura 0,2. Modelo que não aceita o esquema: o app repete o pedido sem ele.
+
+**Na tela:** cada sugestão mostra produto • etapa • operador, a ferramenta, a confiança e a justificativa. Confiança baixa vem desmarcada; "sem ação" não é aplicável e mostra o que observar.
+
+**Plano 5W2H:** a ferramenta sugerida fica guardada na linha (`kaizenTool`, campo opcional do estudo; sai junto quando a ação é apagada) e vai para a coluna Ferramenta Lean ao usar "+ Ações da cronoanálise".
+
+- Nenhum cálculo muda. A anonimização continua ligada por padrão e a IA continua só sugerindo. Service worker v28.
+- Testes: `tests/ai.test.js` (Kaizen REV 1.20 e esquema), `tests/plano-rev119.test.js` (P9) e `tests/e2e.rev120.js`.
 
 ---
 

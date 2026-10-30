@@ -53,7 +53,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - HTML/CSS/JS puro, **sem build e sem servidor**. Funciona por `file://`, por servidor local e pelo GitHub Pages.
 - Scripts clássicos no padrão UMD (`window.LeanX` no navegador e `module.exports` nos testes do Node). **Não usar módulos ES** (quebram no `file://`).
 - Armazenamento local-first: IndexedDB (`LeanChronoDB`) e pasta do OneDrive pela File System Access API, com debounce de 3 s e proteção contra conflito (revisão + cópia `_conflito_`).
-- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6), `Yamazumi_*.json` (grupo de estudos, versão 1) e `Plano_*.json` (plano de ação 5W2H, versão 1) — REV 1.19. Itens arquivados ficam na subpasta `_Arquivo` (fora das listas).
+- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6), `Yamazumi_*.json` (grupo de estudos, versão 1) e `Plano_*.json` (plano de ação 5W2H, versão 1) — REV 1.20. Elemento do estudo tem `kaizenTool` opcional (REV 1.20). Itens arquivados ficam na subpasta `_Arquivo` (fora das listas).
 - A revisão aparece no cabeçalho das 4 páginas (`.app-rev`); um teste confere com a versão do `package.json`.
 
 | Arquivo | Função |
@@ -149,3 +149,10 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 - Status calculado: % = 100 → Concluída; fim < hoje → Atrasada; % > 0 ou início ≤ hoje → Em andamento; senão Não iniciada. % fora de 0–100 não conclui.
 - Σ Quanto é só referência no payback do MFV: **não é somado** ao investimento (decisão do consultor).
 - Modelo 5W2H do B+P: só preenchido (cabeçalho B3/D3/G3/J3, B4/D4/G4; ações nas linhas 8–24, 17 por arquivo); os campos extras vão na aba "Plano (app)".
+
+## Regra implementada na REV 1.20: sugestão Kaizen da IA
+
+- Pedido com todos os produtos, etapas e operadores; resposta pelo id; ação gravada no elemento certo (produto, operador, etapa e nome), só se nenhuma linha dele tiver ação. Faltantes: 1 novo pedido.
+- Por padrão só NA/IN; a caixa "incluir Agrega e sem classificação" amplia. Agrega nunca é eliminado.
+- Tabela desperdício → ferramenta do prompt = práticas usuais de Lean (não é regra oficial do B+P; conferir na base se o consultor pedir).
+- "sem_acao" quando faltam dados (não inventar); confiança baixa vem desmarcada. Ferramenta sugerida → `kaizenTool` → Ferramenta Lean do Plano 5W2H.

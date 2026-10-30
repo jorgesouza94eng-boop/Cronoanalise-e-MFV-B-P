@@ -217,6 +217,28 @@
     return String(description || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
   }
 
+  /**
+   * Chave do elemento no resumo (mesma etapa + mesmo nome). Com etapas (REV 1.15), o mesmo
+   * nome em etapas diferentes é outro elemento. row = linha calculada; el = elemento do estudo.
+   */
+  function elementGroupKey(row, el) {
+    const name = String(el.description || "").trim().replace(/\s+/g, " ");
+    return (row.etapaKey ? `${row.etapaKey}|` : "") + (name ? elementKey(name) : `#${el.id}`);
+  }
+
+  /** Ferramentas Lean (REV 1.19: Plano 5W2H; REV 1.20: sugestão Kaizen da IA). */
+  const LEAN_TOOLS = {
+    "5s": "5S",
+    smed: "TRF / SMED",
+    pokayoke: "Qualidade na fonte / Poka-Yoke",
+    padronizado: "Trabalho padronizado",
+    fluxo: "Fluxo contínuo",
+    kanban: "Kanban",
+    gd: "Gerenciamento diário (GD)",
+    layout: "Layout",
+    outra: "Outra",
+  };
+
   /* ==========================================================================
      CÁLCULO DO ESTUDO (LEITURA CONTÍNUA + RESUMO POR ELEMENTO + INDICADORES)
      ========================================================================== */
@@ -762,7 +784,7 @@
       const el = elements[i];
       const name = String(el.description || "").trim().replace(/\s+/g, " ");
       // Com etapas (REV 1.15), o mesmo nome em etapas diferentes é outro elemento: TP do produto = Σ etapas
-      const key = (row.etapaKey ? `${row.etapaKey}|` : "") + (name ? elementKey(name) : `#${el.id}`);
+      const key = elementGroupKey(row, el);
       let g = groups.get(key);
       if (!g) {
         g = {
@@ -1037,6 +1059,7 @@
         value: "",
         waste: "",
         kaizen: "",
+        kaizenTool: "", // REV 1.20: ferramenta Lean sugerida com a ação (vai para o Plano 5W2H)
         newVideo: false,
         product: "",
         etapa: "", // REV 1.15: etapa do processo (opcional)
@@ -1163,6 +1186,7 @@
             value: VALUES[e.value] ? e.value : "",
             waste: WASTES[e.waste] ? e.waste : "",
             kaizen: str(e.kaizen),
+            kaizenTool: LEAN_TOOLS[e.kaizenTool] ? e.kaizenTool : "",
             newVideo: e.newVideo === true,
             product: str(e.product),
             etapa: str(e.etapa),
@@ -1542,6 +1566,8 @@
   return {
     SCHEMA_ID,
     SCHEMA_VERSION,
+    LEAN_TOOLS,
+    elementGroupKey,
     PACE_MIN,
     PACE_MAX,
     STATUS_LABELS,

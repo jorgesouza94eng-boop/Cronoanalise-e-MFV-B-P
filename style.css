@@ -1551,3 +1551,10 @@ body.no-doc .app-workspace, body.no-doc .client-context { display: none !importa
 .pl-params input[type="text"] { font-family: inherit; }
 #crono-dialog .form-hint { margin: 12px 20px 4px; }
 #crono-dialog .pl-candidates { margin: 4px 20px 8px; max-height: 50vh; }
+
+/* Sugestão Kaizen da IA (REV 1.20) */
+.ai-kaizen-opt { padding: 0 20px; margin: 8px 0 0; }
+.ai-item-where { font-weight: 400; color: var(--text-muted); font-size: 12px; }
+.ai-item-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.ai-item-meta.ai-conf-alta { color: var(--status-ok-text); }
+.ai-item-meta.ai-conf-baixa { color: var(--status-warn-text); }

@@ -72,7 +72,7 @@ function installFakeFolder() {
   // ---- Cronoanálise sem pasta: Arquivar baixa o .json e tira do navegador
   await p.goto(base + "index.html");
   await p.waitForSelector("#study-dialog[open]");
-  check(/^REV 1\.1[6-9]$/.test(await txt(".app-header .app-rev")), "rótulo da revisão REV 1.16");
+  check(/^REV 1\.(1[6-9]|[2-9]\d)$/.test(await txt(".app-header .app-rev")), "rótulo da revisão REV 1.16");
   for (const name of ["Corte", "Solda"]) {
     const s = C.createStudy({ clientName: "Arquivo Teste", processName: name });
     await p.setInputFiles("#input-import-json", { name: `${name}.json`, mimeType: "application/json", buffer: Buffer.from(C.serializeStudy(s)) });

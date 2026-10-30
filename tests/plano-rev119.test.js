@@ -173,3 +173,16 @@ test("P8: preenche a aba 5W2H (17 ações por arquivo) e acrescenta a aba do app
   assert.match(s1, /Ação 19/);
   assert.match(T.exportPlanoFileName(d, "modelo.xlsx", 1, 2), /^5W2H_Empresa_Teste_\d{4}-\d{2}-\d{2}_parte2\.xlsx$/);
 });
+
+test("P9 (REV 1.20): ferramenta sugerida pela IA (kaizenTool) vai para a ação do plano; chave inválida é descartada", () => {
+  const s = estudo();
+  s.elements[3].kaizenTool = "5s"; // 2ª linha do mesmo elemento: vale para a ação
+  const back = C.normalizeStudy(JSON.parse(C.serializeStudy(s))).study;
+  assert.equal(back.elements[3].kaizenTool, "5s");
+  assert.equal(C.normalizeStudy(Object.assign(JSON.parse(C.serializeStudy(s)), {})).study.elements[0].kaizenTool, "");
+  const c = P.studyCandidates(back).find((x) => x.origin.element === "Buscar bandeja");
+  assert.equal(P.actionFromCandidate(c, 1).tool, "5s");
+  const bad = JSON.parse(C.serializeStudy(s));
+  bad.elements[3].kaizenTool = "robo";
+  assert.equal(C.normalizeStudy(bad).study.elements[3].kaizenTool, "");
+});

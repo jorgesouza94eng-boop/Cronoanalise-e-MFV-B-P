@@ -46,7 +46,7 @@ function bancada() {
   // ---- Cronoanálise
   await p.goto(base + "index.html");
   await p.waitForSelector("#study-dialog[open]");
-  check(/^REV 1\.1[4-9]$/.test(await txt(".app-header .app-rev")), "rótulo da revisão (REV 1.14 ou posterior)");
+  check(/^REV 1\.(1[4-9]|[2-9]\d)$/.test(await txt(".app-header .app-rev")), "rótulo da revisão (REV 1.14 ou posterior)");
   await p.setInputFiles("#input-import-json", { name: "e.json", mimeType: "application/json", buffer: Buffer.from(C.serializeStudy(bancada())) });
   await p.waitForFunction(() => window.LeanApp && LeanApp.state.study && LeanApp.state.study.processName === "Bancada");
   const tags = await p.$$eval("#chrono-tbody .op-tag", (t) => t.map((x) => (x.hidden ? "" : x.textContent)));

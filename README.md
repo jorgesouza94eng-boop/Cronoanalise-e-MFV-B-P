@@ -408,7 +408,7 @@ O botão **✨ IA** na barra da grade abre o assistente. Ele precisa de **intern
 1. Na primeira vez: cole a chave → **Carregar modelos** → escolha o modelo (o app sugere um "flash") → **Salvar configuração**.
 2. Use os botões:
    - **Classificar valor e desperdício:** para os elementos ainda sem classificação;
-   - **Sugerir ações Kaizen (ECRS):** para os elementos que não agregam ou são incidentais;
+   - **Sugerir ações Kaizen (ECRS):** para os elementos Não agrega e Incidental de **todos os produtos, etapas e operadores** (REV 1.20). A caixa "Kaizen: incluir também os elementos Agrega e os sem classificação" amplia o pedido. Cada sugestão traz ECRS, ação (verbo + o quê + onde), ferramenta Lean, justificativa com dado do estudo e confiança (a baixa vem desmarcada). Quando faltam dados, a IA responde "sem ação" e diz o que observar. Elementos que a IA não respondeu são pedidos de novo uma vez; ação já digitada não é substituída. A ferramenta vai para o Plano 5W2H;
    - **Redigir constatações e soluções:** um rascunho editável para a Compilação;
    - **Padronizar nomes dos elementos:** junta variações do mesmo elemento ("anotar a OP" → "Anotar OP");
    - **Pergunte sobre este estudo:** perguntas livres, respondidas só com os dados do estudo.
@@ -543,8 +543,8 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 208 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
-npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.19 (Yamazumi, Plano de Ação…) — requer o servidor local
+npm test             # 211 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
+npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.20 (Yamazumi, Plano de Ação, Kaizen da IA…) — requer o servidor local
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

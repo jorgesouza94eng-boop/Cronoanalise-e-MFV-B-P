@@ -345,6 +345,8 @@
       const el = findElement(id);
       if (!el || el[field] === value) return;
       el[field] = value;
+      // Ação apagada: a ferramenta sugerida pela IA (REV 1.20) sai junto
+      if (field === "kaizen" && !String(value).trim()) el.kaizenTool = "";
       // A descrição define o agrupamento do resumo; só o Kaizen não altera cálculos.
       markChanged({ recompute: field !== "kaizen" });
     },
@@ -1188,7 +1190,7 @@
   // Exposto para diagnóstico e testes automatizados.
   /**
    * Aplica sugestões aprovadas da IA. Só preenche campos ainda vazios do estudo.
-   * classify: [{ name, value, waste }] | kaizen: [{ name, text }] | rename: [{ to, from: [] }] |
+   * classify: [{ name, value, waste }] | kaizen: [{ name, text, tool, target }] | rename: [{ to, from: [] }] |
    * notes: { text, mode: "replace"|"append" }
    */
   function applyAi(s) {
@@ -1205,12 +1207,22 @@
         }
       });
     });
+    // Kaizen (REV 1.20): no elemento certo (produto, operador, etapa e nome); uma ação por
+    // elemento, na 1ª linha dele, se nenhuma linha já tiver ação. Sem alvo: só pelo nome.
+    const calcRows = s.kaizen && s.kaizen.length ? Calc.computeStudy(state.study).rows : [];
     (s.kaizen || []).forEach((k) => {
+      const t = k.target;
       const key = Calc.elementKey(k.name);
-      const rows = els.filter((el) => Calc.elementKey(el.description) === key);
-      // Uma ação por elemento: na 1ª linha com o campo vazio (se nenhuma já tiver ação)
+      const rows = els.filter((el, i) => {
+        const row = calcRows[i];
+        if (!t) return Calc.elementKey(el.description) === key;
+        if (!row || row.productKey !== t.productKey) return false;
+        if (t.op != null && row.operator !== t.op) return false;
+        return Calc.elementGroupKey(row, el) === t.groupKey;
+      });
       if (rows.length && !rows.some((el) => el.kaizen)) {
         rows[0].kaizen = k.text;
+        rows[0].kaizenTool = Calc.LEAN_TOOLS[k.tool] ? k.tool : "";
         changed += 1;
       }
     });
