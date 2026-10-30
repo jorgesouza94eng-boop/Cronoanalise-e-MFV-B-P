@@ -500,7 +500,7 @@
               Calc.VALUES[c.value] ? Calc.VALUES[c.value].label : "",
               Calc.WASTES[c.waste] || "",
             ].filter(Boolean).join(" • ");
-            return el("li", {}, [
+            const li = el("li", {}, [
               el("label", { className: already ? "is-disabled" : "" }, [
                 cb,
                 el("span", { className: "pl-cand-main" }, [
@@ -510,15 +510,41 @@
                 ]),
               ]),
             ]);
+            // Filtros (REV 1.23): valor, tipo ECRS, produto e "já no plano"
+            Object.assign(li.dataset, { value: Calc.VALUES[c.value] ? c.value : "-", ecrs: p.ecrs || "-", product: Calc.elementKey(c.origin.product), done: already ? "1" : "" });
+            return li;
           })
         : [el("li", { className: "empty", textContent: 'Nenhuma ação Kaizen nos estudos deste cliente. Digite as ações na coluna "Ação sugerida / Kaizen (ECRS)" da cronoanálise (ou use "Sugerir ações Kaizen (ECRS)" da IA) e volte aqui.' })])
     );
-    $("btn-crono-add").disabled = !list.some((c) => !inPlan.has(c.key));
+    const sel = $("cf-product");
+    const keep = sel.value;
+    const products = new Map();
+    list.forEach((c) => products.set(Calc.elementKey(c.origin.product), c.origin.product || "(sem produto)"));
+    sel.replaceChildren(el("option", { value: "", textContent: "Produto: todos" }), ...Array.from(products, ([k, n]) => el("option", { value: k, textContent: n })));
+    sel.value = products.has(keep) ? keep : "";
+    sel.hidden = products.size < 2;
+    filterCrono();
     $("crono-dialog").showModal();
   }
 
+  /** Mostra só as ações que passam nos filtros (a ordem do Pareto é mantida). */
+  function filterCrono() {
+    const f = { value: $("cf-value").value, ecrs: $("cf-ecrs").value, product: $("cf-product").value, hideDone: $("cf-hide-done").checked };
+    const items = Array.from($("crono-list").querySelectorAll("li[data-ecrs]"));
+    let shown = 0;
+    items.forEach((li) => {
+      const d = li.dataset;
+      const ok = (!f.value || d.value === f.value) && (!f.ecrs || d.ecrs === f.ecrs) && (!f.product || d.product === f.product) && !(f.hideDone && d.done);
+      li.hidden = !ok;
+      if (ok) shown += 1;
+    });
+    $("cf-count").textContent = items.length ? `${shown} de ${items.length} ação(ões)` : "";
+    $("btn-crono-add").disabled = !items.some((li) => !li.hidden && !li.dataset.done);
+  }
+
   function addFromCrono() {
-    const keys = new Set(Array.from($("crono-list").querySelectorAll("input:checked")).map((i) => i.value));
+    // Só as marcadas que estão visíveis (os filtros escondem as demais)
+    const keys = new Set(Array.from($("crono-list").querySelectorAll("li:not([hidden]) input:checked")).map((i) => i.value));
     const chosen = clientCandidates().filter((c) => keys.has(c.key));
     if (!chosen.length) return toast("Marque ao menos uma ação.", "warn");
     let prio = state.doc.actions.reduce((m, a) => Math.max(m, a.priority || 0), 0);
@@ -681,7 +707,8 @@
       await loadStudies();
       showCronoDialog();
     });
-    $("btn-crono-all").addEventListener("click", () => $("crono-list").querySelectorAll("input:not(:disabled)").forEach((c) => (c.checked = true)));
+    $("btn-crono-all").addEventListener("click", () => $("crono-list").querySelectorAll("li:not([hidden]) input:not(:disabled)").forEach((c) => (c.checked = true)));
+    ["cf-value", "cf-ecrs", "cf-product", "cf-hide-done"].forEach((id) => $(id).addEventListener("change", filterCrono));
     $("btn-crono-add").addEventListener("click", addFromCrono);
     $("btn-close-crono").addEventListener("click", () => $("crono-dialog").close());
     $("flt-status").addEventListener("change", (e) => {

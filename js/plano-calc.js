@@ -216,8 +216,11 @@
   /** "Reorganizar: Aplicar 5S…" → { ecrs: "reorganizar", text: "Aplicar 5S…" } (sem prefixo: ecrs ""). */
   function parseEcrs(text) {
     const s = str(text).trim();
-    const m = s.match(/^(eliminar|combinar|reorganizar|simplificar)\s*[:\-–—]\s*(.*)$/i);
-    return m ? { ecrs: m[1].toLowerCase(), text: m[2].trim() } : { ecrs: "", text: s };
+    // REV 1.23: prefixo com mais de uma palavra ("Manter/Simplificar: …") vale pela palavra ECRS
+    const m = s.match(/^([A-Za-zÀ-ÿ]+(?:\s*\/\s*[A-Za-zÀ-ÿ]+)*)\s*[:\-–—]\s*(.*)$/);
+    if (!m) return { ecrs: "", text: s };
+    const hit = m[1].split("/").map((w) => w.trim().toLowerCase()).find((w) => ECRS[w]);
+    return hit ? { ecrs: hit, text: m[2].trim() } : { ecrs: "", text: s };
   }
 
   const originKey = (o) =>

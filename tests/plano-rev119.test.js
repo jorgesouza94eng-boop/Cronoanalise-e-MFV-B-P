@@ -186,3 +186,10 @@ test("P9 (REV 1.20): ferramenta sugerida pela IA (kaizenTool) vai para a ação 
   bad.elements[3].kaizenTool = "robo";
   assert.equal(C.normalizeStudy(bad).study.elements[3].kaizenTool, "");
 });
+
+test("P10 (REV 1.23): ECRS reconhecido em prefixos combinados (\"Manter/Simplificar:\"); sem palavra ECRS, o texto fica inteiro", () => {
+  assert.deepEqual(P.parseEcrs("Manter/Simplificar: Padronizar o método de dobra"), { ecrs: "simplificar", text: "Padronizar o método de dobra" });
+  assert.deepEqual(P.parseEcrs("Manter / Simplificar – usar gabarito"), { ecrs: "simplificar", text: "usar gabarito" });
+  assert.deepEqual(P.parseEcrs("Obs: conferir com o supervisor"), { ecrs: "", text: "Obs: conferir com o supervisor" });
+  assert.deepEqual(P.parseEcrs("Combinar: enrolar e depositar"), { ecrs: "combinar", text: "enrolar e depositar" });
+});

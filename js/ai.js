@@ -268,6 +268,8 @@
       `6. Não invente medidas, distâncias, quantidades ou custos. Se os dados não bastarem para uma ação concreta, responda ` +
       `"sem_acao": true e diga em "falta_observar" o que observar no chão de fábrica.\n` +
       `7. Elemento "Agrega" transforma o produto: nunca sugira eliminá-lo; no máximo Simplificar (método, dispositivo, padronização).\n` +
+      `   O campo "ecrs" é sempre UMA das quatro palavras (Eliminar, Combinar, Reorganizar, Simplificar); não use "Manter", ` +
+      `combinações como "Manter/Simplificar" nem repita o ECRS no início do texto da ação.\n` +
       `8. Confiança: "alta" quando o dado e o desperdício apontam claramente a ação; "media" quando depende de confirmar no posto; ` +
       `"baixa" quando é só uma hipótese.\n` +
       `9. Priorize a profundidade nos elementos de maior % do ciclo e, quando o tempo padrão passa do takt, nos que ajudam a ficar abaixo dele.\n\n` +

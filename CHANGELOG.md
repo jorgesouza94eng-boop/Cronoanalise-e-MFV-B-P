@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.23** | 30/10/2026 | Filtros nas ações da cronoanálise do Plano 5W2H e ECRS em "Manter/Simplificar" |
 | **REV 1.22** | 30/10/2026 | Peças = 0 para filmagem que continua outra (sem peças novas) |
 | **REV 1.21** | 30/10/2026 | Minimizar o assistente de IA enquanto ele trabalha |
 | **REV 1.20** | 30/10/2026 | IA: sugestão Kaizen para todos os produtos e etapas, com pedido mais assertivo |
@@ -27,6 +28,18 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.23 — 30/10/2026
+
+Decisão do consultor: filtros na janela **"Ações da cronoanálise"** do Plano de Ação 5W2H.
+
+- **Filtros:** Valor (Não agrega, Incidental, Agrega, Sem classificação), **tipo ECRS** (Eliminar, Combinar, Reorganizar, Simplificar, Sem ECRS), **Produto** (aparece com 2 ou mais produtos) e **"Ocultar as que já estão no plano"** (marcada por padrão). Os filtros se combinam, a ordem do Pareto (% do ciclo) é mantida e um contador mostra "12 de 34 ação(ões)". Os filtros ficam como estavam ao reabrir a janela.
+- **"Marcar todas"** marca só as ações visíveis. **"Incluir selecionadas"** inclui só as marcadas visíveis: uma ação marcada e depois escondida pelo filtro fica de fora.
+- **ECRS em prefixos combinados:** textos como "Manter/Simplificar: …" passam a ser reconhecidos como **Simplificar** (antes ficavam sem ECRS). Prefixo sem palavra ECRS (ex.: "Obs: …") mantém o texto inteiro.
+- **Prompt da IA (Kaizen):** o campo ECRS é sempre uma das quatro palavras; "Manter" e combinações ficam proibidas.
+- Nenhum cálculo muda. Service worker v31. Testes: `tests/plano-rev119.test.js` (P10) e `tests/e2e.rev123.js`.
 
 ---
 

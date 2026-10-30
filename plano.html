@@ -18,7 +18,7 @@
         <h1>Plano de Ação — 5W2H</h1>
         <nav class="app-nav" aria-label="Módulos">
           <a href="index.html">Cronoanálise</a><a href="mfv.html">MFV</a><a href="yamazumi.html">Yamazumi</a><a href="plano.html" aria-current="page">Plano de Ação</a>
-        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.22</span></nav>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.23</span></nav>
       </div>
     </div>
 
@@ -195,9 +195,20 @@
       <button type="button" class="btn-icon-close" id="btn-close-crono" aria-label="Fechar">&times;</button>
     </div>
     <p class="form-hint" id="crono-hint">Ações digitadas na coluna "Ação sugerida / Kaizen (ECRS)" dos estudos deste cliente, da maior para a menor parcela do ciclo (Pareto). Marque as que entram no plano: Quem, Quando, Quanto e % ficam para você preencher.</p>
+    <div class="pl-cand-filters" role="group" aria-label="Filtros das ações">
+      <select id="cf-value" aria-label="Filtrar por valor">
+        <option value="">Valor: todos</option><option value="NA">Não agrega</option><option value="IN">Incidental</option><option value="AG">Agrega</option><option value="-">Sem classificação</option>
+      </select>
+      <select id="cf-ecrs" aria-label="Filtrar por tipo ECRS">
+        <option value="">ECRS: todos</option><option value="eliminar">Eliminar</option><option value="combinar">Combinar</option><option value="reorganizar">Reorganizar</option><option value="simplificar">Simplificar</option><option value="-">Sem ECRS</option>
+      </select>
+      <select id="cf-product" aria-label="Filtrar por produto"><option value="">Produto: todos</option></select>
+      <label class="ai-check"><input type="checkbox" id="cf-hide-done" checked> Ocultar as que já estão no plano</label>
+      <span id="cf-count" class="study-source"></span>
+    </div>
     <ul class="study-check-list pl-candidates" id="crono-list"></ul>
     <div class="dialog-footer">
-      <button type="button" id="btn-crono-all" class="btn-outline">Marcar todas</button>
+      <button type="button" id="btn-crono-all" class="btn-outline" title="Marca só as ações visíveis (com os filtros aplicados)">Marcar todas</button>
       <button type="button" id="btn-crono-add" class="btn-primary">Incluir selecionadas</button>
     </div>
   </dialog>

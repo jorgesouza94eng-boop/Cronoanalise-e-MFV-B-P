@@ -397,6 +397,7 @@ Um plano por cliente, no formato do modelo 5W2H do B+P.
 
 1. Em **Planos**, informe a empresa (a mesma grafia dos estudos é sugerida) e crie o plano. O objetivo vem preenchido com "Aumentar a produtividade (pç/HH) em 20%"; confira meta, indicador, datas e responsáveis.
 2. **"+ Ações da cronoanálise":** traz as ações digitadas na coluna "Ação sugerida / Kaizen (ECRS)" dos estudos do cliente, da maior para a menor parcela do ciclo. Marque as que entram. O app preenche O que, Como, Onde, Por que, tipo ECRS, desperdício e prioridade; **Quem, Quando, Quanto e % completo são seus**.
+   Na janela, filtre por **Valor**, **tipo ECRS** e **Produto**; as ações já incluídas ficam ocultas por padrão, e "Marcar todas" marca só as visíveis (REV 1.23).
 3. **"+ Ação manual"** para ações que não vêm da cronoanálise (GD, 5S, layout…).
 4. O **status** sai do % e das datas (Concluída, Atrasada, Em andamento, Não iniciada). ⚠ na origem = a ação mudou na cronoanálise; confira o texto.
 5. **Exportar Excel:** com o modelo 5W2H carregado, preenche a aba 5W2H (17 ações por arquivo) e acrescenta a aba "Plano (app)". Sem modelo, gera um Excel simples.
@@ -544,8 +545,8 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 212 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
-npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.22 (Yamazumi, Plano de Ação, Kaizen da IA, IA minimizada, filmagem de continuação…) — requer o servidor local
+npm test             # 213 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
+npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.23 (Yamazumi, Plano de Ação, Kaizen da IA, IA minimizada, filmagem de continuação, filtros do plano…) — requer o servidor local
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:
