@@ -18,7 +18,7 @@
         <h1>MFV — Estado presente</h1>
         <nav class="app-nav" aria-label="Módulos">
           <a href="index.html">Cronoanálise</a><a href="mfv.html" aria-current="page">MFV</a><a href="yamazumi.html">Yamazumi</a><a href="plano.html">Plano de Ação</a>
-        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.23</span></nav>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.24</span></nav>
       </div>
     </div>
 
@@ -233,10 +233,10 @@
       <div class="shift-params-card">
         <div class="card-header-mini">Atravessamento (lead time) — estoques</div>
         <table class="mfv-table inventory-table">
-          <thead><tr><th>Estoque</th><th>Quantidade (<span class="product-unit-label">pç</span>)</th><th>Dias</th><th></th></tr></thead>
+          <thead><tr><th>Estoque</th><th>Quantidade (<span class="product-unit-label">pç</span>)</th><th>Dias</th><th title="Onde o estoque aparece no fluxograma">Posição no fluxo</th><th></th></tr></thead>
           <tbody id="inventory-tbody"></tbody>
           <tfoot>
-            <tr><td class="tfoot-label">Tempo de atravessamento:</td><td></td><td class="mono cell-total" id="lead-time">--</td><td></td></tr>
+            <tr><td class="tfoot-label">Tempo de atravessamento:</td><td></td><td class="mono cell-total" id="lead-time">--</td><td></td><td></td></tr>
           </tfoot>
         </table>
         <button type="button" id="btn-add-inventory" class="btn-outline btn-small">+ Estoque</button>
@@ -252,6 +252,23 @@
           <button type="button" id="btn-export-mfv" class="btn-outline">Exportar JSON</button>
         </div>
       </div>
+    </section>
+
+    <!-- FLUXOGRAMA DO PROCESSO — ESTADO PRESENTE (REV 1.24) -->
+    <section class="timesheet-section summary-section flow-section" id="flow-section" aria-label="Fluxograma do processo — estado presente">
+      <div class="section-toolbar">
+        <div class="toolbar-left">
+          <h2>Fluxograma do processo — Estado presente</h2>
+          <span class="keyboard-hint">Desenhado a partir das etapas do GBO e dos estoques (posição no fluxo) • atualiza sozinho</span>
+        </div>
+        <div class="toolbar-actions">
+          <label class="ai-check"><input type="checkbox" id="flow-show-data" checked> Mostrar dados</label>
+          <button type="button" id="btn-flow-png" class="btn-outline" title="Imagem para colar no Excel (modelo B+P) ou no relatório">Exportar PNG</button>
+        </div>
+      </div>
+      <div id="flow-chart" class="flow-chart" role="img" aria-label="Fluxograma do processo no estado presente"></div>
+      <p class="form-hint flow-timeline" id="flow-timeline"></p>
+      <p class="form-hint form-warning" id="flow-unplaced" hidden></p>
     </section>
 
     <!-- PRODUTIVIDADE REAL (pç/HH) E PAYBACK — comprovação da meta B+P -->

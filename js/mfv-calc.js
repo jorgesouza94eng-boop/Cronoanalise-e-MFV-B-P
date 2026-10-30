@@ -132,8 +132,13 @@
     );
   }
 
+  // Posição do estoque no fluxograma (REV 1.24): id da etapa seguinte, início ou fim do fluxo
+  const FLOW_START = "__start";
+  const FLOW_END = "__end";
+
   function createInventory(overrides) {
-    return Object.assign({ id: Calc.generateId(), name: "", quantity: "" }, overrides || {});
+    // beforeStepId: "" = sem posição no fluxograma (o app não adivinha)
+    return Object.assign({ id: Calc.generateId(), name: "", quantity: "", beforeStepId: "" }, overrides || {});
   }
 
   /**
@@ -167,9 +172,10 @@
       operatorsTotal: "", // vazio = soma dos operadores das etapas
       steps: [],
       inventories: [
-        createInventory({ name: "Matéria-prima" }),
-        createInventory({ name: "Produto acabado" }),
+        createInventory({ name: "Matéria-prima", beforeStepId: FLOW_START }),
+        createInventory({ name: "Produto acabado", beforeStepId: FLOW_END }),
       ],
+      flowShowData: true, // REV 1.24: fluxograma com os dados das etapas e dos estoques
       notes: "",
       productivity: [],
       productivityTargetPct: "20",
@@ -250,7 +256,10 @@
         ),
       inventories: (Array.isArray(raw.inventories) ? raw.inventories : [])
         .filter((s) => s && typeof s === "object")
-        .map((s) => createInventory({ id: typeof s.id === "string" && s.id ? s.id : Calc.generateId(), name: str(s.name), quantity: str(s.quantity) })),
+        .map((s) =>
+          createInventory({ id: typeof s.id === "string" && s.id ? s.id : Calc.generateId(), name: str(s.name), quantity: str(s.quantity), beforeStepId: str(s.beforeStepId) })
+        ),
+      flowShowData: raw.flowShowData !== false,
       notes: str(raw.notes),
       productivity: (Array.isArray(raw.productivity) ? raw.productivity : [])
         .filter((p) => p && typeof p === "object")
@@ -482,7 +491,7 @@
 
     const inventories = doc.inventories.map((inv) => {
       const q = num(inv.quantity);
-      return { id: inv.id, name: inv.name, quantity: q, days: q != null && demandDaily ? q / demandDaily : null };
+      return { id: inv.id, name: inv.name, quantity: q, days: q != null && demandDaily ? q / demandDaily : null, beforeStepId: inv.beforeStepId || "" };
     });
     const leadTimeDays = inventories.reduce((a, inv) => a + (inv.days || 0), 0);
 
@@ -883,10 +892,41 @@
     );
   }
 
+  /**
+   * Fluxograma do estado presente (REV 1.24): sequência para o desenho, sem cálculo novo.
+   * nodes = estoques posicionados (△) e etapas, na ordem do fluxo; unplaced = estoques sem
+   * posição (ou cuja etapa saiu do MFV). bottleneck: etapa gargalo, ou as etapas do operador
+   * compartilhado quando o gargalo é a carga dele. r = computeMfv(doc).
+   */
+  function flowchartModel(r) {
+    const ids = new Set(r.steps.map((s) => s.id));
+    const at = (pos) => r.inventories.filter((i) => i.beforeStepId === pos).map((inv) => ({ kind: "inventory", inv }));
+    const bn = r.bottleneck;
+    const isBn = (s) =>
+      !!bn && !s.unmeasured && (bn.kind === "etapa" ? bn.seq === s.seq : !!s.operatorTag && s.operatorTag.toLowerCase() === String(bn.operator).toLowerCase());
+    const nodes = at(FLOW_START);
+    r.steps.forEach((s) => {
+      nodes.push(...at(s.id));
+      nodes.push({ kind: "step", step: s, bottleneck: isBn(s) });
+    });
+    nodes.push(...at(FLOW_END));
+    const unplaced = r.inventories.filter((i) => i.beforeStepId !== FLOW_START && i.beforeStepId !== FLOW_END && !ids.has(i.beforeStepId));
+    return {
+      nodes,
+      unplaced: unplaced.map((inv) => Object.assign({ orphan: !!inv.beforeStepId }, inv)),
+      leadTimeDays: r.demandDaily ? r.leadTimeDays : null,
+      processTotal: r.processTotal > 0 ? r.processTotal : null,
+      bottleneckKind: bn ? bn.kind : "",
+    };
+  }
+
   return {
     SCHEMA_ID,
     SCHEMA_VERSION,
     FILE_PATTERN,
+    FLOW_START,
+    FLOW_END,
+    flowchartModel,
     MIX_KEY,
     DAYS,
     parseClock,

@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.24** | 30/10/2026 | Fluxograma do processo (estado presente) no MFV |
 | **REV 1.23** | 30/10/2026 | Filtros nas ações da cronoanálise do Plano 5W2H e ECRS em "Manter/Simplificar" |
 | **REV 1.22** | 30/10/2026 | Peças = 0 para filmagem que continua outra (sem peças novas) |
 | **REV 1.21** | 30/10/2026 | Minimizar o assistente de IA enquanto ele trabalha |
@@ -28,6 +29,22 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.24 — 30/10/2026
+
+Opção **B** do consultor: bloco **"Fluxograma do processo — Estado presente"** no MFV, desenhado pelo app.
+
+- **Automático:** caixas das etapas na ordem do GBO, ligadas por setas. Mudou nome, ordem ou TC de uma etapa, o desenho se atualiza. Com muitas etapas, as caixas quebram linha. No celular, o desenho rola de lado e a página não.
+- **Dados de cada etapa** (embaixo da caixa): TC, Nº ops (com o operador compartilhado, se houver) e % do takt (em vermelho acima do takt).
+- **Selos:** **Gargalo** (caixa vermelha; com gargalo pela carga do operador compartilhado, as etapas dele), **✸ Kaizen** e **não medida** (caixa tracejada).
+- **Estoques (△)** com quantidade e dias, no lugar escolhido em **"Posição no fluxo"**, a nova coluna da tabela de estoques: Início do fluxo, Antes da etapa N ou Fim do fluxo. MFV novo: Matéria-prima no início e Produto acabado no fim. Estoque sem posição (ou de etapa removida) não é desenhado e aparece num aviso. O app não adivinha a posição.
+- **Linha do tempo:** lead time (Σ dias dos estoques) + tempo de processamento (Σ TC).
+- **"Mostrar dados"** liga e desliga os dados (só caixas, setas e estoques). A opção fica salva no MFV.
+- **Exportar PNG** (fundo branco, alta resolução), para colar no Excel (modelo B+P) ou no relatório. O fluxograma também sai na impressão. O aviso do Excel (modelo B+P) passa a indicar o "Exportar PNG".
+- Nenhum cálculo muda. MFV continua na versão 6: campos novos opcionais (`beforeStepId` no estoque e `flowShowData`); MFVs antigos abrem com os estoques sem posição. Service worker v32.
+- Testes: `tests/fluxograma-rev124.test.js` e `tests/e2e.rev124.js`.
 
 ---
 

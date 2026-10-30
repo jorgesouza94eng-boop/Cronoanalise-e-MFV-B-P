@@ -282,6 +282,7 @@ O link **MFV** no cabeçalho abre o Mapa de Fluxo de Valor, que reproduz a aba *
 | **Demanda e disponibilidade** | Demanda mensal ÷ dias úteis = demanda diária. Disponibilidade da família (%), unidade do produto (pç, m², kg) e unidade de tempo (s, min, h) |
 | **Takt** | Tempo disponível por dia ÷ demanda diária |
 | **GBO** | Cada etapa vem de um **estudo de cronoanálise**: o TC é o tempo padrão do estudo. O TC é **editável** (vira "✎ editado", com a opção **↺ usar estudo**). Também é possível criar etapas manuais. Cada etapa tem nº de operadores, uptime (%) e % do takt. **Atualizar TCs** relê os estudos |
+| **Fluxograma do processo — estado presente** (REV 1.24) | Desenhado pelo app a partir das etapas e dos estoques ("Posição no fluxo"): TC, Nº ops, % do takt, gargalo, Kaizen, estoques com dias e linha do tempo. "Mostrar dados" e "Exportar PNG" para colar no Excel |
 | **Gráfico GBO** | Barras por etapa com a linha do takt. Barras acima do takt ficam em vermelho e o processo Kaizen fica tracejado |
 | **Resultados** | Gargalo (maior TC), operadores atuais × ideais (ΣTC ÷ takt), capacidade da linha (tempo disponível ÷ maior TC), produtividade (/dia/op e /h/op) e o processo Kaizen marcado |
 | **Atravessamento** | Estoques ÷ demanda diária = dias. A soma dá o lead time |
@@ -525,7 +526,7 @@ js/app.js             Orquestração: estado, autosave, conflitos, gerenciador d
 js/ai.js              Assistente de IA (Gemini): pedidos, anonimização e validação das respostas
 js/ai-ui.js           Tela do assistente de IA (configuração, sugestões e aplicação)
 mfv.html              Página do MFV (estado presente)
-js/mfv-calc.js        Motor de cálculo do MFV (aba EP: horário, takt, GBO, capacidade, atravessamento)
+js/mfv-calc.js        Motor de cálculo do MFV (aba EP: horário, takt, GBO, capacidade, atravessamento, fluxograma)
 js/mfv-app.js         Tela e salvamento do MFV (mesma pasta e proteção contra conflito)
 yamazumi.html         Página do Yamazumi (grupos de estudos)
 js/yamazumi-calc.js   Motor do Yamazumi: classes de valor, ciclo, conteúdo, balanceamento, T1 × T3
@@ -545,8 +546,8 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 213 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
-npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.23 (Yamazumi, Plano de Ação, Kaizen da IA, IA minimizada, filmagem de continuação, filtros do plano…) — requer o servidor local
+npm test             # 217 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
+npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.24 (Yamazumi, Plano de Ação, Kaizen da IA, IA minimizada, filmagem de continuação, filtros do plano, fluxograma…) — requer o servidor local
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

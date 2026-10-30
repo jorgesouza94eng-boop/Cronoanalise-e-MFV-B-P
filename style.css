@@ -1581,3 +1581,18 @@ body.no-doc .app-workspace, body.no-doc .client-context { display: none !importa
 .pl-cand-filters select { height: 30px; font-size: 13px; }
 .pl-cand-filters .ai-check { margin: 0; }
 .pl-candidates li[hidden] { display: none; }
+
+/* Fluxograma do processo — estado presente (REV 1.24) */
+.flow-chart { overflow-x: auto; padding: 8px 16px 4px; }
+.flow-chart svg { display: block; max-width: none; }
+.flow-section .ai-check { margin: 0; }
+.flow-timeline { padding: 0 16px; font-weight: 600; color: var(--text-main); }
+.flow-section .form-warning { padding: 0 16px 12px; }
+.inventory-table select.flow-pos { min-width: 150px; }
+@media (max-width: 760px) { .inventory-table select.flow-pos { min-width: 0; width: 100%; max-width: 104px; } }
+@media print {
+  .flow-section { break-inside: avoid; }
+  .flow-chart { overflow: visible; }
+  .flow-chart svg { max-width: 100%; height: auto; }
+  #btn-flow-png, .flow-section .ai-check { display: none !important; }
+}

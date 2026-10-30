@@ -1016,6 +1016,7 @@
           el("td", {}, [el("input", { type: "text", className: "input-cell", value: inv.name, placeholder: "Ex.: Cura no pátio", autocomplete: "off" })]),
           el("td", {}, [el("input", { type: "text", className: "input-cell mono", value: inv.quantity, inputMode: "decimal", autocomplete: "off" })]),
           el("td", { className: "cell-readonly mono" }),
+          el("td", {}, [flowPositionSelect(inv)]),
           el("td", { className: "cell-actions" }, [el("button", { type: "button", className: "btn-icon-del", textContent: "×", title: "Remover estoque" })]),
         ]);
         tr.dataset.id = inv.id;
@@ -1403,6 +1404,218 @@
       : "Dias = quantidade em estoque ÷ demanda diária.";
 
     updateProductivity(r);
+    // Fluxograma (REV 1.24): posições dos estoques acompanham nomes e ordem das etapas
+    $("inventory-tbody").querySelectorAll("select.flow-pos").forEach((sel) => {
+      if (document.activeElement === sel) return;
+      const inv = d.inventories.find((x) => x.id === sel.closest("tr").dataset.id);
+      if (inv) fillFlowPositions(sel, inv.beforeStepId || "");
+    });
+    renderFlow(r);
+  }
+
+  /* ==========================================================================
+     FLUXOGRAMA DO PROCESSO — ESTADO PRESENTE (REV 1.24)
+     Desenho em SVG a partir das etapas e dos estoques; nenhum cálculo novo.
+     ========================================================================== */
+
+  /** Seletor "Posição no fluxo" do estoque: início, antes de cada etapa, fim ou sem posição. */
+  function flowPositionSelect(inv) {
+    const s = el("select", { className: "input-cell flow-pos", title: "Onde o estoque aparece no fluxograma" });
+    s.dataset.field = "beforeStepId";
+    fillFlowPositions(s, inv.beforeStepId || "");
+    return s;
+  }
+
+  function fillFlowPositions(sel, value) {
+    const steps = state.doc ? state.doc.steps : [];
+    const opts = [["", "— sem posição —"], [M.FLOW_START, "Início do fluxo"]];
+    steps.forEach((s, i) => i > 0 && opts.push([s.id, `Antes de ${i + 1}. ${s.name || `Etapa ${i + 1}`}`]));
+    opts.push([M.FLOW_END, "Fim do fluxo"]);
+    // Estoque ligado a uma etapa que saiu do MFV: mantém o valor e avisa
+    if (value && !opts.some(([v]) => v === value)) opts.push([value, "(etapa removida)"]);
+    // Antes da 1ª etapa = início do fluxo
+    const v = steps.length && value === steps[0].id ? M.FLOW_START : value;
+    sel.replaceChildren(...opts.map(([k, label]) => el("option", { value: k, textContent: label, selected: k === v })));
+  }
+
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  function svgEl(tag, attrs, text) {
+    const n = document.createElementNS(SVG_NS, tag);
+    Object.entries(attrs || {}).forEach(([k, v]) => v != null && n.setAttribute(k, v));
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  /** Quebra o texto em até maxLines linhas de ~maxChars caracteres. */
+  function wrapText(text, maxChars, maxLines) {
+    const words = String(text || "").split(/\s+/).filter(Boolean);
+    const lines = [];
+    let cur = "";
+    words.forEach((w) => {
+      if (!cur) cur = w;
+      else if ((cur + " " + w).length <= maxChars) cur += " " + w;
+      else {
+        lines.push(cur);
+        cur = w;
+      }
+    });
+    if (cur) lines.push(cur);
+    if (lines.length > maxLines) {
+      lines.length = maxLines;
+      lines[maxLines - 1] = lines[maxLines - 1].replace(/.{0,2}$/, "…");
+    }
+    return lines;
+  }
+
+  function renderFlow(r) {
+    const box = $("flow-chart");
+    if (!box) return;
+    const d = state.doc;
+    const show = d.flowShowData !== false;
+    $("flow-show-data").checked = show;
+    const model = M.flowchartModel(r);
+    const u = Calc.TIME_UNITS[unitOf()].label;
+    const steps = model.nodes.filter((n) => n.kind === "step");
+    $("btn-flow-png").disabled = !steps.length;
+    if (!steps.length) {
+      box.replaceChildren(el("p", { className: "chart-empty", textContent: "Adicione as etapas no GBO para desenhar o fluxograma." }));
+      $("flow-timeline").textContent = "";
+      $("flow-unplaced").hidden = true;
+      return;
+    }
+    // Layout: nós em sequência; quebra de linha quando não cabem na largura
+    const STEP_W = 160;
+    const STEP_H = 74;
+    const INV_W = 96;
+    const GAP = 36;
+    const TOP = 26; // espaço do selo Kaizen / gargalo
+    const DATA_H = show ? 62 : 0;
+    const INV_LBL = show ? 46 : 18;
+    const ROW_H = TOP + STEP_H + Math.max(DATA_H, INV_LBL) + 34;
+    const width = Math.max((box.clientWidth || 900) - 8, 660);
+    const placed = [];
+    let x = 12;
+    let row = 0;
+    model.nodes.forEach((n) => {
+      const w = n.kind === "step" ? STEP_W : INV_W;
+      if (x + w > width - 12 && placed.length) {
+        row += 1;
+        x = 12 + GAP;
+      }
+      placed.push({ n, x, w, row });
+      x += w + GAP;
+    });
+    const height = (row + 1) * ROW_H + 8;
+    const svg = svgEl("svg", { xmlns: SVG_NS, width, height, viewBox: `0 0 ${width} ${height}`, "font-family": "Arial, Helvetica, sans-serif", role: "img" });
+    svg.append(svgEl("rect", { x: 0, y: 0, width, height, fill: "#ffffff" }));
+    const defs = svgEl("defs");
+    const marker = svgEl("marker", { id: "flow-arrow", markerWidth: 10, markerHeight: 8, refX: 9, refY: 4, orient: "auto" });
+    marker.append(svgEl("path", { d: "M0,0 L10,4 L0,8 z", fill: "#15803d" }));
+    defs.append(marker);
+    svg.append(defs);
+    const midY = (p) => p.row * ROW_H + TOP + STEP_H / 2;
+    // Setas (na mesma linha: reta; troca de linha: cotovelo)
+    placed.forEach((p, i) => {
+      if (!i) return;
+      const a = placed[i - 1];
+      const line =
+        a.row === p.row
+          ? svgEl("line", { x1: a.x + a.w + 2, y1: midY(a), x2: p.x - 4, y2: midY(p) })
+          : svgEl("polyline", {
+              points: [[a.x + a.w + 2, midY(a)], [a.x + a.w + 16, midY(a)], [a.x + a.w + 16, a.row * ROW_H + ROW_H - 10], [p.x - 26, a.row * ROW_H + ROW_H - 10], [p.x - 26, midY(p)], [p.x - 4, midY(p)]]
+                .map((q) => q.join(","))
+                .join(" "),
+              fill: "none",
+            });
+      line.setAttribute("stroke", "#15803d");
+      line.setAttribute("stroke-width", "2.5");
+      line.setAttribute("marker-end", "url(#flow-arrow)");
+      svg.append(line);
+    });
+    const text = (x0, y0, str, attrs) => svgEl("text", Object.assign({ x: x0, y: y0, "font-size": 12, fill: "#0f172a", "text-anchor": "middle" }, attrs || {}), str);
+    placed.forEach((p) => {
+      const y = p.row * ROW_H + TOP;
+      const cx = p.x + p.w / 2;
+      if (p.n.kind === "inventory") {
+        const inv = p.n.inv;
+        const ty = y + STEP_H / 2 - 22;
+        svg.append(svgEl("polygon", { points: `${cx},${ty} ${cx + 26},${ty + 44} ${cx - 26},${ty + 44}`, fill: "#fde68a", stroke: "#b45309", "stroke-width": 2 }));
+        svg.append(text(cx, ty + 37, "I", { "font-weight": "bold", "font-size": 15, fill: "#92400e" }));
+        const lines = [inv.name || "Estoque"];
+        if (show) {
+          lines.push(inv.quantity != null ? `${fmt(inv.quantity, inv.quantity % 1 ? 2 : 0)} ${pu()}` : "qtd: --");
+          lines.push(inv.days != null ? `${fmt(inv.days, 2)} dia(s)` : "dias: --");
+        }
+        lines.forEach((t, k) => svg.append(text(cx, ty + 60 + k * 14, wrapText(t, 16, 1)[0] || "", { "font-size": 11, fill: k ? "#475569" : "#0f172a" })));
+        return;
+      }
+      const s = p.n.step;
+      const bn = p.n.bottleneck;
+      const attrs = s.unmeasured
+        ? { fill: "#ffffff", stroke: "#94a3b8", "stroke-dasharray": "6 4", "stroke-width": 2 }
+        : bn
+          ? { fill: "#fecaca", stroke: "#dc2626", "stroke-width": 3 }
+          : { fill: "#66ee66", stroke: "#15803d", "stroke-width": 1.5 };
+      svg.append(svgEl("rect", Object.assign({ x: p.x, y, width: p.w, height: STEP_H, rx: 12 }, attrs)));
+      const lines = wrapText(`${s.seq}. ${s.name}`, 20, 3);
+      const y0 = y + STEP_H / 2 - ((lines.length - 1) * 15) / 2 + 4;
+      lines.forEach((t, k) => svg.append(text(cx, y0 + k * 15, t, { "font-size": 13, "font-weight": "600" })));
+      // Selos acima da caixa
+      const tags = [];
+      if (bn) tags.push(["Gargalo", "#dc2626"]);
+      if (s.kaizen) tags.push(["✸ Kaizen", "#ca8a04"]);
+      if (s.unmeasured) tags.push(["não medida", "#64748b"]);
+      tags.forEach(([t, color], k) => svg.append(text(p.x + 6 + k * 70, y - 8, t, { "text-anchor": "start", "font-size": 11, "font-weight": "bold", fill: color })));
+      if (show && !s.unmeasured) {
+        const dy = y + STEP_H + 6;
+        svg.append(svgEl("rect", { x: p.x, y: dy, width: p.w, height: DATA_H - 6, fill: "#f8fafc", stroke: "#cbd5e1" }));
+        const data = [
+          `TC: ${s.tc != null ? `${ft(s.tc)} ${u}` : "--"}`,
+          `Nº ops: ${s.operators != null ? fmt(s.operators, s.operators % 1 ? 2 : 0) : "--"}${s.operatorTag ? ` (${s.operatorTag})` : ""}`,
+          `% do takt: ${s.taktPct != null ? `${fmt(s.taktPct, 0)}%` : "--"}`,
+        ];
+        data.forEach((t, k) =>
+          svg.append(text(p.x + 8, dy + 16 + k * 15, t, { "text-anchor": "start", "font-size": 11.5, fill: k === 2 && s.overTakt ? "#dc2626" : "#0f172a", "font-weight": k === 2 && s.overTakt ? "bold" : null }))
+        );
+      }
+    });
+    box.replaceChildren(svg);
+    // Linha do tempo: atravessamento × processamento
+    const lt = model.leadTimeDays != null ? `${fmt(model.leadTimeDays, 2)} dia(s) em estoques` : "-- (informe a demanda e os estoques)";
+    const pt = model.processTotal != null ? `${ft(model.processTotal)} ${u}` : "--";
+    $("flow-timeline").textContent = `Linha do tempo — Lead time: ${lt} + tempo de processamento ${pt} (Σ TC).`;
+    const un = model.unplaced;
+    $("flow-unplaced").hidden = !un.length;
+    $("flow-unplaced").textContent = un.length
+      ? `⚠ Estoque(s) fora do desenho: ${un.map((i) => `${i.name || "sem nome"}${i.orphan ? " (etapa removida)" : ""}`).join(", ")}. Escolha a "Posição no fluxo" na tabela de estoques.`
+      : "";
+  }
+
+  /** PNG do fluxograma (fundo branco, 2×) para colar no Excel ou no relatório. */
+  function exportFlowPng() {
+    const svg = $("flow-chart").querySelector("svg");
+    if (!svg) return;
+    const w = Number(svg.getAttribute("width"));
+    const h = Number(svg.getAttribute("height"));
+    const data = new root.XMLSerializer().serializeToString(svg);
+    const img = new root.Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = w * 2;
+      c.height = h * 2;
+      const ctx = c.getContext("2d");
+      ctx.scale(2, 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0);
+      c.toBlob((blob) => {
+        const name = `Fluxograma_${Calc.slugify(state.doc.clientName, "Cliente")}_${Calc.slugify(state.doc.family, "Familia")}.png`;
+        Store.downloadText(name, blob, "image/png");
+        toast(`Fluxograma exportado: ${name}`, "ok");
+      }, "image/png");
+    };
+    img.onerror = () => toast("Não foi possível gerar a imagem do fluxograma.", "error");
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(data);
   }
 
   /** Avisos dos vínculos: contagem dupla, qualidade dos estudos e demanda da família. */
@@ -1584,9 +1797,15 @@
 
     // Estoques
     const inv = $("inventory-tbody");
+    inv.addEventListener("change", (e) => {
+      if (e.target.tagName !== "SELECT") return;
+      const tr = e.target.closest("tr[data-id]");
+      state.doc.inventories.find((x) => x.id === tr.dataset.id).beforeStepId = e.target.value;
+      markChanged();
+    });
     inv.addEventListener("input", (e) => {
       const tr = e.target.closest("tr[data-id]");
-      if (!tr || !e.target.dataset.field) return;
+      if (!tr || !e.target.dataset.field || e.target.tagName === "SELECT") return;
       state.doc.inventories.find((x) => x.id === tr.dataset.id)[e.target.dataset.field] = e.target.value;
       markChanged();
     });
@@ -1595,6 +1814,17 @@
       const id = e.target.closest("tr").dataset.id;
       state.doc.inventories = state.doc.inventories.filter((x) => x.id !== id);
       markChanged({ render: true });
+    });
+    // Fluxograma (REV 1.24)
+    $("flow-show-data").addEventListener("change", (e) => {
+      state.doc.flowShowData = e.target.checked;
+      markChanged();
+    });
+    $("btn-flow-png").addEventListener("click", exportFlowPng);
+    let flowResize = null;
+    root.addEventListener("resize", () => {
+      clearTimeout(flowResize);
+      flowResize = setTimeout(() => state.computed && renderFlow(state.computed), 200);
     });
     $("btn-add-inventory").addEventListener("click", () => {
       state.doc.inventories.push(M.createInventory());

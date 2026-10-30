@@ -610,7 +610,7 @@
       applyUpdates(tpl.sheets.EF.parts, ef, force);
       warnings.push("Aba EF (estado futuro) preparada com os dados gerais do EP; preencha as etapas futuras no Excel.");
     }
-    warnings.push("O fluxograma do processo é uma imagem do modelo: atualize-o manualmente no Excel.");
+    warnings.push("O fluxograma do processo é uma imagem do modelo: use \"Exportar PNG\" no bloco Fluxograma do MFV e cole a imagem no Excel.");
     return { bytes: buildOutput(tpl, []), warnings, steps: doc.steps.length };
   }
 
