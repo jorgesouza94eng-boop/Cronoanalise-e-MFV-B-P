@@ -687,7 +687,7 @@ test("filmagens: peças incompletas ou inválidas mantêm o tipo A como Σtempo 
   let r = C.computeStudy(s);
   assert.equal(r.summary.acyclic, "incompleto");
   close(sec(byName(r, "Set-up").cycleTime), 30);
-  s.filmPieces = { [C.FIRST_FILM_KEY]: "5", [s.elements[2].id]: "0" };
+  s.filmPieces = { [C.FIRST_FILM_KEY]: "5", [s.elements[2].id]: "-2" };
   r = C.computeStudy(s);
   assert.equal(r.summary.acyclic, "incompleto");
   assert.ok(r.films.list[1].error);
@@ -695,6 +695,25 @@ test("filmagens: peças incompletas ou inválidas mantêm o tipo A como Σtempo 
   s.settings.entryMode = "frequencia";
   s.filmPieces = { [C.FIRST_FILM_KEY]: "5", [s.elements[2].id]: "5" };
   assert.equal(C.computeStudy(s).summary.acyclic, "total");
+});
+
+test("filmagens (REV 1.22): 0 peças = continuação de outra filmagem; tipo A ÷ peças das demais", () => {
+  const s = twoFilms();
+  s.filmPieces = { [C.FIRST_FILM_KEY]: "5", [s.elements[2].id]: "0" };
+  const r = C.computeStudy(s);
+  assert.equal(r.summary.acyclic, "por-unidade");
+  assert.equal(r.films.piecesTotal, 5);
+  assert.equal(r.films.continuations, 1);
+  assert.deepEqual([r.films.list[1].error, r.films.list[1].continuation, r.films.list[1].observedPerPiece], [null, true, null]);
+  close(sec(byName(r, "Set-up").cycleTime), 6, "30 s ÷ 5 peças");
+  close(sec(byName(r, "Limpar bancada").cycleTime), 4, "20 s da continuação ÷ 5 peças");
+  close(sec(byName(r, "Pegar peça").cycleTime), 10, "tipo C não muda");
+  close(sec(r.films.observedPerPiece), 14, "(40 + 30 s) ÷ 5 peças: inclui a continuação");
+  // Todas com 0: falta a filmagem com as peças → tipo A continua Σtempo
+  s.filmPieces = { [C.FIRST_FILM_KEY]: "0", [s.elements[2].id]: "0" };
+  const z = C.computeStudy(s);
+  assert.equal(z.summary.acyclic, "incompleto");
+  close(sec(byName(z, "Set-up").cycleTime), 30);
 });
 
 test("filmagens: peças gravadas no arquivo, normalizadas e resumidas no JSON", () => {

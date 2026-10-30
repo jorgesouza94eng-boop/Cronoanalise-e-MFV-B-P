@@ -694,7 +694,8 @@
       let error = null;
       if (s) {
         const v = parseNumber(s);
-        if (v == null || !(v > 0)) error = "Peças devem ser um número maior que zero";
+        // REV 1.22: 0 = continuação de outra filmagem (sem peças novas; as peças já estão na outra)
+        if (v == null || v < 0) error = "Peças devem ser um número (0 = continuação de outra filmagem, sem peças novas)";
         else pieces = v;
       }
       if (error) errors += 1;
@@ -706,15 +707,18 @@
         raw: s,
         pieces,
         error,
-        observedPerPiece: pieces != null && f.observed > EPS ? f.observed / pieces : null,
+        continuation: pieces === 0,
+        observedPerPiece: pieces != null && pieces > EPS && f.observed > EPS ? f.observed / pieces : null,
       });
     });
     const observedTotal = list.reduce((a, f) => a + f.observed, 0);
     let acyclic = "total"; // "total" | "por-unidade" | "incompleto"
-    if (mode === "quantidade" && filled > 0) acyclic = filled === list.length && !errors ? "por-unidade" : "incompleto";
+    // Só continuações (todas com 0): falta a filmagem que tem as peças
+    if (mode === "quantidade" && filled > 0) acyclic = filled === list.length && !errors && piecesTotal > EPS ? "por-unidade" : "incompleto";
     return {
       list,
       filled,
+      continuations: list.filter((x) => x.continuation).length,
       piecesTotal: filled ? piecesTotal : null,
       observedTotal,
       observedPerPiece: acyclic === "por-unidade" && piecesTotal > EPS ? observedTotal / piecesTotal : null,

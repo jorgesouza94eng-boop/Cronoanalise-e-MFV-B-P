@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.22** | 30/10/2026 | Peças = 0 para filmagem que continua outra (sem peças novas) |
 | **REV 1.21** | 30/10/2026 | Minimizar o assistente de IA enquanto ele trabalha |
 | **REV 1.20** | 30/10/2026 | IA: sugestão Kaizen para todos os produtos e etapas, com pedido mais assertivo |
 | **REV 1.19** | 28/10/2026 | Plano de Ação 5W2H por cliente, com as ações Kaizen da cronoanálise |
@@ -26,6 +27,19 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.22 — 30/10/2026
+
+Opção **A** do consultor: filmagem que é **continuação** de outra (ex.: um segundo vídeo só com a preparação da massa da mesma fornada).
+
+- O campo **Peças** da filmagem passa a aceitar **0** = continuação de outra filmagem, sem peças novas. Antes, só aceitava número maior que zero, e a filmagem sem peças deixava os acíclicos do produto como tempo total.
+- A filmagem com 0 conta como preenchida, e os **acíclicos (tipo A)** do produto passam a ser **Σtempo ÷ peças das demais filmagens**, incluindo o tempo da continuação. Ex.: F4 = 280 peças e F3 = 0 → acíclicos da F3 e da F4 ÷ 280.
+- Na tela, a filmagem mostra "continuação (sem peças novas)". O aviso informa "Tipo A = Σtempo ÷ 280 peças (1 filmagem de continuação, com 0 peças)", e o **ciclo real observado** passa a incluir o tempo da continuação.
+- Todas as filmagens com 0: o app avisa que falta informar as peças na filmagem em que foram produzidas (os acíclicos continuam como tempo total). Número negativo continua inválido.
+- Os elementos tipo C não mudam (Σtempo ÷ Σqtd). O conferidor "Σ quantidade ≠ peças" ignora elemento que só aparece na continuação.
+- Service worker v30. Testes: `tests/calc.test.js` (REV 1.22) e `tests/e2e.rev122.js`.
 
 ---
 

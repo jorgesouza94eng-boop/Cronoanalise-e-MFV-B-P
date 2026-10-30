@@ -261,6 +261,7 @@ No modo *Quantidade*, o bloco **Filmagens do estudo** (acima do resumo) tem um c
 | Nenhuma filmagem com peças | Σtempo (igual à planilha) |
 | Peças em parte das filmagens | Σtempo, com aviso ⚠ "faltam peças" |
 | Peças em **todas** as filmagens | **Σtempo ÷ Σpeças** (tempo por unidade) |
+| Filmagem que **continua outra** (sem peças novas, REV 1.22) | Digite **0**: ela conta como preenchida e o tipo A é dividido pelas peças das demais |
 
 - Cada filmagem mostra o tempo observado e o **tempo observado ÷ peças**. O bloco mostra também o **ciclo real observado** (tudo o que foi filmado ÷ total de peças, no ritmo filmado), que serve para conferir o tempo normal do ciclo.
 - O tempo padrão e o TC levado ao MFV passam a ser por unidade.
@@ -543,8 +544,8 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 211 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
-npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.21 (Yamazumi, Plano de Ação, Kaizen da IA, IA minimizada…) — requer o servidor local
+npm test             # 212 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
+npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.22 (Yamazumi, Plano de Ação, Kaizen da IA, IA minimizada, filmagem de continuação…) — requer o servidor local
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

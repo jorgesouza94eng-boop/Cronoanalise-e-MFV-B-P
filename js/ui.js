@@ -1161,6 +1161,7 @@
               input.inputMode = "decimal";
               input.autocomplete = "off";
               input.placeholder = "peças";
+              input.title = "Peças produzidas neste trecho. 0 = continuação de outra filmagem (sem peças novas)";
               input.dataset.filmKey = sg.key;
               input.setAttribute("aria-label", `Peças produzidas na filmagem ${f.film}${sg.productName ? ` (${sg.productName})` : ""}`);
               wrap.append(pl, input);
@@ -1193,8 +1194,9 @@
         if (!x) return;
         if (document.activeElement !== input && input.value !== x.raw) input.value = x.raw;
         input.classList.toggle("input-invalid", !!x.error);
-        input.title = x.error || "Peças produzidas neste trecho";
+        input.title = x.error || "Peças produzidas neste trecho. 0 = continuação de outra filmagem (sem peças novas)";
         if (x.observedPerPiece != null) perPiece.push(`${ft(x.observedPerPiece)} ${u}/un`);
+        else if (x.continuation) perPiece.push("continuação (sem peças novas)");
       });
       box.querySelector(".film-out").textContent = `obs. ${ft(f.observed)} ${u}` + (perPiece.length ? ` • ${perPiece.join(" • ")}` : "");
     });
@@ -1208,8 +1210,11 @@
     if (qty) {
       hint += {
         total: " Informe as peças de todas as filmagens para converter os acíclicos (tipo A) em tempo por unidade.",
-        incompleto: ` ⚠ Faltam peças em ${info.list.length - info.filled} trecho(s)${name}: os acíclicos continuam como tempo total.`,
-        "por-unidade": ` Tipo A${name} = Σtempo ÷ ${fmt(info.piecesTotal, info.piecesTotal % 1 ? 2 : 0)} peças. Ciclo real observado: ${ft(info.observedPerPiece)} ${u}/un (inclui tudo, no ritmo filmado).`,
+        incompleto:
+          info.filled === info.list.length && info.continuations === info.list.length
+            ? ` ⚠ Todas as filmagens${name} estão com 0 peças (continuação): informe as peças na filmagem em que foram produzidas.`
+            : ` ⚠ Faltam peças em ${info.list.length - info.filled} trecho(s)${name}: os acíclicos continuam como tempo total. Filmagem que continua outra (sem peças novas): digite 0.`,
+        "por-unidade": ` Tipo A${name} = Σtempo ÷ ${fmt(info.piecesTotal, info.piecesTotal % 1 ? 2 : 0)} peças${info.continuations ? ` (${info.continuations} filmagem(ns) de continuação, com 0 peças)` : ""}. Ciclo real observado: ${ft(info.observedPerPiece)} ${u}/un (inclui tudo, no ritmo filmado).`,
       }[info.acyclic];
     }
     els.filmsHint.textContent = hint;
