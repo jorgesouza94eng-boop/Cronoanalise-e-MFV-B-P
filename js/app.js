@@ -1192,13 +1192,17 @@
    * Aplica sugestões aprovadas da IA. Só preenche campos ainda vazios do estudo.
    * classify: [{ name, value, waste }] | kaizen: [{ name, text, tool, target }] | rename: [{ to, from: [] }] |
    * notes: { text, mode: "replace"|"append" }
+   * report (opcional, REV 1.21): recebe notFound = sugestões cujo elemento não existe mais
+   * (renomeado ou apagado enquanto a IA trabalhava com a janela minimizada).
    */
-  function applyAi(s) {
+  function applyAi(s, report) {
     if (!state.study) return 0;
     let changed = 0;
+    let notFound = 0;
     const els = state.study.elements;
     (s.classify || []).forEach((c) => {
       const key = Calc.elementKey(c.name);
+      if (!els.some((el) => Calc.elementKey(el.description) === key)) notFound += 1;
       els.forEach((el) => {
         if (Calc.elementKey(el.description) === key && !el.value) {
           el.value = c.value;
@@ -1220,6 +1224,7 @@
         if (t.op != null && row.operator !== t.op) return false;
         return Calc.elementGroupKey(row, el) === t.groupKey;
       });
+      if (!rows.length) notFound += 1;
       if (rows.length && !rows.some((el) => el.kaizen)) {
         rows[0].kaizen = k.text;
         rows[0].kaizenTool = Calc.LEAN_TOOLS[k.tool] ? k.tool : "";
@@ -1229,6 +1234,7 @@
     // Padronização de nomes: renomeia as linhas das variantes para o nome padrão
     (s.rename || []).forEach((g) => {
       const keys = new Set(g.from.map((n) => Calc.elementKey(n)));
+      if (!els.some((el) => keys.has(Calc.elementKey(el.description)))) notFound += 1;
       els.forEach((el) => {
         if (keys.has(Calc.elementKey(el.description))) {
           el.description = g.to;
@@ -1244,6 +1250,7 @@
       markChanged({ rerender: true });
       UI.renderStudy(state.study, state.computed);
     }
+    if (report) report.notFound = notFound;
     return changed;
   }
 

@@ -53,7 +53,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - HTML/CSS/JS puro, **sem build e sem servidor**. Funciona por `file://`, por servidor local e pelo GitHub Pages.
 - Scripts clássicos no padrão UMD (`window.LeanX` no navegador e `module.exports` nos testes do Node). **Não usar módulos ES** (quebram no `file://`).
 - Armazenamento local-first: IndexedDB (`LeanChronoDB`) e pasta do OneDrive pela File System Access API, com debounce de 3 s e proteção contra conflito (revisão + cópia `_conflito_`).
-- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6), `Yamazumi_*.json` (grupo de estudos, versão 1) e `Plano_*.json` (plano de ação 5W2H, versão 1) — REV 1.20. Elemento do estudo tem `kaizenTool` opcional (REV 1.20). Itens arquivados ficam na subpasta `_Arquivo` (fora das listas).
+- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6), `Yamazumi_*.json` (grupo de estudos, versão 1) e `Plano_*.json` (plano de ação 5W2H, versão 1) — REV 1.21. Elemento do estudo tem `kaizenTool` opcional (REV 1.20). Itens arquivados ficam na subpasta `_Arquivo` (fora das listas).
 - A revisão aparece no cabeçalho das 4 páginas (`.app-rev`); um teste confere com a versão do `package.json`.
 
 | Arquivo | Função |
@@ -156,3 +156,7 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 - Por padrão só NA/IN; a caixa "incluir Agrega e sem classificação" amplia. Agrega nunca é eliminado.
 - Tabela desperdício → ferramenta do prompt = práticas usuais de Lean (não é regra oficial do B+P; conferir na base se o consultor pedir).
 - "sem_acao" quando faltam dados (não inventar); confiança baixa vem desmarcada. Ferramenta sugerida → `kaizenTool` → Ferramenta Lean do Plano 5W2H.
+
+## Regra implementada na REV 1.21: assistente de IA minimizado
+
+- Uma tarefa da IA por vez; minimizar (ou fechar) durante a tarefa mostra o selo `#ai-pill` (trabalhando / prontas / falha). Sugestões presas ao estudo do pedido (`studyId`): com outro estudo aberto, não se aplica. `applyAi(s, report)` informa em `report.notFound` as sugestões de elementos renomeados ou apagados.

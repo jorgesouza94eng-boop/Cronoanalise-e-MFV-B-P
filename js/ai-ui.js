@@ -16,7 +16,10 @@
   const $ = (id) => document.getElementById(id);
 
   let settings = { apiKey: "", model: "", anonymize: true };
-  let pending = null; // { kind, items, text }
+  let pending = null; // { kind, items, text, studyId, studyName }
+  // Tarefa da IA (REV 1.21): continua com a janela minimizada; o selo mostra o andamento
+  let job = null; // { kind, count, studyId, studyName, state: "running" | "done" | "error" }
+  const KIND_LABELS = { classify: "Classificação", kaizen: "Kaizen", notes: "Constatações", names: "Padronizar nomes", ask: "Pergunta" };
 
   function app() {
     return root.LeanApp;
@@ -28,10 +31,77 @@
     el.classList.toggle("is-error", !!isError);
   }
 
+  const running = () => !!(job && job.state === "running");
+  const studyName = (st) => [st.clientName, st.processName].filter(Boolean).join(" — ") || "sem nome";
+
+  /* ==========================================================================
+     MINIMIZAR (REV 1.21): selo no canto da tela com o andamento da tarefa
+     ========================================================================== */
+
+  function updatePill() {
+    const pill = $("ai-pill");
+    const open = $("ai-dialog").open;
+    const show = !open && !!job && (job.state === "running" || job.state === "error" || !!pending);
+    pill.hidden = !show;
+    document.body.classList.toggle("ai-pill-on", show);
+    if (!show) return;
+    const kind = KIND_LABELS[job.kind] || "IA";
+    pill.className = `ai-pill ai-pill-${job.state}`;
+    $("ai-pill-text").textContent =
+      job.state === "running"
+        ? `✨ IA trabalhando… (${kind}${job.count ? `, ${job.count} elemento(s)` : ""})`
+        : job.state === "error"
+          ? `⚠ Falha na IA (${kind}) — ver detalhe`
+          : `✨ Sugestões prontas (${kind}) — abrir`;
+    $("btn-ai-pill-discard").hidden = job.state === "running";
+  }
+
+  function startJob(kind, count, study) {
+    job = { kind, count, studyId: study.id, studyName: studyName(study), state: "running" };
+    document.querySelectorAll("[data-ai]").forEach((b) => (b.disabled = true));
+    updatePill();
+  }
+
+  /** Fim da tarefa: com a janela minimizada, o selo muda e um aviso aparece. */
+  function finishJob(state) {
+    if (!job) return;
+    job.state = state;
+    refreshButtons();
+    if (!$("ai-dialog").open) {
+      const ui = root.LeanUI;
+      const kind = KIND_LABELS[job.kind] || "IA";
+      if (ui && ui.toast) {
+        if (state === "error") ui.toast(`Falha na IA (${kind}). Clique no selo para ver o detalhe.`, "error");
+        else if (pending) ui.toast(`✨ Sugestões da IA prontas (${kind}). Clique no selo para revisar.`, "ok");
+      }
+    }
+    if (state === "done" && !pending) job = null;
+    updatePill();
+  }
+
+  /** Sugestões presas ao estudo do pedido: com outro estudo aberto, não se aplica. */
+  function checkStudy() {
+    const cur = app() && app().state.study;
+    const other = !!(pending && cur && pending.studyId !== cur.id);
+    $("btn-ai-apply").disabled = other;
+    $("btn-ai-append").disabled = other;
+    if (other) setStatus(`Estas sugestões são do estudo "${pending.studyName}". Abra esse estudo para aplicar (ou descarte pelo selo).`, true);
+    return !other;
+  }
+
+  function discardPending() {
+    if (running()) return;
+    pending = null;
+    job = null;
+    $("ai-results").hidden = true;
+    setStatus("");
+    updatePill();
+  }
+
   function refreshButtons() {
     const online = root.navigator.onLine !== false;
     const ready = !!(settings.apiKey && settings.model);
-    document.querySelectorAll("[data-ai]").forEach((b) => (b.disabled = !online || !ready));
+    document.querySelectorAll("[data-ai]").forEach((b) => (b.disabled = !online || !ready || running()));
     $("ai-config-status").textContent = !online
       ? "• sem internet (a IA precisa de conexão)"
       : ready
@@ -88,14 +158,15 @@
    */
   async function runKaizen() {
     const st = app() && app().state;
-    if (!st || !st.study) return;
+    if (!st || !st.study || running()) return;
     const study = st.study;
     const computed = Calc.computeStudy(study);
     const anon = settings.anonymize !== false;
     const prompt = AI.buildKaizenPrompt(study, computed, anon, { includeAll: $("ai-kaizen-all").checked });
     const outside = AI.kaizenStatsText(prompt.stats);
     if (!prompt.count) return setStatus(`Nenhum elemento para enviar. ${outside || "Lance tempos na grade antes."}`, true);
-    document.querySelectorAll("[data-ai]").forEach((b) => (b.disabled = true));
+    discardPending();
+    startJob("kaizen", prompt.count, study);
     const ask = (p) =>
       AI.generate(settings, p.text, {
         json: true,
@@ -117,7 +188,7 @@
           /* mantém as sugestões da 1ª resposta */
         }
       }
-      showItems("kaizen", items);
+      showItems("kaizen", items, study);
       const ok = items.filter((i) => !i.noAction).length;
       const parts = [`${ok} sugestão(ões) para ${prompt.count} elemento(s) enviado(s).`];
       const noAct = items.length - ok;
@@ -126,17 +197,17 @@
       if (outside) parts.push(outside);
       parts.push('Confiança baixa vem desmarcada. Revise e clique em "Aplicar".');
       setStatus(parts.join(" "), !ok);
+      finishJob("done");
     } catch (err) {
       setStatus(`Falha na IA: ${err.message || err}`, true);
-    } finally {
-      refreshButtons();
+      finishJob("error");
     }
   }
 
   async function run(kind) {
     if (kind === "kaizen") return runKaizen();
     const st = app() && app().state;
-    if (!st || !st.study) return;
+    if (!st || !st.study || running()) return;
     const study = st.study;
     const computed = Calc.computeStudy(study);
     const anon = settings.anonymize !== false;
@@ -156,26 +227,28 @@
       }[kind];
       return setStatus(msg, true);
     }
-    document.querySelectorAll("[data-ai]").forEach((b) => (b.disabled = true));
+    discardPending();
+    startJob(kind, kind === "ask" ? 0 : prompt.count, study);
     setStatus(`Consultando o Gemini (${prompt.count} elemento(s))...`);
     try {
       const text = await AI.generate(settings, prompt.text, {
         json: kind !== "notes" && kind !== "ask",
         onRetry: (n, total) => setStatus(`Servidor do Gemini ocupado, tentando de novo (${n}/${total})...`),
       });
-      if (kind === "classify") showItems(kind, AI.parseClassify(text, prompt.names, study, anon));
-      else if (kind === "names") showItems(kind, AI.parseNames(text, prompt.names, study, anon));
-      else if (kind === "ask") showAnswer(AI.restoreNames(text, study));
-      else showNotes(AI.restoreNames(text, study));
+      if (kind === "classify") showItems(kind, AI.parseClassify(text, prompt.names, study, anon), study);
+      else if (kind === "names") showItems(kind, AI.parseNames(text, prompt.names, study, anon), study);
+      else if (kind === "ask") showAnswer(AI.restoreNames(text, study), study);
+      else showNotes(AI.restoreNames(text, study), study);
+      finishJob("done");
     } catch (err) {
       setStatus(`Falha na IA: ${err.message || err}`, true);
-    } finally {
-      refreshButtons();
+      finishJob("error");
     }
   }
 
-  function showItems(kind, items) {
-    pending = { kind, items };
+  function showItems(kind, items, study) {
+    pending = { kind, items, studyId: study.id, studyName: studyName(study) };
+    $("btn-ai-apply").disabled = false;
     $("ai-results").hidden = false;
     $("ai-notes").hidden = true;
     $("btn-ai-append").hidden = true;
@@ -224,13 +297,16 @@
         return li;
       })
     );
-    if (kind === "names" && !items.length) return setStatus("Nenhuma duplicidade de nomes encontrada. 👍");
+    if (kind === "names" && !items.length) {
+      pending = null;
+      return setStatus("Nenhuma duplicidade de nomes encontrada. 👍");
+    }
     if (kind === "kaizen") return; // a mensagem vem de runKaizen
     setStatus(items.length ? `${items.length} sugestão(ões). Desmarque o que não concordar e clique em "Aplicar".` : "A IA não devolveu sugestões utilizáveis.", !items.length);
   }
 
-  function showNotes(text) {
-    pending = { kind: "notes", text };
+  function showNotes(text, study) {
+    pending = { kind: "notes", text, studyId: study.id, studyName: studyName(study) };
     $("ai-results").hidden = false;
     $("ai-list").replaceChildren();
     $("ai-results-title").textContent = "Rascunho de constatações e soluções (editável)";
@@ -243,8 +319,8 @@
   }
 
   /** Resposta a uma pergunta livre: só leitura, com opção de levar para as constatações. */
-  function showAnswer(text) {
-    pending = { kind: "notes", text };
+  function showAnswer(text, study) {
+    pending = { kind: "notes", text, studyId: study.id, studyName: studyName(study) };
     $("ai-results").hidden = false;
     $("ai-list").replaceChildren();
     $("ai-results-title").textContent = "Resposta da IA (confira os números no estudo)";
@@ -256,22 +332,27 @@
   }
 
   function apply(mode) {
-    if (!pending) return;
+    if (!pending || !checkStudy()) return;
     let n = 0;
+    const report = { notFound: 0 };
     if (pending.kind === "notes") {
       const text = $("ai-notes").value.trim();
       if (!text) return;
       if (mode !== "append" && app().state.study.notes && !root.confirm("Substituir as constatações atuais pelo texto da IA?")) return;
-      n = app().applyAi({ notes: { text, mode } });
+      n = app().applyAi({ notes: { text, mode } }, report);
     } else {
       const chosen = Array.from(document.querySelectorAll("#ai-list input:checked"))
         .map((cb) => pending.items[Number(cb.dataset.index)])
         .filter((it) => !it.noAction);
-      n = app().applyAi({ [pending.kind === "names" ? "rename" : pending.kind]: chosen });
+      n = app().applyAi({ [pending.kind === "names" ? "rename" : pending.kind]: chosen }, report);
     }
-    setStatus(n ? `Aplicado (${n} alteração(ões)). O estudo foi salvo normalmente.` : "Nada a aplicar (os campos já estavam preenchidos).");
+    // Elementos renomeados ou apagados enquanto a IA trabalhava (REV 1.21)
+    const lost = report.notFound ? ` ${report.notFound} sugestão(ões) não aplicada(s): elemento renomeado ou apagado na grade.` : "";
+    setStatus((n ? `Aplicado (${n} alteração(ões)). O estudo foi salvo normalmente.` : "Nada a aplicar (os campos já estavam preenchidos).") + lost, !!report.notFound && !n);
     $("ai-results").hidden = true;
     pending = null;
+    job = null;
+    updatePill();
   }
 
   /* ==========================================================================
@@ -280,14 +361,30 @@
 
   function init() {
     const dlg = $("ai-dialog");
-    $("btn-ai").addEventListener("click", async () => {
+    const openDialog = async () => {
       await loadSettings();
       refreshButtons();
-      setStatus("");
-      $("ai-results").hidden = true;
+      // Tarefa em andamento ou sugestões ainda não aplicadas: a janela volta como estava
+      if (!job && !pending) {
+        setStatus("");
+        $("ai-results").hidden = true;
+      }
+      if (job && job.state === "error") job = null; // o detalhe do erro fica na janela
       if (!dlg.open) dlg.showModal();
-    });
-    $("btn-ai-close").addEventListener("click", () => dlg.close());
+      if (pending) checkStudy();
+      updatePill();
+    };
+    $("btn-ai").addEventListener("click", openDialog);
+    // O evento "close" do <dialog> chega depois: o selo é atualizado na hora
+    const minimize = () => {
+      dlg.close();
+      updatePill();
+    };
+    $("btn-ai-close").addEventListener("click", minimize);
+    $("btn-ai-minimize").addEventListener("click", minimize);
+    $("ai-pill-open").addEventListener("click", openDialog);
+    $("btn-ai-pill-discard").addEventListener("click", discardPending);
+    dlg.addEventListener("close", updatePill);
     $("btn-ai-models").addEventListener("click", loadModels);
     $("btn-ai-save").addEventListener("click", saveSettings);
     $("btn-ai-forget").addEventListener("click", async () => {

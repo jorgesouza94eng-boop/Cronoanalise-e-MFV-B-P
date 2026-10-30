@@ -1,11 +1,11 @@
 {
   "name": "lean-chrono-mfv",
-  "version": "1.20.0",
+  "version": "1.21.0",
   "description": "Cronoanálise de vídeo e apoio ao Mapa de Fluxo de Valor — aplicação web local-first, sem backend e sem build.",
   "private": true,
   "scripts": {
     "test": "node --test tests/calc.test.js tests/xlsx.test.js tests/mfv.test.js tests/template.test.js tests/ai.test.js tests/yamazumi.test.js tests/mfv-checks.test.js tests/mix-rev112.test.js tests/operadores-rev114.test.js tests/mfv-estratificado-rev114.test.js tests/etapas-rev115.test.js tests/classificacao-rev118.test.js tests/plano-rev119.test.js",
-    "test:e2e": "node tests/e2e.browser.js && node tests/e2e.mfv.js && node tests/e2e.ai.js && node tests/e2e.rev12.js && node tests/e2e.rev13.js && node tests/e2e.rev14.js && node tests/e2e.rev15.js && node tests/e2e.rev19.js && node tests/e2e.rev110.js && node tests/e2e.rev111.js && node tests/e2e.rev112.js && node tests/e2e.rev114.js && node tests/e2e.rev114-mfv.js && node tests/e2e.rev115.js && node tests/e2e.rev116.js && node tests/e2e.rev118.js && node tests/e2e.rev119.js && node tests/e2e.rev120.js",
+    "test:e2e": "node tests/e2e.browser.js && node tests/e2e.mfv.js && node tests/e2e.ai.js && node tests/e2e.rev12.js && node tests/e2e.rev13.js && node tests/e2e.rev14.js && node tests/e2e.rev15.js && node tests/e2e.rev19.js && node tests/e2e.rev110.js && node tests/e2e.rev111.js && node tests/e2e.rev112.js && node tests/e2e.rev114.js && node tests/e2e.rev114-mfv.js && node tests/e2e.rev115.js && node tests/e2e.rev116.js && node tests/e2e.rev118.js && node tests/e2e.rev119.js && node tests/e2e.rev120.js && node tests/e2e.rev121.js",
     "start": "npx --yes http-server -c-1 -p 8080 ."
   },
   "engines": {

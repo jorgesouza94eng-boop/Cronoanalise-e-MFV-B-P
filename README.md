@@ -403,7 +403,7 @@ Um plano por cliente, no formato do modelo 5W2H do B+P.
 
 ## 2.2 Assistente de IA (Gemini), opcional
 
-O botão **✨ IA** na barra da grade abre o assistente. Ele precisa de **internet** e de uma **chave de API do Google AI Studio** (aistudio.google.com → ícone 🔑 → *Create API key*).
+O botão **✨ IA** na barra da grade abre o assistente. Durante um pedido, o botão **"−"** minimiza a janela (REV 1.21): a grade fica livre, um selo no canto mostra o andamento e avisa quando as sugestões ficam prontas; as sugestões só se aplicam ao estudo do pedido. Ele precisa de **internet** e de uma **chave de API do Google AI Studio** (aistudio.google.com → ícone 🔑 → *Create API key*).
 
 1. Na primeira vez: cole a chave → **Carregar modelos** → escolha o modelo (o app sugere um "flash") → **Salvar configuração**.
 2. Use os botões:
@@ -544,7 +544,7 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 
 ```bash
 npm test             # 211 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
-npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.20 (Yamazumi, Plano de Ação, Kaizen da IA…) — requer o servidor local
+npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.21 (Yamazumi, Plano de Ação, Kaizen da IA, IA minimizada…) — requer o servidor local
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

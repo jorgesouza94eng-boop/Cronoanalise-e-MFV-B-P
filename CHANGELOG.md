@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.21** | 30/10/2026 | Minimizar o assistente de IA enquanto ele trabalha |
 | **REV 1.20** | 30/10/2026 | IA: sugestão Kaizen para todos os produtos e etapas, com pedido mais assertivo |
 | **REV 1.19** | 28/10/2026 | Plano de Ação 5W2H por cliente, com as ações Kaizen da cronoanálise |
 | **REV 1.18** | 28/10/2026 | Classificação copiada para as linhas do mesmo elemento |
@@ -25,6 +26,20 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.21 — 30/10/2026
+
+Opção **A** do consultor: minimizar o assistente de IA enquanto ele trabalha.
+
+- Botão **"−" (Minimizar)** na janela da IA. Fechar com "×" ou Esc durante uma tarefa também minimiza. A grade fica livre para trabalhar enquanto a IA responde.
+- **Selo no canto da tela** com o andamento: "✨ IA trabalhando… (Kaizen, 14 elemento(s))". Ao terminar, fica verde ("Sugestões prontas — abrir") e aparece um aviso na tela. Em caso de falha, fica vermelho ("Falha na IA — ver detalhe"). Um clique reabre a janela com as sugestões ou com o detalhe do erro.
+- **Sugestões presas ao estudo do pedido:** se outro estudo estiver aberto, o botão Aplicar fica desabilitado e o app informa de qual estudo são as sugestões. O "×" do selo descarta as sugestões não aplicadas.
+- **Edições durante a espera:** as sugestões continuam valendo para o elemento certo. Se o elemento for renomeado ou apagado, aquela sugestão não é aplicada e o app informa quantas ficaram de fora.
+- **Uma tarefa por vez:** enquanto a IA trabalha, os botões da IA ficam bloqueados, para não gastar a cota duas vezes nem misturar respostas.
+- Vale para classificar, Kaizen, constatações, padronizar nomes e pergunta livre. No celular, o selo ocupa a largura da tela e os avisos sobem para não ficar por baixo dele.
+- Nenhum cálculo muda. Service worker v29. Teste: `tests/e2e.rev121.js` (Gemini simulado com resposta segurada).
 
 ---
 

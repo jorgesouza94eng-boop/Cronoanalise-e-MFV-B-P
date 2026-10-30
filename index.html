@@ -19,7 +19,7 @@
         <h1>Cronoanálise &amp; MFV</h1>
         <nav class="app-nav" aria-label="Módulos">
           <a href="index.html" aria-current="page">Cronoanálise</a><a href="mfv.html">MFV</a><a href="yamazumi.html">Yamazumi</a><a href="plano.html">Plano de Ação</a>
-        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.20</span></nav>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.21</span></nav>
       </div>
     </div>
 
@@ -497,6 +497,7 @@
   <dialog id="ai-dialog" class="study-dialog ai-dialog" aria-labelledby="ai-dialog-title">
     <div class="dialog-header">
       <h2 id="ai-dialog-title">✨ Assistente de IA (Gemini)</h2>
+      <button type="button" class="btn-icon-close" id="btn-ai-minimize" aria-label="Minimizar" title="Minimizar: a IA continua trabalhando e o selo no canto avisa quando terminar">&minus;</button>
       <button type="button" class="btn-icon-close" id="btn-ai-close" aria-label="Fechar">&times;</button>
     </div>
 
@@ -549,6 +550,12 @@
       </div>
     </div>
   </dialog>
+
+  <!-- ASSISTENTE DE IA MINIMIZADO (REV 1.21) -->
+  <div id="ai-pill" class="ai-pill" role="status" aria-live="polite" hidden>
+    <button type="button" id="ai-pill-open" class="ai-pill-open" title="Abrir o assistente de IA"><span class="ai-pill-spin" aria-hidden="true"></span><span id="ai-pill-text"></span></button>
+    <button type="button" id="btn-ai-pill-discard" class="ai-pill-discard" aria-label="Descartar as sugestões" title="Descartar as sugestões" hidden>&times;</button>
+  </div>
 
   <!-- NOTIFICAÇÕES -->
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>
