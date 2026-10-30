@@ -19,7 +19,7 @@
         <h1>Cronoanálise &amp; MFV</h1>
         <nav class="app-nav" aria-label="Módulos">
           <a href="index.html" aria-current="page">Cronoanálise</a><a href="mfv.html">MFV</a><a href="yamazumi.html">Yamazumi</a><a href="plano.html">Plano de Ação</a>
-        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.24</span></nav>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.25</span></nav>
       </div>
     </div>
 
@@ -196,6 +196,7 @@
           <label class="inline-check" for="opt-multi-etapa" title="Mostra a coluna Etapa: TP por etapa do processo (ex.: Laminação, Enrolar, Moldagem). No MFV, cada etapa vira uma etapa do fluxo">
             <input type="checkbox" id="opt-multi-etapa"> Etapas
           </label>
+          <button type="button" id="btn-define-etapas" class="btn-outline" title="Escolher a etapa do processo de cada elemento (uma vez por elemento), com ajuda opcional da IA">Definir etapas</button>
           <button type="button" id="btn-add-row" class="btn-secondary" title="Nova linha (Ctrl+Enter)">+ Nova linha</button>
           <button type="button" id="btn-to-mfv" class="btn-outline" title="Levar este estudo (ou o produto do resumo) como etapa do MFV da mesma empresa">→ MFV</button>
           <button type="button" id="btn-ai" class="btn-outline btn-ai" title="Assistente de IA (Gemini): classificação, Kaizen e constatações">✨ IA</button>
@@ -528,6 +529,7 @@
       <button type="button" class="btn-secondary" data-ai="kaizen">Sugerir ações Kaizen (ECRS)</button>
       <button type="button" class="btn-secondary" data-ai="notes">Redigir constatações e soluções</button>
       <button type="button" class="btn-secondary" data-ai="names">Padronizar nomes dos elementos</button>
+      <button type="button" class="btn-secondary" data-ai="etapas">Sugerir etapas do processo</button>
     </div>
     <label class="ai-check ai-kaizen-opt" title="Sem esta opção, só vão para a IA os elementos Não agrega e Incidental"><input type="checkbox" id="ai-kaizen-all"> Kaizen: incluir também os elementos "Agrega" e os sem classificação</label>
     <div class="ai-ask">
@@ -551,11 +553,41 @@
     </div>
   </dialog>
 
-  <!-- ASSISTENTE DE IA MINIMIZADO (REV 1.24) -->
+  <!-- ASSISTENTE DE IA MINIMIZADO (REV 1.25) -->
   <div id="ai-pill" class="ai-pill" role="status" aria-live="polite" hidden>
     <button type="button" id="ai-pill-open" class="ai-pill-open" title="Abrir o assistente de IA"><span class="ai-pill-spin" aria-hidden="true"></span><span id="ai-pill-text"></span></button>
     <button type="button" id="btn-ai-pill-discard" class="ai-pill-discard" aria-label="Descartar as sugestões" title="Descartar as sugestões" hidden>&times;</button>
   </div>
+
+  <!-- DEFINIR ETAPAS DO PROCESSO (REV 1.25) -->
+  <dialog id="etapas-dialog" class="study-dialog etapas-dialog" aria-labelledby="etapas-title">
+    <div class="dialog-header">
+      <h2 id="etapas-title">Definir etapas do processo</h2>
+      <button type="button" class="btn-icon-close" id="btn-et-close" aria-label="Fechar">&times;</button>
+    </div>
+    <p class="form-hint et-hint">Escolha a etapa de cada elemento <strong>uma vez</strong>: ela vale para todas as linhas do elemento neste produto. No MFV, cada etapa vira uma barra do GBO. Nada é gravado até você clicar em "Salvar etapas".</p>
+    <div class="et-toolbar">
+      <label class="et-field" id="et-product-wrap">Produto <select id="et-product"></select></label>
+      <input type="text" id="et-bulk" list="et-names" placeholder="Etapa para os marcados" autocomplete="off" aria-label="Etapa para os elementos marcados">
+      <button type="button" id="btn-et-bulk" class="btn-outline">Aplicar aos marcados</button>
+      <button type="button" id="btn-et-ai" class="btn-outline btn-ai" title="A IA sugere as etapas dos elementos sem etapa; você revisa antes de salvar">✨ Sugerir com IA</button>
+    </div>
+    <div class="table-container et-table-wrap">
+      <table class="chrono-table et-table">
+        <thead><tr>
+          <th class="et-check"><input type="checkbox" id="et-all" aria-label="Marcar todos"></th>
+          <th>Nº</th><th>Elemento</th><th>Tipo</th><th id="et-time-head">Tempo</th><th>% ciclo</th><th>Etapa</th>
+        </tr></thead>
+        <tbody id="et-tbody"></tbody>
+      </table>
+    </div>
+    <div id="et-preview" class="et-preview" role="status"></div>
+    <div class="dialog-footer">
+      <button type="button" id="btn-et-save" class="btn-primary">Salvar etapas</button>
+      <button type="button" id="btn-et-cancel" class="btn-outline">Cancelar</button>
+    </div>
+    <datalist id="et-names"></datalist>
+  </dialog>
 
   <!-- NOTIFICAÇÕES -->
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>
@@ -569,5 +601,6 @@
   <script src="js/app.js"></script>
   <script src="js/ai.js"></script>
   <script src="js/ai-ui.js"></script>
+  <script src="js/etapas-ui.js"></script>
 </body>
 </html>

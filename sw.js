@@ -5,7 +5,7 @@
  * REV 1.15: os arquivos são baixados direto do servidor (sem o cache HTTP do navegador), para a
  * página e os scripts chegarem sempre na mesma versão.
  */
-const CACHE_VERSION = "lean-chrono-v32";
+const CACHE_VERSION = "lean-chrono-v33";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -29,6 +29,7 @@ const APP_SHELL = [
   "./js/app.js",
   "./js/ai.js",
   "./js/ai-ui.js",
+  "./js/etapas-ui.js",
 ];
 
 self.addEventListener("install", (event) => {

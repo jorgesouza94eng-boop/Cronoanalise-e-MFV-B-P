@@ -16,10 +16,11 @@
   const $ = (id) => document.getElementById(id);
 
   let settings = { apiKey: "", model: "", anonymize: true };
+  let openDialog = async () => {}; // definido em init (abre a janela do assistente)
   let pending = null; // { kind, items, text, studyId, studyName }
   // Tarefa da IA (REV 1.21): continua com a janela minimizada; o selo mostra o andamento
   let job = null; // { kind, count, studyId, studyName, state: "running" | "done" | "error" }
-  const KIND_LABELS = { classify: "Classificação", kaizen: "Kaizen", notes: "Constatações", names: "Padronizar nomes", ask: "Pergunta" };
+  const KIND_LABELS = { classify: "Classificação", kaizen: "Kaizen", notes: "Constatações", names: "Padronizar nomes", ask: "Pergunta", etapas: "Etapas" };
 
   function app() {
     return root.LeanApp;
@@ -204,8 +205,110 @@
     }
   }
 
+  /**
+   * Etapas do processo (REV 1.25): a IA agrupa os elementos sem etapa de cada produto; a revisão
+   * e a gravação são feitas na janela "Definir etapas" (nada é gravado direto).
+   */
+  async function runEtapas() {
+    const st = app() && app().state;
+    if (!st || !st.study || running()) return;
+    const study = st.study;
+    const computed = Calc.computeStudy(study);
+    const anon = settings.anonymize !== false;
+    const prompt = AI.buildEtapasPrompt(study, computed, anon);
+    if (!prompt.count) return setStatus('Todos os elementos já têm etapa. Para mudar, use "Definir etapas".', true);
+    discardPending();
+    startJob("etapas", prompt.count, study);
+    const ask = (p) =>
+      AI.generate(settings, p.text, {
+        json: true,
+        schema: p.schema,
+        temperature: p.temperature,
+        onRetry: (n, total) => setStatus(`Servidor do Gemini ocupado, tentando de novo (${n}/${total})...`),
+      });
+    setStatus(`Consultando o Gemini (${prompt.count} elemento(s) sem etapa)...`);
+    try {
+      const res = AI.parseEtapas(await ask(prompt), prompt.targets, study);
+      showEtapas(res, prompt, study, computed);
+      finishJob("done");
+    } catch (err) {
+      setStatus(`Falha na IA: ${err.message || err}`, true);
+      finishJob("error");
+    }
+  }
+
+  /** Lista agrupada por produto e etapa, com o TP de cada etapa calculado pelo app. */
+  function showEtapas(res, prompt, study, computed) {
+    const items = res.items;
+    pending = { kind: "etapas", items, studyId: study.id, studyName: studyName(study) };
+    $("ai-results").hidden = false;
+    $("ai-notes").hidden = true;
+    $("btn-ai-append").hidden = true;
+    $("btn-ai-apply").textContent = "Revisar e salvar…";
+    $("btn-ai-apply").hidden = false;
+    $("btn-ai-apply").disabled = false;
+    $("ai-results-title").textContent = "Etapas sugeridas (o TP de cada etapa é calculado pelo app)";
+    const u = Calc.TIME_UNITS[computed.unit] ? computed.unit : "s";
+    const lbl = Calc.TIME_UNITS[u].label;
+    const nodes = [];
+    computed.products.forEach((p) => {
+      const mine = items.filter((it) => it.target.productKey === p.key);
+      if (!mine.length) return;
+      const list = Calc.etapaElements(study, p.key, computed);
+      const assign = new Map(mine.filter((it) => !it.noStage).map((it) => [it.target.key, it.etapa]));
+      const pv = Calc.etapaPreview(study, p.key, Calc.etapaAssignPlan(study, list, assign));
+      const tpOf = (name) => {
+        const e = pv.etapas.find((x) => Calc.elementKey(x.name) === Calc.elementKey(name));
+        return e ? ` — ${Calc.formatTime(e.tp, u)} ${lbl}` : "";
+      };
+      if (computed.multiProduct) nodes.push(Object.assign(document.createElement("li"), { className: "ai-group ai-group-product", textContent: p.name }));
+      const names = [];
+      mine.forEach((it) => !it.noStage && !names.includes(it.etapa) && names.push(it.etapa));
+      names.forEach((name, gi) => {
+        const why = res.why.get(Calc.elementKey(name));
+        nodes.push(Object.assign(document.createElement("li"), { className: "ai-group", textContent: `${gi + 1}. ${name}${tpOf(name)}${why ? ` • ${why}` : ""}` }));
+        mine.filter((it) => !it.noStage && it.etapa === name).forEach((it) => nodes.push(itemLi(it, items.indexOf(it), it.target.name, "")));
+      });
+      mine.filter((it) => it.noStage).forEach((it) => nodes.push(itemLi(it, items.indexOf(it), it.target.name, `Sem etapa clara: ${it.why}`)));
+    });
+    $("ai-list").replaceChildren(...nodes);
+    const ok = items.filter((i) => !i.noStage).length;
+    const missing = prompt.targets.length - items.length;
+    setStatus(
+      `${ok} elemento(s) com etapa sugerida de ${prompt.count} sem etapa.` +
+        (items.length - ok ? ` ${items.length - ok} sem etapa clara (decida na revisão).` : "") +
+        (missing > 0 ? ` A IA não respondeu ${missing} elemento(s).` : "") +
+        ' Desmarque o que não concordar e clique em "Revisar e salvar…": a janela "Definir etapas" abre para ajustar nomes e salvar.',
+      !ok
+    );
+  }
+
+  function itemLi(it, index, title, detail) {
+    const li = document.createElement("li");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !it.noStage;
+    cb.disabled = !!it.noStage;
+    cb.dataset.index = index;
+    cb.id = `ai-item-${index}`;
+    const label = document.createElement("label");
+    label.htmlFor = cb.id;
+    label.append(Object.assign(document.createElement("div"), { className: "ai-item-title", textContent: title }));
+    if (detail) label.append(Object.assign(document.createElement("div"), { className: "ai-item-detail", textContent: detail }));
+    li.append(cb, label);
+    return li;
+  }
+
+  /** Abre o assistente e pede as etapas (botão da janela "Definir etapas"). */
+  async function suggestEtapas() {
+    await openDialog();
+    if (!settings.apiKey || !settings.model) return setStatus("Cadastre a chave e o modelo do Gemini para a IA sugerir as etapas.", true);
+    return runEtapas();
+  }
+
   async function run(kind) {
     if (kind === "kaizen") return runKaizen();
+    if (kind === "etapas") return runEtapas();
     const st = app() && app().state;
     if (!st || !st.study || running()) return;
     const study = st.study;
@@ -333,6 +436,25 @@
 
   function apply(mode) {
     if (!pending || !checkStudy()) return;
+    if (pending.kind === "etapas") {
+      // Revisão na janela "Definir etapas" (a IA nunca grava direto)
+      const draft = new Map();
+      Array.from(document.querySelectorAll("#ai-list input:checked")).forEach((cb) => {
+        const it = pending.items[Number(cb.dataset.index)];
+        if (!it || it.noStage) return;
+        if (!draft.has(it.target.productKey)) draft.set(it.target.productKey, new Map());
+        draft.get(it.target.productKey).set(it.target.key, it.etapa);
+      });
+      const first = draft.keys().next();
+      pending = null;
+      job = null;
+      $("ai-results").hidden = true;
+      setStatus("");
+      $("ai-dialog").close();
+      updatePill();
+      if (root.LeanEtapas) root.LeanEtapas.open({ draft, productKey: first.done ? undefined : first.value });
+      return;
+    }
     let n = 0;
     const report = { notFound: 0 };
     if (pending.kind === "notes") {
@@ -361,7 +483,7 @@
 
   function init() {
     const dlg = $("ai-dialog");
-    const openDialog = async () => {
+    openDialog = async () => {
       await loadSettings();
       refreshButtons();
       // Tarefa em andamento ou sugestões ainda não aplicadas: a janela volta como estava
@@ -401,6 +523,8 @@
     root.addEventListener("online", refreshButtons);
     root.addEventListener("offline", refreshButtons);
   }
+
+  root.LeanAIUI = { suggestEtapas };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();

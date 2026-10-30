@@ -622,6 +622,92 @@
     return { mode, value, oldValue: String(oldProduct || "").trim(), ids, from: idx + 2, to: idx + 1 + ids.length };
   }
 
+  /* ==========================================================================
+     DEFINIR ETAPAS (REV 1.25): elementos do produto uma vez cada, na ordem da grade
+     ========================================================================== */
+
+  const cleanName = (v) => String(v == null ? "" : v).trim().replace(/\s+/g, " ");
+
+  /**
+   * Elementos de um produto, um por nome (a etapa é escolhida uma vez por elemento e vale para
+   * todas as linhas dele). etapa: "" = sem etapa; texto = a mesma etapa em todas as linhas;
+   * null = linhas em etapas diferentes ("várias"). cycleTime/sharePct: soma no resumo do produto.
+   */
+  function etapaElements(study, productKey, computed) {
+    const r = computed || computeStudy(study);
+    const map = new Map();
+    const out = [];
+    (study.elements || []).forEach((el, i) => {
+      const row = r.rows[i];
+      if (!row || row.productKey !== productKey) return;
+      const name = cleanName(el.description);
+      if (!name) return;
+      const key = elementKey(name);
+      let g = map.get(key);
+      if (!g) {
+        g = { key, name, firstSeq: row.seq, type: el.type, rows: [], etapas: new Set(), operators: new Set(), cycleTime: 0, sharePct: 0 };
+        map.set(key, g);
+        out.push(g);
+      }
+      g.rows.push(i);
+      g.etapas.add(cleanName(el.etapa));
+      if (r.multiOperator) g.operators.add(row.operator);
+    });
+    const prod = r.products.find((p) => p.key === productKey);
+    if (prod) {
+      prod.summary.elements.forEach((sg) => {
+        const g = !sg.unnamed && map.get(elementKey(sg.name));
+        if (g) {
+          g.cycleTime += sg.cycleTime || 0;
+          g.sharePct += sg.sharePct || 0;
+        }
+      });
+    }
+    return out.map((g) => ({
+      key: g.key,
+      name: g.name,
+      firstSeq: g.firstSeq,
+      type: g.type,
+      rows: g.rows,
+      operators: Array.from(g.operators).sort((a, b) => a - b),
+      cycleTime: g.cycleTime,
+      sharePct: g.sharePct,
+      etapa: g.etapas.size === 1 ? Array.from(g.etapas)[0] : null,
+    }));
+  }
+
+  /**
+   * Linhas que mudam ao gravar as etapas. assignments: Map(chave do elemento → etapa) com os
+   * elementos editados; "" tira a etapa. Só as linhas com etapa diferente entram.
+   * Retorna [{ index, value }].
+   */
+  function etapaAssignPlan(study, list, assignments) {
+    const changes = [];
+    list.forEach((g) => {
+      if (!assignments.has(g.key)) return;
+      const value = cleanName(assignments.get(g.key));
+      g.rows.forEach((i) => {
+        if (cleanName(study.elements[i].etapa) !== value) changes.push({ index: i, value });
+      });
+    });
+    return changes;
+  }
+
+  /** Prévia: TP por etapa do produto com as mudanças aplicadas numa cópia do estudo. */
+  function etapaPreview(study, productKey, changes) {
+    const copy = JSON.parse(JSON.stringify(study));
+    (changes || []).forEach((c) => (copy.elements[c.index].etapa = c.value));
+    copy.settings = Object.assign({}, copy.settings, { multiEtapa: true });
+    const r = computeStudy(copy);
+    const p = r.products.find((x) => x.key === productKey);
+    if (!p) return { etapas: [], tp: null };
+    return {
+      etapas: (p.etapas || []).map((e) => ({ name: e.name, tp: e.tp != null ? e.tp : e.tn, key: e.key })),
+      tp: p.kpis.standardTime != null ? p.kpis.standardTime : p.summary.cycleNormal,
+      unit: r.unit,
+    };
+  }
+
   /**
    * Classificação copiada para as linhas do mesmo elemento (REV 1.18): ao mudar o tipo, o valor
    * ou o desperdício de uma linha, as outras linhas com o mesmo nome (no mesmo produto e na mesma
@@ -1572,6 +1658,9 @@
     SCHEMA_VERSION,
     LEAN_TOOLS,
     elementGroupKey,
+    etapaElements,
+    etapaAssignPlan,
+    etapaPreview,
     PACE_MIN,
     PACE_MAX,
     STATUS_LABELS,

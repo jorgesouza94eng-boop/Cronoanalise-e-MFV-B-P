@@ -1782,6 +1782,10 @@
       if (!state.doc.clientName && st.clientName) state.doc.clientName = st.clientName;
       markChanged({ render: true });
       toast(`Etapa adicionada: ${st.processName} (TC ${st.tcMin ? ft(st.tcMin) + " " + Calc.TIME_UNITS[unitOf()].label : "sem tempo padrão"}).`, "ok");
+      // REV 1.25: produto sem etapas do processo vira 1 barra só no GBO
+      if (newSteps.length === 1 && st.product !== MIX_KEY && !(st.etapaList && st.etapaList.length)) {
+        toast('Este produto ainda não tem etapas do processo: no GBO ele vira 1 barra. Para 1 barra por etapa, use "Definir etapas" na Cronoanálise e adicione de novo.', "info", 9000);
+      }
     });
     $("btn-add-manual-step").addEventListener("click", () => {
       state.doc.steps.push(M.createStep({ name: "" }));

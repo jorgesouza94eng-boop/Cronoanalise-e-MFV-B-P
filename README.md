@@ -411,6 +411,7 @@ O botão **✨ IA** na barra da grade abre o assistente. Durante um pedido, o bo
 1. Na primeira vez: cole a chave → **Carregar modelos** → escolha o modelo (o app sugere um "flash") → **Salvar configuração**.
 2. Use os botões:
    - **Classificar valor e desperdício:** para os elementos ainda sem classificação;
+   - **Sugerir etapas do processo** (REV 1.25): agrupa os elementos sem etapa de cada produto em etapas (as barras do GBO); você revisa e salva na janela **"Definir etapas"** (botão ao lado de "Etapas"), que também funciona sem IA: uma etapa por elemento, aplicação em lote e prévia do TP por etapa;
    - **Sugerir ações Kaizen (ECRS):** para os elementos Não agrega e Incidental de **todos os produtos, etapas e operadores** (REV 1.20). A caixa "Kaizen: incluir também os elementos Agrega e os sem classificação" amplia o pedido. Cada sugestão traz ECRS, ação (verbo + o quê + onde), ferramenta Lean, justificativa com dado do estudo e confiança (a baixa vem desmarcada). Quando faltam dados, a IA responde "sem ação" e diz o que observar. Elementos que a IA não respondeu são pedidos de novo uma vez; ação já digitada não é substituída. A ferramenta vai para o Plano 5W2H;
    - **Redigir constatações e soluções:** um rascunho editável para a Compilação;
    - **Padronizar nomes dos elementos:** junta variações do mesmo elemento ("anotar a OP" → "Anotar OP");
@@ -525,6 +526,7 @@ js/ui.js              Renderização e navegação por teclado
 js/app.js             Orquestração: estado, autosave, conflitos, gerenciador de estudos
 js/ai.js              Assistente de IA (Gemini): pedidos, anonimização e validação das respostas
 js/ai-ui.js           Tela do assistente de IA (configuração, sugestões e aplicação)
+js/etapas-ui.js       Janela "Definir etapas do processo" (REV 1.25)
 mfv.html              Página do MFV (estado presente)
 js/mfv-calc.js        Motor de cálculo do MFV (aba EP: horário, takt, GBO, capacidade, atravessamento, fluxograma)
 js/mfv-app.js         Tela e salvamento do MFV (mesma pasta e proteção contra conflito)
@@ -546,8 +548,8 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 217 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
-npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.24 (Yamazumi, Plano de Ação, Kaizen da IA, IA minimizada, filmagem de continuação, filtros do plano, fluxograma…) — requer o servidor local
+npm test             # 221 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
+npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.25 (Yamazumi, Plano de Ação, Kaizen da IA, IA minimizada, filmagem de continuação, filtros do plano, fluxograma, definir etapas…) — requer o servidor local
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

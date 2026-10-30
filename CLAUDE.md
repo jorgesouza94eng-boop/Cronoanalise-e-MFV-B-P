@@ -53,7 +53,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - HTML/CSS/JS puro, **sem build e sem servidor**. Funciona por `file://`, por servidor local e pelo GitHub Pages.
 - Scripts clássicos no padrão UMD (`window.LeanX` no navegador e `module.exports` nos testes do Node). **Não usar módulos ES** (quebram no `file://`).
 - Armazenamento local-first: IndexedDB (`LeanChronoDB`) e pasta do OneDrive pela File System Access API, com debounce de 3 s e proteção contra conflito (revisão + cópia `_conflito_`).
-- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6), `Yamazumi_*.json` (grupo de estudos, versão 1) e `Plano_*.json` (plano de ação 5W2H, versão 1) — REV 1.24. Elemento do estudo tem `kaizenTool` opcional (REV 1.20). Itens arquivados ficam na subpasta `_Arquivo` (fora das listas).
+- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6), `Yamazumi_*.json` (grupo de estudos, versão 1) e `Plano_*.json` (plano de ação 5W2H, versão 1) — REV 1.25. Elemento do estudo tem `kaizenTool` opcional (REV 1.20). Itens arquivados ficam na subpasta `_Arquivo` (fora das listas).
 - A revisão aparece no cabeçalho das 4 páginas (`.app-rev`); um teste confere com a versão do `package.json`.
 
 | Arquivo | Função |
@@ -66,6 +66,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 | `js/plano-calc.js`, `js/plano-app.js` | Plano de Ação 5W2H por cliente (ações Kaizen da cronoanálise, status, modelo 5W2H) |
 | `js/xlsx.js`, `js/xlsx-template.js` | Excel simples e preenchimento dos modelos B+P do consultor |
 | `js/ai.js`, `js/ai-ui.js` | Assistente Gemini (opcional) |
+| `js/etapas-ui.js` | Janela "Definir etapas" (REV 1.25) |
 | `js/storage.js` | IndexedDB, pasta e importação/exportação |
 
 ## Comandos
@@ -172,3 +173,8 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 ## Regra implementada na REV 1.24: fluxograma do estado presente (MFV)
 
 - `M.flowchartModel(r)`: etapas na ordem do GBO + estoques por `beforeStepId` (`__start`, id da etapa seguinte ou `__end`; vazio = sem posição, fora do desenho, com aviso). Gargalo = etapa de maior TC ou etapas do operador compartilhado quando o gargalo é a carga dele. Desenho em SVG (mfv-app), PNG para o Excel; nenhum cálculo novo.
+
+## Regra implementada na REV 1.25: definir etapas do processo
+
+- `C.etapaElements` (elementos do produto uma vez cada, etapa "" / texto / null = várias), `C.etapaAssignPlan` (linhas que mudam) e `C.etapaPreview` (TP por etapa numa cópia). A etapa vale para todas as linhas do elemento no produto.
+- IA (`A.buildEtapasPrompt` / `A.parseEtapas`): só elementos sem etapa recebem sugestão; 3–8 etapas por produto, pela sequência; "sem_etapa" quando não dá para decidir; a gravação passa sempre pela janela "Definir etapas".

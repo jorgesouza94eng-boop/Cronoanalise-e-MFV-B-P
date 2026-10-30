@@ -1596,3 +1596,21 @@ body.no-doc .app-workspace, body.no-doc .client-context { display: none !importa
   .flow-chart svg { max-width: 100%; height: auto; }
   #btn-flow-png, .flow-section .ai-check { display: none !important; }
 }
+
+/* Definir etapas do processo (REV 1.25) */
+.etapas-dialog { width: min(980px, calc(100vw - 24px)); }
+.et-hint { margin: 12px 20px 6px; }
+.et-toolbar { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin: 0 20px 8px; }
+.et-toolbar input[type="text"] { height: 32px; min-width: 200px; padding: 0 8px; border: 1px solid var(--border-light); border-radius: var(--radius-sm); }
+.et-field { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+.et-table-wrap { max-height: 52vh; margin: 0 20px; }
+.et-table { min-width: 0; }
+.et-table td.cell-text { white-space: normal; padding: 4px 8px; }
+.et-table td.mono { padding: 0 8px; text-align: right; }
+.et-table .et-check { width: 34px; text-align: center; }
+.et-table input.et-input { min-width: 180px; }
+.et-table input.et-input.is-ai { background: #eef2ff; border-color: #a5b4fc; }
+.et-preview { margin: 10px 20px 0; padding: 8px 12px; border: 1px solid var(--border-light); border-radius: var(--radius-md); background: var(--bg-subtle); font-size: 13px; }
+.et-preview-sub { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+.ai-list li.ai-group { font-weight: 700; color: var(--primary-700); border-bottom: none; padding-top: 12px; }
+.ai-list li.ai-group-product { color: var(--text-main); font-size: 14px; }

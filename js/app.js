@@ -1254,9 +1254,26 @@
     return changed;
   }
 
+  /**
+   * Grava as etapas definidas na janela "Definir etapas" (REV 1.25): changes = [{ index, value }].
+   * Liga a coluna Etapa e redesenha a grade. Retorna o nº de linhas alteradas.
+   */
+  function applyEtapas(changes) {
+    if (!state.study || !changes || !changes.length) return 0;
+    changes.forEach((c) => {
+      const el = state.study.elements[c.index];
+      if (el) el.etapa = c.value;
+    });
+    (state.study.settings || (state.study.settings = {})).multiEtapa = true;
+    markChanged({ rerender: true });
+    UI.renderStudy(state.study, state.computed);
+    return changes.length;
+  }
+
   root.LeanApp = {
     state,
     applyAi,
+    applyEtapas,
     flushSave,
     openStudy,
     showStudies,

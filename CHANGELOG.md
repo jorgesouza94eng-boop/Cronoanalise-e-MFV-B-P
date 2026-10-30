@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.25** | 30/10/2026 | Definir etapas do processo (janela manual e sugestão da IA) |
 | **REV 1.24** | 30/10/2026 | Fluxograma do processo (estado presente) no MFV |
 | **REV 1.23** | 30/10/2026 | Filtros nas ações da cronoanálise do Plano 5W2H e ECRS em "Manter/Simplificar" |
 | **REV 1.22** | 30/10/2026 | Peças = 0 para filmagem que continua outra (sem peças novas) |
@@ -29,6 +30,24 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.25 — 30/10/2026
+
+Decisão do consultor: ajuda para definir as **etapas do processo** (as barras do GBO), com **janela manual** e **sugestão da IA**.
+
+- **Janela "Definir etapas"** (botão ao lado de "Etapas", na cronoanálise): mostra os elementos do produto **uma vez cada**, na ordem da grade (Nº, elemento, tipo, tempo, % do ciclo), com um campo **Etapa**.
+  - A etapa escolhida vale para **todas as linhas do elemento** naquele produto.
+  - **Aplicar aos marcados:** a mesma etapa para vários elementos de uma vez.
+  - **Prévia do TP por etapa** e total do produto (calculados pelo app) antes de salvar. Nada é gravado até "Salvar etapas". Ao salvar, a coluna Etapa é ligada.
+  - Elemento com linhas em etapas diferentes aparece como "(várias — manter)": vazio mantém; digitar troca todas.
+- **Assistente de IA → "Sugerir etapas do processo"** (também pelo botão "✨ Sugerir com IA" da janela): a IA agrupa os elementos **sem etapa** de cada produto em 3 a 8 etapas, pela sequência da grade, reaproveitando os nomes já usados. Elementos com etapa vão só como referência e **não são trocados**. Quando não dá para decidir, a IA responde "sem etapa clara" com o motivo (não inventa).
+  - O resultado aparece **agrupado por etapa**, com o TP de cada etapa calculado pelo app e a justificativa da IA. "Revisar e salvar…" abre a janela "Definir etapas" com as sugestões em destaque, para ajustar nomes e salvar.
+  - Mesmas regras da IA: só sugere, anonimização ligada, esquema JSON e temperatura 0,2, funciona minimizada (REV 1.21) e presa ao estudo do pedido.
+- **MFV:** ao adicionar um produto **sem etapas**, o app avisa que ele vira 1 barra no GBO e indica o "Definir etapas".
+- Nenhum cálculo muda: o TP do produto continua igual à soma das etapas. Service worker v33.
+- Testes: `tests/etapas-rev125.test.js` e `tests/e2e.rev125.js`.
 
 ---
 

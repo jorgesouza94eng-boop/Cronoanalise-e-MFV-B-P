@@ -283,6 +283,119 @@
     return { text, count: targets.length, targets, stats: sel.stats, schema: KAIZEN_SCHEMA, temperature: 0.2 };
   }
 
+  /* --------------------------------------------------------------------------
+     (2b) ETAPAS DO PROCESSO (REV 1.25): agrupar os elementos de cada produto em etapas
+     -------------------------------------------------------------------------- */
+
+  const ETAPAS_SCHEMA = {
+    type: "OBJECT",
+    properties: {
+      itens: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: { id: { type: "INTEGER" }, sem_etapa: { type: "BOOLEAN" }, etapa: { type: "STRING" }, motivo: { type: "STRING" } },
+          required: ["id", "sem_etapa"],
+        },
+      },
+      etapas: {
+        type: "ARRAY",
+        items: { type: "OBJECT", properties: { produto: { type: "STRING" }, nome: { type: "STRING" }, justificativa: { type: "STRING" } }, required: ["nome"] },
+      },
+    },
+    required: ["itens"],
+  };
+
+  /**
+   * Pedido de etapas. Vão os elementos de todos os produtos, um por nome, na ordem da grade
+   * (ids sequenciais). Elementos que já têm etapa vão como referência ("etapa_atual") e não
+   * recebem sugestão. Retorna { text, count, targets, schema, temperature }.
+   */
+  function buildEtapasPrompt(study, computed, anonymize, opts) {
+    const o = opts || {};
+    const r = computed;
+    const an = (t) => (t ? (anonymize ? anonymizeText(t, study) : t) : null);
+    const conv = (v) => (v == null || !Number.isFinite(v) ? null : Number(Calc.toUnit(v, r.unit).toFixed(2)));
+    let targets = o.targets;
+    const items = [];
+    if (!targets) {
+      targets = [];
+      r.products.forEach((p) => {
+        Calc.etapaElements(study, p.key, r).forEach((g, i) => {
+          const t = { id: 0, productKey: p.key, product: r.multiProduct ? p.name || "" : "", key: g.key, name: g.name, order: i + 1, group: g };
+          if (g.etapa === "") {
+            t.id = targets.length + 1;
+            targets.push(t);
+          }
+          items.push(t);
+        });
+      });
+    } else items.push(...targets);
+    const list = items.map((t) => ({
+      id: t.id || null,
+      produto: an(t.product),
+      ordem: t.order,
+      elemento: an(t.name),
+      tipo: t.group.type === "A" ? "acíclico" : "cíclico",
+      tempo_no_ciclo: conv(t.group.cycleTime),
+      percentual_do_ciclo: Number((t.group.sharePct || 0).toFixed(1)),
+      operador: t.group.operators && t.group.operators.length ? t.group.operators.map((n) => r.operatorLabel(n)).join(", ") : null,
+      etapa_atual: t.group.etapa || (t.group.etapa === null ? "(várias)" : null),
+    }));
+    const text =
+      `${SYSTEM}\n\nTAREFA: agrupar os elementos de trabalho de cada produto em ETAPAS DO PROCESSO (as caixas do Mapa de Fluxo ` +
+      `de Valor), para o gráfico de balanceamento (GBO).\n\nREGRAS:\n` +
+      `1. Cada produto tem de 3 a 8 etapas. Uma etapa é uma fase do processo que transforma o produto ou o prepara ` +
+      `(ex.: "Preparação da massa", "Laminação", "Divisão", "Modelagem", "Embalagem").\n` +
+      `2. Respeite a sequência ("ordem"): elementos seguidos da mesma fase ficam na mesma etapa; não junte fases distantes.\n` +
+      `3. Atividades de apoio (buscar material, limpar, organizar, esperar, beber água, conversar) vão para a etapa em que ` +
+      `acontecem, pela sequência.\n` +
+      `4. Nome da etapa: 1 a 4 palavras, em português, sem número; o mesmo nome escrito igual em todos os elementos da etapa. ` +
+      `Se houver "etapa_atual" em outros elementos do produto, reaproveite esses nomes.\n` +
+      `5. Responda SÓ para os itens com "id". Itens com "etapa_atual" (sem id) são referência.\n` +
+      `6. Não invente: se a sequência e o nome não permitirem decidir, responda "sem_etapa": true e diga o motivo em até 12 palavras.\n` +
+      `7. Em "etapas", liste por produto cada etapa usada, com uma justificativa de até 15 palavras.\n\n` +
+      `ELEMENTOS (na ordem da cronoanálise): ${JSON.stringify(list)}\n\n` +
+      `Responda SOMENTE com JSON {"itens":[{"id":1,"sem_etapa":false,"etapa":"Laminação","motivo":""}],` +
+      `"etapas":[{"produto":"...","nome":"Laminação","justificativa":"..."}]}, com exatamente um item para cada id ` +
+      `recebido (${targets.length} no total).`;
+    return { text, count: targets.length, targets, schema: ETAPAS_SCHEMA, temperature: 0.2 };
+  }
+
+  /**
+   * Lê as etapas sugeridas pelo id. Nomes iguais (sem diferença de maiúsculas e espaços) no mesmo
+   * produto viram uma grafia só. Retorna { items: [{ id, target, etapa, noStage, why }], why: Map(nome → justificativa) }.
+   */
+  function parseEtapas(text, targets, study) {
+    const data = extractJson(text);
+    const byId = new Map(targets.map((t) => [t.id, t]));
+    const seen = new Set();
+    const spelling = new Map();
+    const clean = (v, max) => restoreNames(String(v == null ? "" : v).replace(/\s+/g, " "), study).trim().slice(0, max);
+    const items = [];
+    (Array.isArray(data.itens) ? data.itens : []).forEach((it) => {
+      const id = Number(it && it.id);
+      const t = byId.get(id);
+      if (!t || seen.has(id)) return;
+      const raw = clean(it.etapa, 40).replace(/^\d+[.)-]?\s*/, "");
+      if (it.sem_etapa === true || !raw) {
+        seen.add(id);
+        items.push({ id, target: t, etapa: "", noStage: true, why: clean(it.motivo, 160) || "sem etapa clara" });
+        return;
+      }
+      const k = `${t.productKey}|${Calc.elementKey(raw)}`;
+      if (!spelling.has(k)) spelling.set(k, raw);
+      seen.add(id);
+      items.push({ id, target: t, etapa: spelling.get(k), noStage: false, why: "" });
+    });
+    const why = new Map();
+    (Array.isArray(data.etapas) ? data.etapas : []).forEach((e) => {
+      const n = clean(e && e.nome, 40);
+      if (n && !why.has(Calc.elementKey(n))) why.set(Calc.elementKey(n), clean(e.justificativa, 160));
+    });
+    return { items: items.sort((a, b) => a.id - b.id), why };
+  }
+
   /** (3) Rascunho de constatações e soluções (aba "Compilação e Soluções"). */
   function buildNotesPrompt(study, computed, anonymize) {
     const c = computed.compilation;
@@ -611,6 +724,8 @@
     parseKaizen,
     kaizenTargets,
     kaizenStatsText,
+    buildEtapasPrompt,
+    parseEtapas,
     missingTargets,
     restoreNames,
     extractJson,
