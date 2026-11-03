@@ -29,6 +29,11 @@
   const FILE_PATTERN = /^Crono_.+\.json$/i;
   const CONFLICT_MARK = "_conflito_";
   const ARCHIVE_DIR = "_Arquivo"; // REV 1.16: subpasta dos arquivos arquivados (fora das listas)
+  // REV 1.26: um subpasta por empresa na pasta conectada (<Empresa>/Crono_….json). Subpastas que
+  // começam com "_" (ex.: _Modelos, _Arquivo) não são de empresa.
+  const COMPANY_FALLBACK = "Sem_cliente";
+  const DOC_PATTERN = /^(Crono|MFV|Yamazumi|Plano)_.+\.json$/i;
+  const locations = new Map(); // nome do arquivo → subpasta onde está ("" = pasta principal)
 
   let dbPromise = null;
   let backend = null; // "idb" | "localStorage" | "memory"
@@ -222,6 +227,7 @@
   /** Usa um handle de pasta (escolhido pelo usuário) e o memoriza no IndexedDB. */
   async function useDirectoryHandle(handle) {
     dirHandle = handle;
+    locations.clear(); // outra pasta: os locais conhecidos não valem mais
     if (backend === "idb") {
       try {
         await setKV("dirHandle", handle);
@@ -274,11 +280,68 @@
     return !!dirHandle && (await queryPermission()) === "granted";
   }
 
-  /** Lê e valida um arquivo de estudo da pasta. Retorna null se não existir ou estiver vazio. */
-  async function readStudyFile(fileName, normalize) {
+  /* --------------------------------------------------------------------------
+     SUBPASTA POR EMPRESA (REV 1.26)
+     -------------------------------------------------------------------------- */
+
+  /** Nome da subpasta da empresa (mesma grafia do início do nome dos arquivos). */
+  function companyDirName(clientName) {
+    return Calc.slugify(clientName, COMPANY_FALLBACK);
+  }
+
+  const isCompanyDir = (name) => !!name && !name.startsWith("_") && !name.startsWith(".");
+
+  async function subdir(name, create) {
+    return name ? dirHandle.getDirectoryHandle(name, create ? { create: true } : undefined) : dirHandle;
+  }
+
+  async function hasFile(dir, name) {
+    try {
+      await dir.getFileHandle(name);
+      return true;
+    } catch (err) {
+      if (err && (err.name === "NotFoundError" || err.name === "TypeMismatchError")) return false;
+      throw err;
+    }
+  }
+
+  /**
+   * Onde está o arquivo: o local já conhecido, a subpasta indicada, a pasta principal (arquivos de
+   * versões anteriores) ou qualquer subpasta de empresa (empresa renomeada). null = não existe.
+   */
+  async function locate(fileName, hintDir) {
+    const tries = [];
+    if (locations.has(fileName)) tries.push(locations.get(fileName));
+    if (hintDir != null && !tries.includes(hintDir)) tries.push(hintDir);
+    if (!tries.includes("")) tries.push("");
+    for (const d of tries) {
+      try {
+        if (await hasFile(await subdir(d), fileName)) {
+          locations.set(fileName, d);
+          return d;
+        }
+      } catch (err) {
+        if (!err || err.name !== "NotFoundError") throw err;
+      }
+    }
+    for await (const entry of dirHandle.values()) {
+      if (entry.kind !== "directory" || !isCompanyDir(entry.name) || tries.includes(entry.name)) continue;
+      if (await hasFile(entry, fileName)) {
+        locations.set(fileName, entry.name);
+        return entry.name;
+      }
+    }
+    locations.delete(fileName);
+    return null;
+  }
+
+  /** Lê e valida um arquivo de estudo da pasta (em qualquer subpasta de empresa). Retorna null se não existir ou estiver vazio. */
+  async function readStudyFile(fileName, normalize, hintDir) {
+    const where = await locate(fileName, hintDir);
+    if (where == null) return null;
     let fileHandle;
     try {
-      fileHandle = await dirHandle.getFileHandle(fileName);
+      fileHandle = await (await subdir(where)).getFileHandle(fileName);
     } catch (err) {
       if (err && err.name === "NotFoundError") return null;
       throw err;
@@ -297,30 +360,89 @@
     return result.study;
   }
 
-  /** Lista os estudos da pasta (ignora cópias de conflito e arquivos inválidos). */
+  /**
+   * Lista os estudos da pasta: subpastas das empresas e, por compatibilidade, a pasta principal
+   * (ignora cópias de conflito e arquivos inválidos).
+   */
   async function listFolderStudies(options) {
     const opts = options || {};
     const pattern = opts.pattern || FILE_PATTERN;
     const studies = [];
     const skipped = [];
+    const dirs = [["", dirHandle]];
     for await (const entry of dirHandle.values()) {
-      if (entry.kind !== "file" || !pattern.test(entry.name)) continue;
-      if (entry.name.includes(CONFLICT_MARK)) continue;
-      try {
-        const study = await readStudyFile(entry.name, opts.normalize);
-        if (!study) continue;
-        if (study.invalid) skipped.push({ fileName: entry.name, error: study.error });
-        // O nome real do arquivo prevalece (caso tenha sido renomeado no Explorer).
-        else studies.push(Object.assign(study, { fileName: entry.name }));
-      } catch (err) {
-        skipped.push({ fileName: entry.name, error: err.message || String(err) });
+      if (entry.kind === "directory" && isCompanyDir(entry.name)) dirs.push([entry.name, entry]);
+    }
+    for (const [dirName, dir] of dirs) {
+      for await (const entry of dir.values()) {
+        if (entry.kind !== "file" || !pattern.test(entry.name)) continue;
+        if (entry.name.includes(CONFLICT_MARK)) continue;
+        locations.set(entry.name, dirName);
+        try {
+          const study = await readStudyFile(entry.name, opts.normalize, dirName);
+          if (!study) continue;
+          if (study.invalid) skipped.push({ fileName: entry.name, error: study.error });
+          // O nome real do arquivo prevalece (caso tenha sido renomeado no Explorer).
+          else studies.push(Object.assign(study, { fileName: entry.name }));
+        } catch (err) {
+          skipped.push({ fileName: entry.name, error: err.message || String(err) });
+        }
       }
     }
     return { studies, skipped };
   }
 
-  async function writeTextFile(fileName, text) {
-    const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+  /** Arquivos de documentos soltos na pasta principal (versões anteriores à REV 1.26). */
+  async function countLooseFiles() {
+    if (!(await folderReady())) return 0;
+    let n = 0;
+    for await (const entry of dirHandle.values()) if (entry.kind === "file" && DOC_PATTERN.test(entry.name)) n += 1;
+    return n;
+  }
+
+  /**
+   * Organizar por empresa (REV 1.26): move os documentos soltos na pasta principal (inclusive as
+   * cópias de conflito) para a subpasta da empresa de cada um. Nada é apagado antes de gravado no
+   * destino; se já houver um arquivo com o mesmo nome no destino, o arquivo fica onde está.
+   * Retorna { moved, skipped: [{ fileName, reason }], dirs: [subpastas usadas] }.
+   */
+  async function organizeByCompany() {
+    if (!(await folderReady())) return { moved: 0, skipped: [], dirs: [] };
+    const names = [];
+    for await (const entry of dirHandle.values()) if (entry.kind === "file" && DOC_PATTERN.test(entry.name)) names.push(entry.name);
+    let moved = 0;
+    const skipped = [];
+    const dirs = new Set();
+    for (const name of names) {
+      try {
+        const text = await (await (await dirHandle.getFileHandle(name)).getFile()).text();
+        let client;
+        try {
+          client = JSON.parse(text).clientName;
+        } catch (err) {
+          skipped.push({ fileName: name, reason: "JSON corrompido" });
+          continue;
+        }
+        const target = companyDirName(client);
+        const dir = await subdir(target, true);
+        if (await hasFile(dir, name)) {
+          skipped.push({ fileName: name, reason: `já existe em ${target}` });
+          continue;
+        }
+        await writeTextFile(name, text, target);
+        await dirHandle.removeEntry(name);
+        locations.set(name, target);
+        dirs.add(target);
+        moved += 1;
+      } catch (err) {
+        skipped.push({ fileName: name, reason: err.message || String(err) });
+      }
+    }
+    return { moved, skipped, dirs: Array.from(dirs).sort() };
+  }
+
+  async function writeTextFile(fileName, text, dirName) {
+    const fileHandle = await (await subdir(dirName || "", true)).getFileHandle(fileName, { create: true });
     const writable = await fileHandle.createWritable();
     try {
       await writable.write(text);
@@ -372,7 +494,16 @@
   async function archiveFile(fileName, text) {
     if (!dirHandle) return { status: "no-folder" };
     if ((await queryPermission()) !== "granted") return { status: "no-permission" };
-    const dir = await dirHandle.getDirectoryHandle(ARCHIVE_DIR, { create: true });
+    // REV 1.26: o arquivado vai para <Empresa>/_Arquivo
+    let client = "";
+    try {
+      client = JSON.parse(text).clientName;
+    } catch (err) {
+      /* conteúdo sem JSON: usa a pasta onde o arquivo está */
+    }
+    const where = await locate(fileName);
+    const base = client || where == null ? companyDirName(client) : where;
+    const dir = await (await subdir(base, true)).getDirectoryHandle(ARCHIVE_DIR, { create: true });
     let name = fileName;
     try {
       await dir.getFileHandle(name);
@@ -385,12 +516,15 @@
     const w = await fh.createWritable();
     await w.write(text);
     await w.close();
-    try {
-      await dirHandle.removeEntry(fileName);
-    } catch (err) {
-      if (!err || err.name !== "NotFoundError") throw err; // só no navegador: não havia arquivo na pasta
+    if (where != null) {
+      try {
+        await (await subdir(where)).removeEntry(fileName);
+      } catch (err) {
+        if (!err || err.name !== "NotFoundError") throw err; // só no navegador: não havia arquivo na pasta
+      }
+      locations.delete(fileName);
     }
-    return { status: "ok", archived: `${ARCHIVE_DIR}/${name}` };
+    return { status: "ok", archived: `${base}/${ARCHIVE_DIR}/${name}` };
   }
 
   /**
@@ -438,7 +572,11 @@
     if (!dirHandle) return { status: "no-folder" };
     if ((await queryPermission()) !== "granted") return { status: "no-permission" };
 
-    const disk = await readStudyFile(study.fileName, opts.normalize);
+    // REV 1.26: grava na subpasta da empresa; arquivo em outro lugar (versão anterior ou empresa
+    // renomeada) é lido de onde está e, depois de gravado no destino, sai do lugar antigo.
+    const target = companyDirName(study.clientName);
+    const current = await locate(study.fileName, target);
+    const disk = current == null ? null : await readStudyFile(study.fileName, opts.normalize, current);
     const serialize = opts.serialize || Calc.serializeStudy;
     const diskStudy = disk && !disk.invalid ? disk : null;
     const diskExists = !!disk;
@@ -452,15 +590,25 @@
       let conflictFile = null;
       if (!opts.skipConflictCopy) {
         conflictFile = conflictFileName(study.fileName);
-        await writeTextFile(conflictFile, serialize(study));
+        await writeTextFile(conflictFile, serialize(study), target);
       }
       return { status: "conflict", diskStudy, diskInvalid: diskExists && !diskStudy, conflictFile };
     }
 
     const nextRevision = (diskStudy ? diskStudy.revision : expectedRevision || 0) + 1;
     const toWrite = Object.assign({}, study, { revision: nextRevision });
-    await writeTextFile(study.fileName, serialize(toWrite));
-    return { status: "ok", revision: nextRevision };
+    await writeTextFile(study.fileName, serialize(toWrite), target);
+    let moved = null;
+    if (current != null && current !== target) {
+      try {
+        await (await subdir(current)).removeEntry(study.fileName);
+      } catch (err) {
+        if (!err || err.name !== "NotFoundError") throw err;
+      }
+      moved = { from: current, to: target };
+    }
+    locations.set(study.fileName, target);
+    return { status: "ok", revision: nextRevision, folder: target, moved };
   }
 
   /* ==========================================================================
@@ -518,6 +666,9 @@
     folderReady,
     readStudyFile,
     listFolderStudies,
+    companyDirName,
+    countLooseFiles,
+    organizeByCompany,
     writeStudy,
     writeTextFile,
     writeBinaryFile,

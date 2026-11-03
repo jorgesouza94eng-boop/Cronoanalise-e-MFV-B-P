@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.26** | 03/11/2026 | Arquivos organizados por empresa (subpastas) e filtro por empresa nas listas |
 | **REV 1.25** | 30/10/2026 | Definir etapas do processo (janela manual e sugestão da IA) |
 | **REV 1.24** | 30/10/2026 | Fluxograma do processo (estado presente) no MFV |
 | **REV 1.23** | 30/10/2026 | Filtros nas ações da cronoanálise do Plano 5W2H e ECRS em "Manter/Simplificar" |
@@ -30,6 +31,25 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.26 — 03/11/2026
+
+Decisão do consultor: **B + C**, organização dos arquivos por empresa.
+
+**B — uma subpasta por empresa na pasta conectada:**
+- Os documentos passam a ser gravados em `<Empresa>/` (ex.: `R_F_DE_ASSIS/Crono_….json`, `R_F_DE_ASSIS/MFV_….json`). O nome da subpasta segue a grafia do início do nome dos arquivos. Sem empresa: `Sem_cliente/`.
+- O app lê as subpastas das empresas e, por compatibilidade, a pasta principal. O MFV, o Yamazumi e o Plano encontram os estudos em qualquer subpasta.
+- **Arquivos soltos de versões anteriores:** as listas mostram o aviso "N arquivo(s) soltos na pasta principal" com o botão **"Organizar por empresa"**. Com confirmação, cada arquivo (inclusive as cópias de conflito) é gravado na subpasta da sua empresa e só depois sai da pasta principal. Se já houver arquivo com o mesmo nome no destino, ele fica onde está e o app informa. Mesmo sem organizar, cada documento muda para a subpasta da empresa na próxima vez que for salvo.
+- **Empresa renomeada:** o arquivo (mesmo nome) muda para a subpasta da nova grafia ao salvar, sem duplicar.
+- **Arquivar** passa a usar `<Empresa>/_Arquivo`. As cópias de conflito ficam na subpasta da empresa. Os modelos Excel continuam em `_Modelos`, na pasta principal (um só para todas as empresas).
+- A proteção contra conflito (revisão e cópia `_conflito_`) não muda.
+
+**C — filtro e agrupamento por empresa nas listas** de Estudos, MFVs, Grupos e Planos: itens agrupados por empresa (ordem alfabética, "Sem cliente" no fim) e seletor **"Empresa"**, lembrado neste navegador. Com uma empresa só, a lista fica como antes.
+
+- Nenhum cálculo muda. Service worker v34.
+- Testes: `tests/e2e.rev126.js` (pasta simulada); `tests/e2e.browser.js` e `tests/e2e.rev116.js` atualizados para a subpasta da empresa.
 
 ---
 

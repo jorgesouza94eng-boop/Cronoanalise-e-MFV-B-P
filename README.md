@@ -449,7 +449,7 @@ O botão **✨ IA** na barra da grade abre o assistente. Durante um pedido, o bo
 ## 3.1 Arquivar (REV 1.16)
 
 Em **Estudos**, **MFVs** e **Grupos**, o botão **Arquivar** tira o item da lista sem apagar:
-- **Com a pasta conectada:** o arquivo vai para a subpasta `_Arquivo`. Para trazer de volta, mova o arquivo para a pasta.
+- **Com a pasta conectada:** o arquivo vai para a subpasta `_Arquivo` da empresa (`<Empresa>/_Arquivo`, REV 1.26). Para trazer de volta, mova o arquivo para a subpasta da empresa.
 - **Sem pasta:** o app baixa o `.json` e tira o item do navegador. Para trazer de volta, use "Importar JSON".
 
 O documento aberto não pode ser arquivado.
@@ -461,9 +461,11 @@ O documento aberto não pode ser arquivado.
 1. Clique em **Conectar pasta (OneDrive)** e escolha a pasta sincronizada.
 2. Cada alteração é salva **na hora no navegador** e **na pasta 3 s depois da última tecla** (*debounce*), para não sobrecarregar a sincronização do OneDrive.
 3. Ao reabrir o navegador, ele pede a permissão de novo: clique em **Reautorizar pasta**. Enquanto isso, nada se perde, porque tudo continua salvo no navegador.
-4. O botão **Estudos** lista os arquivos `Crono_*.json` da pasta e os estudos guardados no navegador.
+4. O botão **Estudos** lista os arquivos `Crono_*.json` da pasta e os estudos guardados no navegador. As listas são agrupadas por empresa, com o filtro **"Empresa"** (REV 1.26).
 
-**Nome do arquivo:** gerado uma única vez na criação, sem acentos e com um ID único. Exemplo: `Crono_Industria_Metalurgica_Alfa_Montagem_Final_Posto_01_2026-10-15_a1b2c3d4.json`. Renomear o cliente ou o posto **não** cria um arquivo novo.
+**Uma subpasta por empresa (REV 1.26):** os arquivos ficam em `<Empresa>/` dentro da pasta conectada (ex.: `Industria_Metalurgica_Alfa/Crono_….json`), com o `_Arquivo` da empresa dentro dela. Os modelos Excel ficam em `_Modelos`, na pasta principal. Arquivos soltos na pasta principal (versões anteriores) continuam sendo lidos; o botão **"Organizar por empresa"**, no aviso das listas, move todos para as subpastas.
+
+**Nome do arquivo:** gerado uma única vez na criação, sem acentos e com um ID único. Exemplo: `Crono_Industria_Metalurgica_Alfa_Montagem_Final_Posto_01_2026-10-15_a1b2c3d4.json`. Renomear o cliente ou o posto **não** cria um arquivo novo; renomear o cliente muda o arquivo para a subpasta da nova grafia.
 
 **Proteção contra conflito (dois notebooks):** cada arquivo tem um número de **revisão**. Antes de gravar, o app confere se a pasta ainda está na revisão que ele conhece. Se outro dispositivo gravou antes:
 
@@ -527,6 +529,7 @@ js/app.js             Orquestração: estado, autosave, conflitos, gerenciador d
 js/ai.js              Assistente de IA (Gemini): pedidos, anonimização e validação das respostas
 js/ai-ui.js           Tela do assistente de IA (configuração, sugestões e aplicação)
 js/etapas-ui.js       Janela "Definir etapas do processo" (REV 1.25)
+js/org-ui.js          Filtro por empresa nas listas e "Organizar por empresa" (REV 1.26)
 mfv.html              Página do MFV (estado presente)
 js/mfv-calc.js        Motor de cálculo do MFV (aba EP: horário, takt, GBO, capacidade, atravessamento, fluxograma)
 js/mfv-app.js         Tela e salvamento do MFV (mesma pasta e proteção contra conflito)
@@ -549,7 +552,7 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 
 ```bash
 npm test             # 221 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
-npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.25 (Yamazumi, Plano de Ação, Kaizen da IA, IA minimizada, filmagem de continuação, filtros do plano, fluxograma, definir etapas…) — requer o servidor local
+npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.26 (Yamazumi, Plano de Ação, Kaizen da IA, IA minimizada, filmagem de continuação, filtros do plano, fluxograma, definir etapas, pastas por empresa…) — requer o servidor local
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

@@ -187,22 +187,33 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     check(await page.evaluate(() => LeanApp.state.diskRevision) === 1, "debounce: após 1,5 s ainda não gravou");
     await page.waitForFunction(() => LeanApp.state.diskRevision === 2, null, { timeout: 6000 });
     check(true, "debounce: gravou após ~3 s (revisão 2)");
-    const diskDesc = await page.evaluate(async (fn) => {
+    // REV 1.26: o arquivo fica na subpasta da empresa
+    const DIR = "Industria_Metalurgica_Alfa";
+    const diskDesc = await page.evaluate(async ([dir, fn]) => {
       const root = await navigator.storage.getDirectory();
-      const f = await (await root.getFileHandle(fn)).getFile();
+      const f = await (await (await root.getDirectoryHandle(dir)).getFileHandle(fn)).getFile();
       return JSON.parse(await f.text());
-    }, fileName);
+    }, [DIR, fileName]);
     check(diskDesc.elements[4].description === "Embalar" && diskDesc.revision === 2 && diskDesc.results.capacityPcsDay > 0, "arquivo na pasta contém a alteração e o resumo de resultados");
 
     // Renomear o cliente NÃO cria arquivo novo
     await page.fill("#client-name", "Alfa Renomeada");
     await page.waitForFunction(() => LeanApp.state.diskRevision === 3, null, { timeout: 6000 });
-    const files = await page.evaluate(async () => { const r = await navigator.storage.getDirectory(); const out = []; for await (const k of r.keys()) out.push(k); return out; });
-    check(files.length === 1 && files[0] === fileName, "renomear cliente mantém 1 único arquivo");
+    // Lista "subpasta/arquivo" de todos os .json da pasta (REV 1.26: um nível de subpastas)
+    const listAll = () => page.evaluate(async () => {
+      const r = await navigator.storage.getDirectory(); const out = [];
+      for await (const [k, h] of r.entries()) {
+        if (h.kind === "file") out.push(k);
+        else for await (const k2 of h.keys()) out.push(`${k}/${k2}`);
+      }
+      return out;
+    });
+    const files = await listAll();
+    check(files.length === 1 && files[0] === `Alfa_Renomeada/${fileName}`, "renomear cliente: o único arquivo (mesmo nome) muda para a subpasta da nova empresa: " + files.join(", "));
 
     // Conflito: outro dispositivo grava revisão 4 na pasta
     await page.evaluate(async (fn) => {
-      const root = await navigator.storage.getDirectory();
+      const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("Alfa_Renomeada");
       const fh = await root.getFileHandle(fn);
       const data = JSON.parse(await (await fh.getFile()).text());
       data.revision = 4; data.updatedAt = new Date().toISOString(); data.elements[0].description = "Alterado no notebook B";
@@ -212,7 +223,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await page.waitForSelector("#conflict-banner:not([hidden])", { timeout: 6000 });
     check(true, "conflito detectado: aviso exibido");
     const after = await page.evaluate(async (fn) => {
-      const root = await navigator.storage.getDirectory(); const out = [];
+      const root = await (await navigator.storage.getDirectory()).getDirectoryHandle("Alfa_Renomeada"); const out = [];
       for await (const k of root.keys()) out.push(k);
       const d = JSON.parse(await (await (await root.getFileHandle(fn)).getFile()).text());
       return { files: out, desc: d.elements[0].description };
@@ -235,8 +246,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await page.click("#new-study-form button[type=submit]");
     await page.waitForFunction(() => LeanApp.state.study.clientName === "Cliente Beta" && LeanApp.state.diskRevision === 1, null, { timeout: 6000 });
     check(await page.inputValue("#daily-demand") === "240", "novo estudo herda parâmetros da jornada");
-    const n = await page.evaluate(async () => { const r = await navigator.storage.getDirectory(); let c = 0; for await (const k of r.keys()) if (!k.includes("_conflito_")) c++; return c; });
-    check(n === 2, "2 arquivos de estudo na pasta (1 por posto)");
+    const all = (await listAll()).filter((k) => !k.includes("_conflito_"));
+    check(all.length === 2 && all.some((k) => k.startsWith("Cliente_Beta/")), "2 arquivos de estudo, cada um na subpasta da sua empresa: " + all.join(", "));
     }
   }
 

@@ -1463,6 +1463,7 @@
       li.className = "study-row" + (it.current ? " is-current" : "");
       li.dataset.id = it.id;
       li.dataset.fileName = it.fileName || "";
+      li.dataset.client = it.clientName || ""; // REV 1.26: filtro e agrupamento por empresa
 
       const btn = document.createElement("button");
       btn.type = "button";
@@ -1527,6 +1528,7 @@
       li.append(btn, actions);
       els.studyList.appendChild(li);
     });
+    if (root.LeanOrgUI) root.LeanOrgUI.attach(els.studyList, { key: "crono", onRefresh: () => h.onOpenStudies && h.onOpenStudies() });
   }
 
   function onStudyListClick(e) {

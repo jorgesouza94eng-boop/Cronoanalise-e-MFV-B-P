@@ -53,7 +53,8 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - HTML/CSS/JS puro, **sem build e sem servidor**. Funciona por `file://`, por servidor local e pelo GitHub Pages.
 - Scripts clássicos no padrão UMD (`window.LeanX` no navegador e `module.exports` nos testes do Node). **Não usar módulos ES** (quebram no `file://`).
 - Armazenamento local-first: IndexedDB (`LeanChronoDB`) e pasta do OneDrive pela File System Access API, com debounce de 3 s e proteção contra conflito (revisão + cópia `_conflito_`).
-- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6), `Yamazumi_*.json` (grupo de estudos, versão 1) e `Plano_*.json` (plano de ação 5W2H, versão 1) — REV 1.25. Elemento do estudo tem `kaizenTool` opcional (REV 1.20). Itens arquivados ficam na subpasta `_Arquivo` (fora das listas).
+- Pasta conectada organizada **por empresa** (REV 1.26): `<Empresa>/` (= `Store.companyDirName(cliente)`, mesma grafia do nome dos arquivos); `_Arquivo` dentro de cada empresa; `_Modelos` na pasta principal. Arquivos soltos na pasta principal (versões anteriores) continuam lidos e podem ser movidos com "Organizar por empresa".
+- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6), `Yamazumi_*.json` (grupo de estudos, versão 1) e `Plano_*.json` (plano de ação 5W2H, versão 1) — REV 1.26. Elemento do estudo tem `kaizenTool` opcional (REV 1.20). Itens arquivados ficam na subpasta `_Arquivo` (fora das listas).
 - A revisão aparece no cabeçalho das 4 páginas (`.app-rev`); um teste confere com a versão do `package.json`.
 
 | Arquivo | Função |
@@ -67,6 +68,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 | `js/xlsx.js`, `js/xlsx-template.js` | Excel simples e preenchimento dos modelos B+P do consultor |
 | `js/ai.js`, `js/ai-ui.js` | Assistente Gemini (opcional) |
 | `js/etapas-ui.js` | Janela "Definir etapas" (REV 1.25) |
+| `js/org-ui.js` | Filtro/agrupamento por empresa nas listas e "Organizar por empresa" (REV 1.26) |
 | `js/storage.js` | IndexedDB, pasta e importação/exportação |
 
 ## Comandos

@@ -111,9 +111,13 @@ function installFakeFolder() {
   await p.click(`${mrow("Versão antiga")} [data-action='archive']`);
   await p.waitForFunction(() => !document.querySelector("#doc-list").textContent.includes("Versão antiga"));
   check(dialogs.some((m) => m.includes("subpasta _Arquivo")), "confirmação cita a subpasta _Arquivo");
-  const fs = await p.evaluate((name) => ({ root: window.__fakeDir.files.has(name), arq: !!(window.__fakeDir.dirs.get("_Arquivo") && window.__fakeDir.dirs.get("_Arquivo").files.has(name)) }), old.fileName);
-  check(!fs.root && fs.arq, "arquivo movido da pasta para _Arquivo (nada apagado)");
-  const arqText = await p.evaluate((name) => window.__fakeDir.dirs.get("_Arquivo").files.get(name), old.fileName);
+  // REV 1.26: o arquivado vai para <Empresa>/_Arquivo (o MFV antigo estava solto na pasta principal)
+  const fs = await p.evaluate((name) => {
+    const a = window.__fakeDir.dirs.get("Arquivo_Teste") && window.__fakeDir.dirs.get("Arquivo_Teste").dirs.get("_Arquivo");
+    return { root: window.__fakeDir.files.has(name), arq: !!(a && a.files.has(name)) };
+  }, old.fileName);
+  check(!fs.root && fs.arq, "arquivo movido da pasta para Arquivo_Teste/_Arquivo (nada apagado)");
+  const arqText = await p.evaluate((name) => window.__fakeDir.dirs.get("Arquivo_Teste").dirs.get("_Arquivo").files.get(name), old.fileName);
   check(M.normalizeMfv(JSON.parse(arqText)).ok, "cópia arquivada é um MFV válido (pode voltar à pasta)");
   check((await txt(mrow("Versão atual"))).length > 0, "MFV aberto continua na lista");
 

@@ -846,6 +846,7 @@
             const li = el("li", { className: "study-row" + (state.doc && state.doc.id === doc.id ? " is-current" : "") });
             li.dataset.id = doc.id;
             li.dataset.fileName = doc.fileName;
+            li.dataset.client = doc.clientName || ""; // REV 1.26: filtro e agrupamento por empresa
             const r = P.computePlan(doc);
             const btn = el("button", { type: "button", className: "study-item" }, [
               el("span", { className: "study-title", textContent: `${doc.clientName || "Sem cliente"} — Plano de ação` }),
@@ -863,6 +864,7 @@
           })
         : [el("li", { className: "empty", textContent: "Nenhum plano salvo ainda. Crie o primeiro acima." })])
     );
+    if (root.LeanOrgUI) root.LeanOrgUI.attach($("doc-list"), { key: "plano", onRefresh: () => showDocs() });
     const dlg = $("doc-dialog");
     if (!dlg.open) dlg.showModal();
     (list.length ? $("doc-list").querySelector(".study-item") : $("new-client")).focus();

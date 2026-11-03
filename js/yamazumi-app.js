@@ -862,6 +862,7 @@
             const li = el("li", { className: "study-row" + (state.doc && state.doc.id === doc.id ? " is-current" : "") });
             li.dataset.id = doc.id;
             li.dataset.fileName = doc.fileName;
+            li.dataset.client = doc.clientName || ""; // REV 1.26: filtro e agrupamento por empresa
             const btn = el("button", { type: "button", className: "study-item" }, [
               el("span", { className: "study-title", textContent: `${doc.clientName || "Sem cliente"} — ${doc.name || "Sem nome"} (${doc.situation})` }),
               el("span", { className: "study-meta", textContent: `${doc.kind === "linha" ? "Linha" : "Posto"} • ${doc.members.length} estudo(s) • ${doc.fileName}` }),
@@ -879,6 +880,7 @@
           })
         : [el("li", { className: "empty", textContent: "Nenhum grupo salvo ainda. Crie o primeiro acima." })])
     );
+    if (root.LeanOrgUI) root.LeanOrgUI.attach($("doc-list"), { key: "yamazumi", onRefresh: () => showDocs() });
     const dlg = $("doc-dialog");
     if (!dlg.open) dlg.showModal();
     (list.length ? $("doc-list").querySelector(".study-item") : $("new-client")).focus();

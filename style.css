@@ -1614,3 +1614,8 @@ body.no-doc .app-workspace, body.no-doc .client-context { display: none !importa
 .et-preview-sub { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
 .ai-list li.ai-group { font-weight: 700; color: var(--primary-700); border-bottom: none; padding-top: 12px; }
 .ai-list li.ai-group-product { color: var(--text-main); font-size: 14px; }
+
+/* Organização por empresa nas listas (REV 1.26) */
+.study-list-header select.company-filter { margin-left: auto; height: 28px; font-size: 12px; max-width: 260px; }
+.study-list li.company-head { list-style: none; padding: 10px 4px 4px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--primary-700); border-bottom: 1px solid var(--border-light); }
+.org-banner { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 8px 20px 0; padding: 8px 12px; border: 1px solid #fcd34d; border-radius: var(--radius-md); background: #fffbeb; font-size: 12px; color: #92400e; }
