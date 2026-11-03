@@ -219,6 +219,22 @@ A REV2.1 é a planilha de cronoanálise da equipe com as fórmulas corrigidas, e
 - A aba **Controle de Revisão** descreve as mudanças.
 - Com a REV2.0, o app avisa que o ritmo não é levado (a planilha não tem a coluna) e que a G3 não usa o acíclico por unidade.
 
+#### Modelo EO_Cronoanálise v00_r05 (REV 1.28)
+
+O app reconhece sozinho o modelo r05 (abas UNIDADES, GERAL, Listagem de Elementos e Compilação e Soluções). Células preenchidas:
+
+| Aba | Células | Conteúdo |
+|---|---|---|
+| GERAL (9–500) | B, C, D, E, F, G, L | Elemento, início, fim, Qtd. intermed., Unidade, Tipo e lista de elementos sem repetição |
+| UNIDADES | B8, B9, C15 | Tamanho do lote = peças das filmagens; unidade base ("Peça" se vazia); observações (premissas e desperdícios) |
+| Listagem (9–208) | B a H | Elemento, Tempo (s), Qtd. média, Valor, Ação, **Responsável e Data do Plano 5W2H** do cliente |
+| Compilação e Soluções | B35 | Constatações do estudo |
+
+- **Acíclico (tipo A):** vai como 1 "Lote"; como o lote = peças filmadas, a planilha calcula Σtempo ÷ peças, igual ao app. Sem as peças de todas as filmagens, lote = 1 (tempo total) e o app avisa.
+- **Tempos observados:** o r05 não tem ritmo nem tolerância; o app avisa quando o estudo usa algum dos dois.
+- **% de incidência** (Listagem I) fica para o consultor. Acima de **137 lançamentos** o app exporta e avisa (limite das macros do modelo).
+- Conferido com o modelo real recalculado no LibreOffice: a Listagem e a GERAL dão o mesmo tempo do app.
+
 > Dica: use como modelo uma cópia **em branco** da planilha. O app limpa as áreas que preenche, mas abas ocultas como "Listagem de Elementos (2)" e textos fora dessas áreas ficam como estão no modelo.
 
 ### Várias filmagens no mesmo estudo

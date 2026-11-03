@@ -120,6 +120,29 @@
      HANDLERS CHAMADOS PELA INTERFACE
      ========================================================================== */
 
+  /**
+   * REV 1.28: ações do Plano 5W2H do cliente do estudo (navegador e pasta), para levar o
+   * Responsável e a Data de conclusão ao modelo r05. Sem plano: lista vazia.
+   */
+  async function clientPlanActions(study) {
+    if (!Store.collectCompanyDocs) return [];
+    try {
+      const docs = await Store.collectCompanyDocs(Calc.elementKey(study.clientName));
+      return docs
+        .filter((d) => d.kind === "Plano")
+        .flatMap((d) => {
+          try {
+            return JSON.parse(d.text).actions || [];
+          } catch (err) {
+            return [];
+          }
+        });
+    } catch (err) {
+      console.warn("Plano de ação não lido para o modelo:", err);
+      return [];
+    }
+  }
+
   const handlers = {
     hasOpenStudy: () => !!state.study,
     getElement: findElement,
@@ -491,9 +514,10 @@
         // Vários operadores (REV 1.14): o modelo é de um operador → um arquivo por operador
         const c = state.computed;
         const ops = c.multiOperator && c.product.operators ? c.product.operators.map((o) => o.op) : [0];
+        const planActions = await clientPlanActions(state.study);
         for (const op of ops) {
           const study = op ? Calc.operatorStudy(state.study, op) : state.study;
-          const res = await Tpl.fillFromBytes(rec.bytes, study);
+          const res = await Tpl.fillFromBytes(rec.bytes, study, { planActions });
           const name = Tpl.exportFileName(state.study, rec.name, op);
           const mime = /\.xlsm$/i.test(name)
             ? "application/vnd.ms-excel.sheet.macroEnabled.12"
@@ -534,7 +558,7 @@
           UI.toast(`Modelo guardado no navegador, mas não na pasta ${TEMPLATE_DIR}: ${err.message || err}`, "warn");
         }
       }
-      UI.toast(`Modelo REV${tpl.rev || "2.0"} reconhecido ✅ ${meta.name}${tpl.macro ? " (com macros)" : ""}.`, "ok", 6000);
+      UI.toast(`Modelo ${tpl.rev === "r05" ? "EO_Cronoanálise r05" : `REV${tpl.rev || "2.0"}`} reconhecido ✅ ${meta.name}${tpl.macro ? " (com macros)" : ""}.`, "ok", 6000);
     },
 
     async onRemoveTemplate() {

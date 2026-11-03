@@ -14,6 +14,8 @@
  *   Compilação e Soluções: B55 constatações e soluções
  *   Análise: C16 identificação do estudo
  *
+ * Modelo "EO_Cronoanálise v00_r05" (REV 1.28): ver a seção do r05 mais abaixo.
+ *
  * Mapeamento (planilha "04_MFV_SIMPLIFICADO" REV1, aba EP — estado presente):
  *   D5 empresa | D6 família | C22:F28 horário (entrada, saída, pausas, refeição) |
  *   K28 disponibilidade | O21 demanda mensal | O26 dias úteis | P23 unidade do takt |
@@ -33,7 +35,10 @@
   "use strict";
 
   const LIMITS = { geralFirst: 10, geralLast: 300, listFirst: 9, listLast: 134, analiseSum: 40 };
-  const SHEETS = { geral: "GERAL", listagem: "Listagem de Elementos", compilacao: "Compilação e Soluções", analise: "Análise", bd: "BD" };
+  const SHEETS = { geral: "GERAL", listagem: "Listagem de Elementos", compilacao: "Compilação e Soluções", analise: "Análise", bd: "BD", unidades: "UNIDADES" };
+  // Modelo EO_Cronoanálise v00_r05 (REV 1.28): GERAL 9–500, Listagem 9–208; as macros dele
+  // funcionam até ~137 atividades (aviso na própria planilha).
+  const R05 = { geralFirst: 9, geralLast: 500, listFirst: 9, listLast: 208, macroLimit: 137 };
 
   /* ==========================================================================
      LEITURA DO ZIP (.xlsx/.xlsm)
@@ -265,6 +270,11 @@
       if (sheetPath.has(name)) sheets[key] = { name, path: sheetPath.get(name), parts: splitRows(await text(sheetPath.get(name))) };
     }
 
+    // Modelo r05 (REV 1.28): cabeçalho da GERAL começa na coluna A (Nº) e B8 = "Elemento de Trabalho"
+    if (norm(getCell(sheets.geral.parts, "B8", sst)) === "elemento de trabalho") {
+      return recognizeR05({ entries, sst, sheets, workbook, macro: byName.has("xl/vbaProject.bin") });
+    }
+
     // Cabeçalhos (linha 8) que identificam a REV2
     const expectGeral = { C8: "elemento", D8: "tempo (inicio)", E8: "tempo (fim)", G8: "quantidade", I8: "tipo", L8: "todos elementos" };
     const expectList = { B8: "elemento", C8: "tempo (s)", D8: "qt.", E8: "valor" };
@@ -302,16 +312,12 @@
      PREENCHIMENTO
      ========================================================================== */
 
-  /** Gera o .xlsm/.xlsx preenchido. Retorna { bytes, warnings }. */
-  function fillTemplate(tpl, study) {
-    const r = Calc.computeStudy(study);
-    const rev21 = tpl.rev === "2.1"; // planilha da equipe com ritmo, peças e tolerância
-    const warnings = [];
+  /**
+   * Parte comum aos modelos REV2 e r05: lançamentos válidos do produto exportado (GERAL) e
+   * elementos do resumo com os mesmos nomes (Listagem). Com etapas, o nome leva a etapa.
+   */
+  function exportLines(study, r, warnings) {
     const qtyMode = r.mode === "quantidade";
-    const geral = tpl.sheets.geral.parts;
-    const listagem = tpl.sheets.listagem.parts;
-
-    // ---- GERAL: só linhas com leitura válida (como na planilha: elemento + início + fim)
     const lines = [];
     let skipped = 0;
     // Vários produtos: a planilha recebe só o produto escolhido no resumo (um arquivo por produto).
@@ -337,23 +343,37 @@
       });
     });
     if (skipped) warnings.push(`${skipped} linha(s) sem tempo ou com erro não foram exportadas.`);
-    if (!rev21 && r.summary.acyclic === "por-unidade") {
-      warnings.push("A aba Análise do modelo REV2.0 soma os acíclicos sem dividir pelas peças; use o modelo REV2.1 para o mesmo TP do app.");
-    }
     if (r.multiProduct && r.products.length > 1) {
       warnings.push(`Estudo com ${r.products.length} produtos: exportado só "${r.product.name}". Escolha o outro produto no resumo e exporte de novo.`);
     }
     if (!qtyMode) warnings.push("O estudo está no modo Frequência: a planilha usa Quantidade (exportado como 1 ÷ frequência).");
-    const capacity = LIMITS.geralLast - LIMITS.geralFirst + 1;
-    if (lines.length > capacity) throw new Error(`O estudo tem ${lines.length} lançamentos; o modelo comporta ${capacity} (linhas ${LIMITS.geralFirst}–${LIMITS.geralLast}).`);
 
     // Nomes iguais aos do resumo, para os SOMASE/CONT.SE da planilha agruparem igual ao app.
     // Com etapas (REV 1.15), o modelo não tem a coluna: o nome leva a etapa ("Moldagem • Passar a massa").
     const label = (g) => (r.withEtapas ? `${g.etapa} • ${g.name}` : g.name);
     const canonical = new Map(r.summary.elements.map((g) => [g.key, label(g)]));
     lines.forEach((l) => (l.name = canonical.get(l.key) || l.name));
-    const elements = r.summary.elements.filter((g) => !g.unnamed).map((g) => (r.withEtapas ? Object.assign({}, g, { name: label(g) }) : g));
+    const elements = r.summary.elements.filter((g) => !g.unnamed).map((g) => Object.assign({}, g, { name: label(g), rawName: g.name }));
     if (r.withEtapas) warnings.push('O modelo B+P não tem coluna Etapa: o nome de cada elemento foi exportado com a etapa ("Etapa • Elemento").');
+    return { lines, elements };
+  }
+
+  /** Gera o .xlsm/.xlsx preenchido. Retorna { bytes, warnings }. */
+  function fillTemplate(tpl, study, options) {
+    if (tpl.kind === "crono-r05") return fillTemplateR05(tpl, study, options);
+    const r = Calc.computeStudy(study);
+    const rev21 = tpl.rev === "2.1"; // planilha da equipe com ritmo, peças e tolerância
+    const warnings = [];
+    const geral = tpl.sheets.geral.parts;
+    const listagem = tpl.sheets.listagem.parts;
+
+    // ---- GERAL: só linhas com leitura válida (como na planilha: elemento + início + fim)
+    const { lines, elements } = exportLines(study, r, warnings);
+    if (!rev21 && r.summary.acyclic === "por-unidade") {
+      warnings.push("A aba Análise do modelo REV2.0 soma os acíclicos sem dividir pelas peças; use o modelo REV2.1 para o mesmo TP do app.");
+    }
+    const capacity = LIMITS.geralLast - LIMITS.geralFirst + 1;
+    if (lines.length > capacity) throw new Error(`O estudo tem ${lines.length} lançamentos; o modelo comporta ${capacity} (linhas ${LIMITS.geralFirst}–${LIMITS.geralLast}).`);
     const listCap = LIMITS.listLast - LIMITS.listFirst + 1;
     if (elements.length > listCap) throw new Error(`O estudo tem ${elements.length} elementos; a Listagem do modelo comporta ${listCap}.`);
     if (!rev21 && lines.some((l) => Math.abs(l.pace - 100) > 1e-9)) {
@@ -414,6 +434,201 @@
     }
 
     return { bytes: buildOutput(tpl, [tpl.sheets.bd]), warnings, lines: lines.length, elements: elements.length };
+  }
+
+  /* ==========================================================================
+     MODELO EO_Cronoanálise v00_r05 (REV 1.28)
+     ----------------------------------------------------------------------------
+     UNIDADES: B8 tamanho do lote | B9 unidade base | A11 = B9 (equiv. 1) | A12 "Lote" (= B8) |
+               C15 observações do analista.
+     GERAL (9–500): A Nº (do modelo) | B Elemento | C Tempo (início) | D Tempo (fim) |
+               E Qtd. intermed. | F Unidade | G Tipo | L lista de elementos (sem repetição).
+     Listagem (9–208): B Elemento | C Tempo (s) | D Qtd. (média) | E Valor | F Ação |
+               G Responsável | H Data conclusão | I % incidência (fica para o consultor).
+     Compilação e Soluções: B35 observações e soluções (constatações do estudo).
+     ========================================================================== */
+
+  function recognizeR05(wb) {
+    const { sheets, sst } = wb;
+    const missing = ["unidades", "geral", "listagem", "compilacao"].filter((k) => !sheets[k]).map((k) => SHEETS[k]);
+    if (missing.length) throw new Error(`Modelo r05 incompleto: faltam as abas ${missing.join(", ")}`);
+    const expectGeral = { B8: "elemento de trabalho", C8: "tempo (inicio)", D8: "tempo (fim)", E8: "qtd. intermed.", F8: "unidade", G8: "tipo" };
+    const expectList = { B7: "elemento", C7: "tempo (s)", D7: "qtd. (media)", E7: "valor", F7: "acao" };
+    const bad = [];
+    Object.entries(expectGeral).forEach(([ref, label]) => {
+      if (norm(getCell(sheets.geral.parts, ref, sst)) !== label) bad.push(`GERAL!${ref} ≠ "${label}"`);
+    });
+    Object.entries(expectList).forEach(([ref, label]) => {
+      if (norm(getCell(sheets.listagem.parts, ref, sst)) !== label) bad.push(`Listagem!${ref} ≠ "${label}"`);
+    });
+    if (!norm(getCell(sheets.geral.parts, "L8", sst)).startsWith("todos os elementos")) bad.push('GERAL!L8 ≠ "Todos os Elementos…"');
+    if (!norm(getCell(sheets.unidades.parts, "A9", sst)).startsWith("unidade base")) bad.push('UNIDADES!A9 ≠ "Unidade Base"');
+    if (bad.length) throw new Error(`Layout diferente do modelo r05 (${bad.slice(0, 3).join("; ")}). Envie o modelo para ajustar o mapeamento.`);
+    // Rótulos da validação de "Valor" (Listagem Q3:Q5), usados nos SOMASE da Compilação
+    const valueLabels = { AG: "Agrega", NA: "Não agrega", IN: "Incidental" };
+    ["AG", "NA", "IN"].forEach((k, i) => {
+      const v = getCell(sheets.listagem.parts, `Q${i + 3}`, sst);
+      if (v) valueLabels[k] = v;
+    });
+    return {
+      kind: "crono-r05",
+      rev: "r05",
+      entries: wb.entries,
+      sst,
+      sheets,
+      workbook: wb.workbook,
+      valueLabels,
+      baseUnit: getCell(sheets.unidades.parts, "B9", sst).trim(),
+      lotUnit: getCell(sheets.unidades.parts, "A12", sst).trim() || "Lote",
+      macro: wb.macro,
+    };
+  }
+
+  /** Data AAAA-MM-DD → número de série do Excel (formato dd/mm/aaaa da coluna). */
+  function excelDate(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+    if (!m) return null;
+    return Math.round((Date.UTC(+m[1], +m[2] - 1, +m[3]) - Date.UTC(1899, 11, 30)) / 86400000);
+  }
+
+  /**
+   * Responsável e data de conclusão do Plano 5W2H do cliente (Quem / Fim) para cada elemento
+   * com ação no plano. planActions = ações dos planos (com origin do estudo).
+   */
+  function planLookup(study, r, planActions) {
+    const k = Calc.elementKey;
+    const own = (planActions || []).filter((a) => a && a.origin && a.origin.studyId === study.id);
+    return (g) => {
+      const list = own.filter(
+        (a) =>
+          k(a.origin.element) === k(g.rawName) &&
+          k(a.origin.etapa) === k(g.etapa || "") &&
+          (!r.multiProduct || k(a.origin.product) === k(r.product.name))
+      );
+      if (!list.length) return null;
+      const who = Array.from(new Set(list.map((a) => String(a.who || "").trim()).filter(Boolean))).join(" / ");
+      const ends = list.map((a) => a.end).filter((d) => excelDate(d) != null).sort();
+      return { who: who || null, end: ends.length ? excelDate(ends[ends.length - 1]) : null };
+    };
+  }
+
+  function fillTemplateR05(tpl, study, options) {
+    const r = Calc.computeStudy(study);
+    const warnings = [];
+    const { lines, elements } = exportLines(study, r, warnings);
+    const capacity = R05.geralLast - R05.geralFirst + 1;
+    if (lines.length > capacity) throw new Error(`O estudo tem ${lines.length} lançamentos; o modelo r05 comporta ${capacity} (linhas ${R05.geralFirst}–${R05.geralLast}).`);
+    const listCap = R05.listLast - R05.listFirst + 1;
+    if (elements.length > listCap) throw new Error(`O estudo tem ${elements.length} elementos; a Listagem do modelo r05 comporta ${listCap}.`);
+    if (lines.length > R05.macroLimit) {
+      warnings.push(`O estudo tem ${lines.length} lançamentos: o modelo r05 avisa que as automações (macros) podem falhar acima de ${R05.macroLimit} atividades. Os dados foram exportados; confira os botões da planilha.`);
+    }
+    // D2: o r05 não tem ritmo nem tolerância → tempos observados
+    if (lines.some((l) => Math.abs(l.pace - 100) > 1e-9)) {
+      warnings.push("O modelo r05 não tem coluna de ritmo: os tempos foram exportados como observados (ritmo 100%); o tempo normal do app é diferente.");
+    }
+    const tol = Calc.parseNumber(String(study.shiftParams && study.shiftParams.tolerancePct != null ? study.shiftParams.tolerancePct : "")) || 0;
+    if (tol > 0) warnings.push(`O modelo r05 não tem tolerância: o TP do app (com ${String(tol).replace(".", ",")}% de tolerância) é maior que o tempo da planilha.`);
+
+    // D1: acíclicos (tipo A) = 1 Lote, com Tamanho do lote = peças das filmagens → Σtempo ÷ peças
+    const perUnit = r.summary.acyclic === "por-unidade";
+    const hasA = lines.some((l) => l.type === "A");
+    const lot = perUnit ? r.films.piecesTotal : hasA ? 1 : null;
+    if (hasA && !perUnit) {
+      warnings.push("Sem as peças de todas as filmagens: os acíclicos foram exportados como tempo total (Tamanho do lote = 1), como no app.");
+    }
+    const baseUnit = tpl.baseUnit || "Peça";
+
+    // ---- GERAL
+    const g = new Map();
+    for (let n = R05.geralFirst; n <= R05.geralLast; n++) {
+      const l = lines[n - R05.geralFirst];
+      const u = elements[n - R05.geralFirst];
+      g.set(`B${n}`, l ? l.name : null);
+      g.set(`C${n}`, l ? l.start : null);
+      g.set(`D${n}`, l ? l.end : null);
+      g.set(`E${n}`, l ? (l.type === "A" ? 1 : l.qty) : null);
+      g.set(`F${n}`, l ? (l.type === "A" ? tpl.lotUnit : baseUnit) : null);
+      g.set(`G${n}`, l ? l.type : null);
+      g.set(`L${n}`, u ? u.name : null);
+    }
+    applyUpdates(tpl.sheets.geral.parts, g);
+
+    // ---- Listagem: os mesmos números que a GERAL calcula (tempo observado), como a macro faria
+    const acc = new Map();
+    lines.forEach((l) => {
+      const k = l.name;
+      if (!acc.has(k)) acc.set(k, { type: l.type, time: 0, qty: 0, n: 0 });
+      const a = acc.get(k);
+      a.time += (l.end - l.start) * 86400;
+      a.qty += l.type === "A" ? lot || 1 : l.qty;
+      a.n += 1;
+    });
+    // Ação Kaizen digitada na grade (a mesma de todas as linhas do elemento; textos diferentes = juntos)
+    const kaizen = new Map();
+    study.elements.forEach((el, i) => {
+      const row = r.rows[i];
+      const text = String(el.kaizen || "").trim().replace(/\s+/g, " ");
+      const nm = String(el.description || "").trim();
+      if (!text || !nm || (r.multiProduct && row.productKey !== r.product.key)) return;
+      const key = (row.etapaKey ? `${row.etapaKey}|` : "") + Calc.elementKey(nm);
+      if (!kaizen.has(key)) kaizen.set(key, []);
+      if (!kaizen.get(key).includes(text)) kaizen.get(key).push(text);
+    });
+    const plan = planLookup(study, r, options && options.planActions);
+    let fromPlan = 0;
+    const lst = new Map();
+    for (let n = R05.listFirst; n <= R05.listLast; n++) {
+      const e = elements[n - R05.listFirst];
+      const a = e ? acc.get(e.name) : null;
+      let cycle = null;
+      let avgQty = null;
+      if (a && a.n) {
+        avgQty = a.qty / a.n;
+        const avgTime = a.type === "A" ? a.time : a.time / a.n; // A: Σtempo; C: média (fórmula O da GERAL)
+        cycle = avgQty > 0 ? avgTime / avgQty : null;
+      }
+      const p = e ? plan(e) : null;
+      if (p) fromPlan += 1;
+      lst.set(`B${n}`, e ? e.name : null);
+      lst.set(`C${n}`, cycle != null ? Math.round(cycle * 1000) / 1000 : null);
+      lst.set(`D${n}`, avgQty != null ? Math.round(avgQty * 1000) / 1000 : null);
+      lst.set(`E${n}`, e && e.value ? tpl.valueLabels[e.value] : null);
+      lst.set(`F${n}`, e && kaizen.has(e.key) ? kaizen.get(e.key).join(" | ") : null);
+      lst.set(`G${n}`, p ? p.who : null);
+      lst.set(`H${n}`, p ? p.end : null);
+      lst.set(`I${n}`, null); // D4: % de incidência fica para o consultor
+    }
+    applyUpdates(tpl.sheets.listagem.parts, lst);
+    if (fromPlan) warnings.push(`Responsável e data de conclusão de ${fromPlan} elemento(s) vieram do Plano de Ação 5W2H.`);
+
+    // ---- UNIDADES: lote, unidade base e observações do analista (premissas + desperdícios)
+    const fmt = (v) => String(Math.round(v * 1000) / 1000).replace(".", ",");
+    const obs = [`Exportado pelo Lean Chrono em ${new Date().toLocaleDateString("pt-BR")}: ${study.clientName || "Cliente"} — ${study.processName || "Posto"}${r.multiProduct ? ` — ${r.product.name}` : ""}.`];
+    const films = r.films || {};
+    const filmTxt = (films.list || [])
+      .map((f, i) => `F${i + 1}: ${f.pieces == null ? "sem peças" : f.continuation ? "0 (continuação)" : fmt(f.pieces)}`)
+      .join("; ");
+    obs.push(`- ${r.filmCount} filmagem(ns)${filmTxt ? ` — peças ${filmTxt}` : ""}; ${lines.length} lançamento(s), ${elements.length} elemento(s).`);
+    if (hasA) {
+      obs.push(
+        perUnit
+          ? `- Acíclicos (tipo A) lançados como 1 "${tpl.lotUnit}"; Tamanho do lote = ${fmt(lot)} peças filmadas → tempo do acíclico ÷ peças.`
+          : `- Acíclicos (tipo A) como tempo total observado (faltam as peças das filmagens).`
+      );
+    }
+    obs.push("- Tempos observados (sem ritmo e sem tolerância).");
+    const wastes = elements.filter((e) => e.waste).map((e) => `- ${e.name}: ${Calc.WASTES[e.waste] || e.waste}`);
+    if (wastes.length) obs.push("Desperdícios observados:", ...wastes);
+    const u = new Map([["C15", obs.join("\n")]]);
+    if (lot != null) u.set("B8", lot);
+    if (!tpl.baseUnit) u.set("B9", baseUnit);
+    applyUpdates(tpl.sheets.unidades.parts, u);
+
+    // ---- Compilação: constatações do estudo
+    applyUpdates(tpl.sheets.compilacao.parts, new Map([["B35", study.notes || null]]));
+
+    return { bytes: buildOutput(tpl, []), warnings, lines: lines.length, elements: elements.length };
   }
 
   /** Monta o arquivo: abas alteradas sem compressão; todo o resto copiado byte a byte. */
@@ -778,7 +993,7 @@
   async function fillFromBytes(templateBytes, docOrStudy, options) {
     const tpl = await loadTemplate(templateBytes, options);
     if (tpl.kind === "plano-5w2h") return fillPlanoTemplate(tpl, docOrStudy, options);
-    return tpl.kind === "mfv-rev1" ? fillMfvTemplate(tpl, docOrStudy) : fillTemplate(tpl, docOrStudy);
+    return tpl.kind === "mfv-rev1" ? fillMfvTemplate(tpl, docOrStudy) : fillTemplate(tpl, docOrStudy, options);
   }
 
   function exportFileName(study, templateName, op) {
@@ -798,6 +1013,7 @@
 
   return {
     LIMITS,
+    R05,
     MFV,
     readZip,
     loadTemplate,

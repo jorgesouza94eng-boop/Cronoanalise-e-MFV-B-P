@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.28** | 03/11/2026 | Modelo de cronoanálise EO_Cronoanálise v00_r05 (unidades, lote e Plano 5W2H na Listagem) |
 | **REV 1.27** | 03/11/2026 | IA só com o estudo aberto, MFV só da empresa, estouros de Kaizen ligados ao 5W2H e backup .zip |
 | **REV 1.26** | 03/11/2026 | Arquivos organizados por empresa (subpastas) e filtro por empresa nas listas |
 | **REV 1.25** | 30/10/2026 | Definir etapas do processo (janela manual e sugestão da IA) |
@@ -32,6 +33,22 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.28 — 03/11/2026
+
+Modelo novo de cronoanálise **EO_Cronoanálise v00_r05** (abas UNIDADES, GERAL, Listagem de Elementos e Compilação e Soluções). Decisões do consultor D1 a D7 ("confirmo"). Os modelos REV2.0 e REV2.1 continuam aceitos.
+
+- **Reconhecimento:** pelo cabeçalho da GERAL (B8 "Elemento de Trabalho", E8 "Qtd. Intermed.", F8 "Unidade"), da Listagem (linha 7) e da UNIDADES (A9 "Unidade Base"). Mensagem: "Modelo EO_Cronoanálise r05 reconhecido".
+- **GERAL (linhas 9–500):** Elemento, Tempo (início), Tempo (fim), Qtd. intermed., Unidade, Tipo e a lista de elementos sem repetição (coluna L). O Nº do modelo é mantido.
+- **D1 — acíclicos:** tipo A vai com **1 "Lote"** e a UNIDADES!B8 (tamanho do lote) recebe as **peças das filmagens** → a fórmula da planilha dá Σtempo ÷ peças, igual ao app. Sem as peças de todas as filmagens: lote = 1 (tempo total), com aviso. Tipo C vai na unidade base (UNIDADES!B9; vazia → "Peça").
+- **D2:** tempos observados; aviso quando há ritmo ≠ 100% ou tolerância > 0 (o r05 não tem essas colunas).
+- **Listagem (linhas 9–208):** Elemento, Tempo (s) e Qtd. média (os mesmos números que a GERAL calcula), Valor, Ação Kaizen da grade; **D3:** Responsável e Data de conclusão vêm do **Plano 5W2H do cliente** (Quem e Fim da ação ligada ao elemento); **D4:** % de incidência em branco (para o consultor).
+- **D5/D6:** UNIDADES!C15 (observações do analista) recebe as premissas (filmagens, peças, continuação, lançamentos, lote) e a lista "Elemento: desperdício"; as constatações do estudo vão para Compilação!B35.
+- **D7:** mais de 137 lançamentos → exporta e avisa (limite das macros do modelo).
+- Nenhum cálculo do app muda. Conferido com o modelo real recalculado no LibreOffice (Listagem = TP observado do app). Service worker v36.
+- Testes: `tests/rev128.test.js` (modelo sintético em `tests/r05-template.js`) e `tests/e2e.rev128.js`.
 
 ---
 

@@ -187,3 +187,10 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 - MFV: seletor só com estudos/grupos da empresa do MFV ("Outras empresas" mostra o resto); etapa de outra empresa = aviso e fora do resumo executivo da IA.
 - Estouros: `kaizenNote` na etapa do MFV → `flowchartModel(r).bursts` (numerados) e `P.mfvCandidates(doc, r)` no Plano (origem `mfv:<id>`).
 - Backup: `Store.collectCompanyDocs(chave|null)` + `LeanOrgUI.backupZip` (zip `<Empresa>/<arquivo>` + LEIA-ME).
+
+## Regra implementada na REV 1.28: modelo de cronoanálise r05
+
+- `T.loadTemplate` reconhece o r05 (GERAL!B8 "Elemento de Trabalho") → `kind: "crono-r05"`; REV2.0/2.1 seguem iguais. `exportLines` é comum aos dois.
+- Tipo A = 1 "Lote" e UNIDADES!B8 = peças das filmagens (sem todas as peças: 1, com aviso); tipo C na unidade base (B9). Tempos observados (sem ritmo/tolerância, com aviso).
+- Listagem C/D = mesmos números da GERAL (A: Σtempo ÷ lote; C: média ÷ qtd média); G/H = Quem/Fim do Plano 5W2H do cliente (`options.planActions`, origem do mesmo estudo, elemento e etapa); I em branco.
+- UNIDADES!C15 = premissas + desperdícios; Compilação!B35 = constatações. > 137 lançamentos: aviso (macros do modelo).
