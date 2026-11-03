@@ -13,6 +13,7 @@
 
   const Calc = root.LeanCalc;
   const P = root.LeanPlano;
+  const MF = root.LeanMfv; // REV 1.27: oportunidades Kaizen dos MFVs do cliente
   const Store = root.LeanStorage;
   const Tpl = root.LeanXlsxTemplate;
   const STORE = Store.STORE_PLANS;
@@ -315,6 +316,28 @@
         console.warn("Estudo ignorado:", study.fileName, err);
       }
     });
+    // REV 1.27: oportunidades Kaizen (estouros) das etapas dos MFVs
+    const mfvs = new Map();
+    if (MF) {
+      const addM = (d) => {
+        const prev = mfvs.get(d.id);
+        if (!prev || String(prev.updatedAt) < String(d.updatedAt)) mfvs.set(d.id, d);
+      };
+      try {
+        (await Store.listLocal(Store.STORE_MFV)).forEach((r) => r && r.study && addM(r.study));
+        if (await Store.folderReady()) (await Store.listFolderStudies({ pattern: MF.FILE_PATTERN, normalize: MF.normalizeMfv })).studies.forEach(addM);
+      } catch (err) {
+        console.warn("MFVs não lidos:", err);
+      }
+      mfvs.forEach((d) => {
+        try {
+          state.candidatesByStudy.set(`mfv:${d.id}`, P.mfvCandidates(d, MF.computeMfv(d)));
+        } catch (err) {
+          console.warn("MFV ignorado:", d.fileName, err);
+        }
+      });
+    }
+    state.mfvs = mfvs;
   }
 
   /** Ações Kaizen dos estudos do cliente do plano, da maior para a menor parcela do ciclo. */
@@ -324,6 +347,11 @@
     state.studies.forEach((study) => {
       if (Calc.elementKey(study.clientName) !== key) return;
       (state.candidatesByStudy.get(study.id) || []).forEach((c) => out.push(c));
+    });
+    // Oportunidades dos MFVs do cliente: no fim da lista (não têm % do ciclo)
+    (state.mfvs || new Map()).forEach((d) => {
+      if (Calc.elementKey(d.clientName) !== key) return;
+      (state.candidatesByStudy.get(`mfv:${d.id}`) || []).forEach((c) => out.push(c));
     });
     return out.sort((a, b) => (b.sharePct || 0) - (a.sharePct || 0));
   }
@@ -514,7 +542,7 @@
             Object.assign(li.dataset, { value: Calc.VALUES[c.value] ? c.value : "-", ecrs: p.ecrs || "-", product: Calc.elementKey(c.origin.product), done: already ? "1" : "" });
             return li;
           })
-        : [el("li", { className: "empty", textContent: 'Nenhuma ação Kaizen nos estudos deste cliente. Digite as ações na coluna "Ação sugerida / Kaizen (ECRS)" da cronoanálise (ou use "Sugerir ações Kaizen (ECRS)" da IA) e volte aqui.' })])
+        : [el("li", { className: "empty", textContent: 'Nenhuma ação Kaizen nos estudos deste cliente. Digite as ações na coluna "Ação sugerida / Kaizen (ECRS)" da cronoanálise (ou use "Sugerir ações Kaizen (ECRS)" da IA), ou a "Oportunidade Kaizen" nas etapas do MFV, e volte aqui.' })])
     );
     const sel = $("cf-product");
     const keep = sel.value;

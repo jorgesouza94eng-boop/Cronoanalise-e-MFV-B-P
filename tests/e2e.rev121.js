@@ -103,25 +103,21 @@ const check = (cond, msg) => { console.log((cond ? "  OK  " : "  FALHA ") + msg)
   await p.click("#btn-ai-minimize");
   check(!(await pillShown()), "sem tarefa nem sugestões: sem selo");
 
-  // 2) Sugestões presas ao estudo do pedido
+  // 2) Sugestões presas ao estudo do pedido (REV 1.27: resultado de outro estudo é descartado)
   const b = study("Solda", [["Sem valor", "10", ""]]);
   await p.click("#btn-ai");
   await p.waitForSelector("#ai-dialog[open]");
+  check((await txt("#ai-scope-label")).startsWith("Analisando: Minimizar Teste — Bancada"), "cabeçalho mostra o estudo analisado: " + (await txt("#ai-scope-label")));
   await p.click("[data-ai=classify]");
   await p.click("#btn-ai-minimize");
   await p.setInputFiles("#input-import-json", { name: "b.json", mimeType: "application/json", buffer: Buffer.from(C.serializeStudy(b)) });
   await p.waitForFunction(() => LeanApp.state.study.processName === "Solda");
   await p.keyboard.press("Escape");
   await answer();
-  await p.waitForFunction(() => document.getElementById("ai-pill-text").textContent.includes("prontas"));
-  await p.click("#ai-pill-open");
-  await p.waitForSelector("#ai-dialog[open]");
-  check(await p.$eval("#btn-ai-apply", (x) => x.disabled), "outro estudo aberto: Aplicar desabilitado");
-  check((await txt("#ai-status")).includes('Estas sugestões são do estudo "Minimizar Teste — Bancada"'), "avisa de qual estudo são as sugestões");
-  await p.click("#btn-ai-minimize");
-  check(await pillShown() && (await p.isVisible("#btn-ai-pill-discard")), "sugestões não aplicadas: selo continua, com descartar");
-  await p.click("#btn-ai-pill-discard");
-  check(!(await pillShown()), "descartar tira o selo");
+  await p.waitForFunction(() => document.getElementById("ai-pill").hidden);
+  await p.waitForTimeout(300);
+  check(!(await pillShown()), "resultado do estudo anterior descartado: sem selo de sugestões");
+  check((await txt("#toast-region")).includes('Resultado da IA do estudo "Minimizar Teste — Bancada" descartado'), "aviso do descarte");
   check(await p.evaluate(() => LeanApp.state.study.elements[0].value) === "", "nada aplicado no estudo errado");
 
   // 3) Falha com a janela minimizada

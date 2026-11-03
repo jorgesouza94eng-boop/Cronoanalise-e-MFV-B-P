@@ -19,7 +19,7 @@
         <h1>Cronoanálise &amp; MFV</h1>
         <nav class="app-nav" aria-label="Módulos">
           <a href="index.html" aria-current="page">Cronoanálise</a><a href="mfv.html">MFV</a><a href="yamazumi.html">Yamazumi</a><a href="plano.html">Plano de Ação</a>
-        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.26</span></nav>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.27</span></nav>
       </div>
     </div>
 
@@ -532,6 +532,15 @@
       <button type="button" class="btn-secondary" data-ai="etapas">Sugerir etapas do processo</button>
     </div>
     <label class="ai-check ai-kaizen-opt" title="Sem esta opção, só vão para a IA os elementos Não agrega e Incidental"><input type="checkbox" id="ai-kaizen-all"> Kaizen: incluir também os elementos "Agrega" e os sem classificação</label>
+    <div class="ai-scope" id="ai-scope-box">
+      <span id="ai-scope-label" class="ai-scope-label"></span>
+      <label class="ai-check" id="ai-scope-wrap">Analisar:
+        <select id="ai-scope" title="Kaizen e Etapas: só o produto aberto no Resumo ou todos os produtos do estudo. Classificar, padronizar, constatações e pergunta usam sempre o produto do Resumo">
+          <option value="produto">Produto selecionado no Resumo</option>
+          <option value="todos">Todos os produtos do estudo</option>
+        </select>
+      </label>
+    </div>
     <div class="ai-ask">
       <label for="ai-question">Pergunte sobre este estudo</label>
       <div class="ai-ask-row">
@@ -553,13 +562,13 @@
     </div>
   </dialog>
 
-  <!-- ASSISTENTE DE IA MINIMIZADO (REV 1.26) -->
+  <!-- ASSISTENTE DE IA MINIMIZADO (REV 1.27) -->
   <div id="ai-pill" class="ai-pill" role="status" aria-live="polite" hidden>
     <button type="button" id="ai-pill-open" class="ai-pill-open" title="Abrir o assistente de IA"><span class="ai-pill-spin" aria-hidden="true"></span><span id="ai-pill-text"></span></button>
     <button type="button" id="btn-ai-pill-discard" class="ai-pill-discard" aria-label="Descartar as sugestões" title="Descartar as sugestões" hidden>&times;</button>
   </div>
 
-  <!-- DEFINIR ETAPAS DO PROCESSO (REV 1.26) -->
+  <!-- DEFINIR ETAPAS DO PROCESSO (REV 1.27) -->
   <dialog id="etapas-dialog" class="study-dialog etapas-dialog" aria-labelledby="etapas-title">
     <div class="dialog-header">
       <h2 id="etapas-title">Definir etapas do processo</h2>

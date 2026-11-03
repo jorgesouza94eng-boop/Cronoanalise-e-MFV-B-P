@@ -722,6 +722,8 @@
     state.computed = Calc.computeStudy(state.study);
     UI.renderStudy(state.study, state.computed);
     refreshStatus();
+    // REV 1.27: o assistente de IA descarta as sugestões de outro estudo
+    document.dispatchEvent(new root.CustomEvent("lean:study-changed", { detail: { id: state.study.id } }));
   }
 
   /**
@@ -1200,11 +1202,18 @@
     let changed = 0;
     let notFound = 0;
     const els = state.study.elements;
+    // REV 1.27: com productKey, só as linhas daquele produto (a IA analisou um produto)
+    let rowsCache = null;
+    const inProduct = (i, pk) => {
+      if (pk == null) return true;
+      if (!rowsCache) rowsCache = Calc.computeStudy(state.study).rows;
+      return !!rowsCache[i] && rowsCache[i].productKey === pk;
+    };
     (s.classify || []).forEach((c) => {
       const key = Calc.elementKey(c.name);
-      if (!els.some((el) => Calc.elementKey(el.description) === key)) notFound += 1;
-      els.forEach((el) => {
-        if (Calc.elementKey(el.description) === key && !el.value) {
+      if (!els.some((el, i) => Calc.elementKey(el.description) === key && inProduct(i, c.productKey))) notFound += 1;
+      els.forEach((el, i) => {
+        if (Calc.elementKey(el.description) === key && !el.value && inProduct(i, c.productKey)) {
           el.value = c.value;
           el.waste = c.waste || "";
           changed += 1;
@@ -1234,9 +1243,9 @@
     // Padronização de nomes: renomeia as linhas das variantes para o nome padrão
     (s.rename || []).forEach((g) => {
       const keys = new Set(g.from.map((n) => Calc.elementKey(n)));
-      if (!els.some((el) => keys.has(Calc.elementKey(el.description)))) notFound += 1;
-      els.forEach((el) => {
-        if (keys.has(Calc.elementKey(el.description))) {
+      if (!els.some((el, i) => keys.has(Calc.elementKey(el.description)) && inProduct(i, g.productKey))) notFound += 1;
+      els.forEach((el, i) => {
+        if (keys.has(Calc.elementKey(el.description)) && inProduct(i, g.productKey)) {
           el.description = g.to;
           changed += 1;
         }

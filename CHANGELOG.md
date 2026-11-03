@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.27** | 03/11/2026 | IA só com o estudo aberto, MFV só da empresa, estouros de Kaizen ligados ao 5W2H e backup .zip |
 | **REV 1.26** | 03/11/2026 | Arquivos organizados por empresa (subpastas) e filtro por empresa nas listas |
 | **REV 1.25** | 30/10/2026 | Definir etapas do processo (janela manual e sugestão da IA) |
 | **REV 1.24** | 30/10/2026 | Fluxograma do processo (estado presente) no MFV |
@@ -31,6 +32,32 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.27 — 03/11/2026
+
+Decisão do consultor: itens **9, 11, 12 e 13** das sugestões.
+
+**9 — IA só com o estudo aberto e o produto selecionado:**
+- O assistente mostra **"Analisando: Empresa — Posto • Produto"**.
+- Seletor **"Analisar"**: **Produto selecionado no Resumo** (padrão) ou **Todos os produtos do estudo**. Vale para Kaizen e Etapas. Classificar, padronizar nomes, constatações e pergunta usam sempre o produto do Resumo, e a classificação e os nomes passam a ser aplicados **só nas linhas desse produto**.
+- Ao abrir outro estudo, as sugestões do anterior **são descartadas** (com aviso). Resultado que chega depois da troca de estudo também é descartado e não aparece no estudo novo.
+
+**11 — MFV só com a empresa do MFV:**
+- O seletor de estudos e grupos mostra **só os da empresa do MFV**; a caixa **"Outras empresas"** mostra os demais.
+- Etapa que vem de estudo ou grupo de outra empresa recebe o aviso **"Etapa de outra empresa"**, e o **Resumo executivo (IA)** não a envia (a mensagem informa quantas ficaram de fora).
+
+**12 — Vários estouros de Kaizen ligados ao Plano 5W2H:**
+- Cada etapa do MFV ganha o campo **"✸ Oportunidade Kaizen"** (opcional), embaixo do nome.
+- No fluxograma, cada oportunidade vira um **estouro ✸ numerado** no canto da caixa, com a legenda embaixo do desenho. O selo do processo Kaizen único do modelo B+P passa a se chamar **"Processo Kaizen"**.
+- No Plano 5W2H, **"+ Ações da cronoanálise"** traz também as oportunidades dos MFVs do cliente (no fim da lista): O que = ECRS — etapa, Onde = MFV — família, Por que = TC e % do takt. A origem é conferida como nas ações da cronoanálise.
+
+**13 — Backup .zip por empresa:**
+- Botão **"Backup .zip"** nas listas de Estudos, MFVs, Grupos e Planos: baixa todos os documentos da empresa escolhida no filtro (ou de todas), na versão mais recente entre navegador e pasta, em `<Empresa>/<arquivo>.json`, com um **LEIA-ME.txt** (conteúdo e como restaurar). Fora do backup: arquivados, cópias de conflito e modelos Excel.
+
+- Nenhum cálculo muda. MFV continua na versão 6 (campo opcional `kaizenNote` na etapa). Service worker v35.
+- Testes: `tests/rev127.test.js` e `tests/e2e.rev127.js`; `e2e.rev120`, `e2e.rev121` e `e2e.rev124` atualizados para as regras novas (escopo padrão, descarte e "Processo Kaizen").
 
 ---
 

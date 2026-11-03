@@ -45,7 +45,7 @@ const check = (cond, msg) => { console.log((cond ? "  OK  " : "  FALHA ") + msg)
   const svgText = () => p.$eval("#flow-chart svg", (s) => Array.from(s.querySelectorAll("text")).map((t) => t.textContent).join(" | "));
   const t1 = await svgText();
   check(["1. Bater uso nas", "2. Grampear frente", "4. Lavar e secar", "Matéria-prima", "Produto acabado"].every((x) => t1.includes(x)), "etapas e estoques no desenho");
-  check(t1.includes("Gargalo") && t1.includes("✸ Kaizen") && t1.includes("não medida"), "selos de gargalo, Kaizen e etapa não medida");
+  check(t1.includes("Gargalo") && t1.includes("Processo Kaizen") && t1.includes("não medida"), "selos de gargalo, Kaizen e etapa não medida");
   check(t1.includes("TC: 1,200 min") && t1.includes("Nº ops: 2") && t1.includes("% do takt"), "dados das etapas (TC, Nº ops, % do takt)");
   check(t1.includes("400 pç") && t1.includes("2,00 dia(s)"), "estoque com quantidade e dias (400 ÷ 200/dia)");
   check(await p.$$eval("#flow-chart polygon", (l) => l.length) === 2, "2 estoques posicionados (△): matéria-prima e produto acabado");

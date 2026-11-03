@@ -392,6 +392,48 @@
     return { studies, skipped };
   }
 
+  /**
+   * Backup (REV 1.27): todos os documentos (estudos, MFVs, grupos e planos) de uma empresa —
+   * ou de todas (clientKey null) —, do navegador e da pasta, na versão mais recente de cada id.
+   * Não inclui os arquivados nem as cópias de conflito. Retorna [{ dir, fileName, text, kind }].
+   */
+  async function collectCompanyDocs(clientKey) {
+    const best = new Map();
+    const keep = (doc, text, fileName) => {
+      if (!doc || typeof doc !== "object" || !doc.id) return;
+      if (clientKey != null && Calc.elementKey(doc.clientName) !== clientKey) return;
+      const prev = best.get(doc.id);
+      if (prev && String(prev.updatedAt) >= String(doc.updatedAt || "")) return;
+      best.set(doc.id, { doc, text, fileName: fileName || doc.fileName, updatedAt: String(doc.updatedAt || "") });
+    };
+    for (const store of [STORE_STUDIES, STORE_MFV, STORE_GROUPS, STORE_PLANS]) {
+      (await listLocal(store)).forEach((r) => {
+        if (!r || !r.study) return;
+        const isCrono = store === STORE_STUDIES;
+        keep(r.study, isCrono ? Calc.serializeStudy(r.study) : JSON.stringify(r.study, null, 2));
+      });
+    }
+    if (await folderReady()) {
+      const dirs = [dirHandle];
+      for await (const entry of dirHandle.values()) if (entry.kind === "directory" && isCompanyDir(entry.name)) dirs.push(entry);
+      for (const dir of dirs) {
+        for await (const entry of dir.values()) {
+          if (entry.kind !== "file" || !DOC_PATTERN.test(entry.name) || entry.name.includes(CONFLICT_MARK)) continue;
+          try {
+            const text = await (await entry.getFile()).text();
+            keep(JSON.parse(text), text, entry.name);
+          } catch (err) {
+            /* arquivo ilegível: fica fora do backup */
+          }
+        }
+      }
+    }
+    return Array.from(best.values())
+      .filter((x) => DOC_PATTERN.test(String(x.fileName || "")))
+      .map((x) => ({ dir: companyDirName(x.doc.clientName), fileName: x.fileName, text: x.text, kind: x.fileName.split("_")[0] }))
+      .sort((a, b) => a.dir.localeCompare(b.dir) || a.fileName.localeCompare(b.fileName));
+  }
+
   /** Arquivos de documentos soltos na pasta principal (versões anteriores à REV 1.26). */
   async function countLooseFiles() {
     if (!(await folderReady())) return 0;
@@ -669,6 +711,7 @@
     companyDirName,
     countLooseFiles,
     organizeByCompany,
+    collectCompanyDocs,
     writeStudy,
     writeTextFile,
     writeBinaryFile,

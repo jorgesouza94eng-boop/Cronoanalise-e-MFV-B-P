@@ -71,6 +71,8 @@ const check = (cond, msg) => { console.log((cond ? "  OK  " : "  FALHA ") + msg)
   await p.waitForFunction(() => !document.querySelector("[data-ai=kaizen]").disabled);
 
   // Padrão (só NA/IN): os 3 "Pegar bandeja" (2 do Pão, em etapas diferentes, e 1 da Rosca)
+  // REV 1.27: o padrão é só o produto do Resumo; aqui o teste cobre todos os produtos do estudo
+  await p.selectOption("#ai-scope", "todos");
   await p.click("[data-ai=kaizen]");
   await p.waitForSelector("#ai-results:not([hidden])");
   await p.waitForFunction(() => document.getElementById("ai-status").textContent.includes("sugestão"));

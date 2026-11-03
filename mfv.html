@@ -18,7 +18,7 @@
         <h1>MFV — Estado presente</h1>
         <nav class="app-nav" aria-label="Módulos">
           <a href="index.html">Cronoanálise</a><a href="mfv.html" aria-current="page">MFV</a><a href="yamazumi.html">Yamazumi</a><a href="plano.html">Plano de Ação</a>
-        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.26</span></nav>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.27</span></nav>
       </div>
     </div>
 
@@ -149,6 +149,7 @@
           <div class="inline-field">
             <label for="study-picker">Estudo</label>
             <select id="study-picker" class="study-picker"></select>
+            <label class="inline-check picker-all" title="Mostrar no seletor os estudos e grupos de outras empresas"><input type="checkbox" id="picker-all"> Outras empresas</label>
           </div>
           <button type="button" id="btn-add-study-step" class="btn-secondary">+ Etapa do estudo</button>
           <button type="button" id="btn-add-manual-step" class="btn-outline">+ Etapa manual</button>
@@ -254,7 +255,7 @@
       </div>
     </section>
 
-    <!-- FLUXOGRAMA DO PROCESSO — ESTADO PRESENTE (REV 1.26) -->
+    <!-- FLUXOGRAMA DO PROCESSO — ESTADO PRESENTE (REV 1.27) -->
     <section class="timesheet-section summary-section flow-section" id="flow-section" aria-label="Fluxograma do processo — estado presente">
       <div class="section-toolbar">
         <div class="toolbar-left">
@@ -268,6 +269,7 @@
       </div>
       <div id="flow-chart" class="flow-chart" role="img" aria-label="Fluxograma do processo no estado presente"></div>
       <p class="form-hint flow-timeline" id="flow-timeline"></p>
+      <ol class="flow-bursts" id="flow-bursts" aria-label="Oportunidades Kaizen (estouros)" hidden></ol>
       <p class="form-hint form-warning" id="flow-unplaced" hidden></p>
     </section>
 

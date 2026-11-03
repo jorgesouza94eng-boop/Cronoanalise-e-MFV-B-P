@@ -18,7 +18,7 @@
         <h1>Plano de Ação — 5W2H</h1>
         <nav class="app-nav" aria-label="Módulos">
           <a href="index.html">Cronoanálise</a><a href="mfv.html">MFV</a><a href="yamazumi.html">Yamazumi</a><a href="plano.html" aria-current="page">Plano de Ação</a>
-        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.26</span></nav>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.27</span></nav>
       </div>
     </div>
 
@@ -194,7 +194,7 @@
       <h2 id="crono-dialog-title">Ações da cronoanálise</h2>
       <button type="button" class="btn-icon-close" id="btn-close-crono" aria-label="Fechar">&times;</button>
     </div>
-    <p class="form-hint" id="crono-hint">Ações digitadas na coluna "Ação sugerida / Kaizen (ECRS)" dos estudos deste cliente, da maior para a menor parcela do ciclo (Pareto). Marque as que entram no plano: Quem, Quando, Quanto e % ficam para você preencher.</p>
+    <p class="form-hint" id="crono-hint">Ações digitadas na coluna "Ação sugerida / Kaizen (ECRS)" dos estudos deste cliente, da maior para a menor parcela do ciclo (Pareto), e as oportunidades Kaizen (✸) das etapas dos MFVs dele, no fim da lista. Marque as que entram no plano: Quem, Quando, Quanto e % ficam para você preencher.</p>
     <div class="pl-cand-filters" role="group" aria-label="Filtros das ações">
       <select id="cf-value" aria-label="Filtrar por valor">
         <option value="">Valor: todos</option><option value="NA">Não agrega</option><option value="IN">Incidental</option><option value="AG">Agrega</option><option value="-">Sem classificação</option>
@@ -257,6 +257,7 @@
 
   <!-- Scripts clássicos (sem módulos ES) para funcionar também via file:// -->
   <script src="js/calc.js"></script>
+  <script src="js/mfv-calc.js"></script>
   <script src="js/xlsx.js"></script>
   <script src="js/xlsx-template.js"></script>
   <script src="js/plano-calc.js"></script>

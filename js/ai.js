@@ -151,10 +151,11 @@
   /**
    * Elementos que vão para a IA, de todos os produtos (e operadores) do estudo, na ordem da
    * grade. Ficam de fora os que já têm ação digitada e, sem includeAll, os de "Agrega" e os
-   * sem classificação. Retorna { targets, stats: { sent, withAction, ag, unclassified } }.
+   * sem classificação. opts.productKey (REV 1.27): só esse produto. Retorna { targets, stats }.
    */
   function kaizenTargets(study, computed, opts) {
     const all = !!(opts && opts.includeAll);
+    const only = opts && opts.productKey != null ? opts.productKey : null;
     const r = computed;
     const els = study.elements || [];
     const opOf = (row) => (r.multiOperator ? row.operator : "");
@@ -166,6 +167,7 @@
     const targets = [];
     const stats = { sent: 0, withAction: 0, ag: 0, unclassified: 0 };
     r.products.forEach((p) => {
+      if (only != null && p.key !== only) return;
       const lists = p.operators ? p.operators.map((o) => ({ op: o.op, label: o.label, list: o.summary.elements })) : [{ op: null, label: "", list: p.summary.elements }];
       lists.forEach(({ op, label, list }) => {
         const named = list.filter((g) => !g.unnamed).sort((a, b) => a.firstSeq - b.firstSeq);
@@ -309,7 +311,8 @@
   /**
    * Pedido de etapas. Vão os elementos de todos os produtos, um por nome, na ordem da grade
    * (ids sequenciais). Elementos que já têm etapa vão como referência ("etapa_atual") e não
-   * recebem sugestão. Retorna { text, count, targets, schema, temperature }.
+   * recebem sugestão. opts.productKey (REV 1.27): só esse produto.
+   * Retorna { text, count, targets, schema, temperature }.
    */
   function buildEtapasPrompt(study, computed, anonymize, opts) {
     const o = opts || {};
@@ -321,6 +324,7 @@
     if (!targets) {
       targets = [];
       r.products.forEach((p) => {
+        if (o.productKey != null && p.key !== o.productKey) return;
         Calc.etapaElements(study, p.key, r).forEach((g, i) => {
           const t = { id: 0, productKey: p.key, product: r.multiProduct ? p.name || "" : "", key: g.key, name: g.name, order: i + 1, group: g };
           if (g.etapa === "") {

@@ -44,6 +44,7 @@
     });
     const keys = Array.from(groups.keys()).sort((a, b) => (a === NONE) - (b === NONE) || groups.get(a).name.localeCompare(groups.get(b).name, "pt-BR"));
     const many = keys.length > 1;
+    backupButton(header, () => (sel && many && sel.value ? sel.value : null), groups);
     if (!sel && header && many) {
       sel = document.createElement("select");
       sel.className = "company-filter";
@@ -79,6 +80,73 @@
       ul.querySelectorAll("li[data-group]").forEach((li) => (li.hidden = !!v && li.dataset.group !== v));
     }
     apply();
+  }
+
+  /* --------------------------------------------------------------------------
+     BACKUP .ZIP (REV 1.27)
+     -------------------------------------------------------------------------- */
+
+  const enc = new TextEncoder();
+  const today = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const KIND_LABEL = { Crono: "estudo(s) de cronoanálise", MFV: "MFV(s)", Yamazumi: "grupo(s) do Yamazumi", Plano: "plano(s) de ação" };
+
+  /** Gera e baixa o .zip: <Empresa>/<arquivo>.json e um LEIA-ME.txt. clientKey null = todas. */
+  async function backupZip(clientKey, label) {
+    const docs = await Store.collectCompanyDocs(clientKey);
+    if (!docs.length) {
+      root.alert("Nenhum documento para o backup.");
+      return 0;
+    }
+    const count = {};
+    docs.forEach((d) => (count[d.kind] = (count[d.kind] || 0) + 1));
+    const readme = [
+      "BACKUP — LEAN CHRONO & MFV (Programa Brasil Mais Produtivo)",
+      `Empresa: ${label}`,
+      `Gerado em: ${new Date().toLocaleString("pt-BR")}`,
+      "",
+      "Conteúdo (versão mais recente de cada documento, do navegador e da pasta):",
+      ...Object.keys(count).map((k) => `  • ${count[k]} ${KIND_LABEL[k] || k}`),
+      "",
+      "Fora do backup: itens arquivados (_Arquivo), cópias de conflito e modelos Excel (_Modelos).",
+      "",
+      "Para restaurar: copie as subpastas para a pasta conectada (OneDrive)",
+      'ou use "Importar JSON" em cada módulo.',
+      "",
+    ].join("\r\n");
+    const files = [{ name: "LEIA-ME.txt", data: enc.encode(readme) }].concat(docs.map((d) => ({ name: `${d.dir}/${d.fileName}`, data: enc.encode(d.text) })));
+    const bytes = root.LeanXlsx.zip(files);
+    const name = `Backup_${clientKey ? docs[0].dir : "Todas_as_empresas"}_${today()}.zip`;
+    Store.downloadText(name, bytes, "application/zip");
+    return docs.length;
+  }
+
+  /** Botão "Backup .zip" no cabeçalho da lista (empresa do filtro ou todas). */
+  function backupButton(header, currentKey, groups) {
+    if (!header || !Store.collectCompanyDocs || !root.LeanXlsx) return;
+    let btn = header.querySelector("button.btn-backup");
+    if (!btn) {
+      btn = Object.assign(document.createElement("button"), { type: "button", className: "btn-outline btn-small btn-backup", textContent: "Backup .zip" });
+      header.append(btn);
+      btn.addEventListener("click", async () => {
+        const k = btn.__key ? btn.__key() : null;
+        const label = k ? (btn.__groups.get(k) || {}).name || "empresa" : "todas as empresas";
+        btn.disabled = true;
+        try {
+          const n = await backupZip(k === NONE ? "" : k, label);
+          if (n) btn.title = `Último backup: ${n} documento(s) de ${label}`;
+        } catch (err) {
+          root.alert(`Não foi possível gerar o backup: ${err.message || err}`);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    }
+    btn.__key = currentKey;
+    btn.__groups = groups;
+    btn.title = 'Baixa um .zip com todos os documentos da empresa escolhida no filtro (ou de todas), do navegador e da pasta';
   }
 
   /** Aviso dos documentos soltos na pasta principal, com "Organizar por empresa". */
@@ -126,5 +194,5 @@
     organizeBanner(ul, o.onRefresh);
   }
 
-  root.LeanOrgUI = { attach, companyFilter };
+  root.LeanOrgUI = { attach, companyFilter, backupZip };
 })(typeof self !== "undefined" ? self : this);

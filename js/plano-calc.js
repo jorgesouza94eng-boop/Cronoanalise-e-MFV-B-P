@@ -285,7 +285,7 @@
       c.cycleTime != null
         ? `${Calc.formatTime(c.cycleTime, u)} ${Calc.TIME_UNITS[u].label}/pç${c.sharePct != null ? ` (${Calc.formatNumber(c.sharePct, 1)}% do ciclo)` : ""}`
         : "";
-    const why = [[valor, desp].filter(Boolean).join(" / "), numbers].filter(Boolean).join(": ") || "Ação Kaizen da cronoanálise";
+    const why = c.why || [[valor, desp].filter(Boolean).join(" / "), numbers].filter(Boolean).join(": ") || "Ação Kaizen da cronoanálise";
     return createAction({
       what: p.ecrs ? `${ECRS[p.ecrs]} — ${c.origin.element}` : c.origin.element,
       how: p.text,
@@ -297,6 +297,49 @@
       priority: Number.isInteger(priority) && priority > 0 ? priority : null,
       origin: Object.assign({}, c.origin),
     });
+  }
+
+  /**
+   * Oportunidades Kaizen do MFV (REV 1.27): uma por etapa com "Oportunidade Kaizen" preenchida.
+   * Mesmo formato das ações da cronoanálise; a origem usa studyId "mfv:<id do MFV>".
+   * r = resultado do MFV (computeMfv), para o TC e o % do takt no "Por que".
+   */
+  function mfvCandidates(doc, r) {
+    const out = [];
+    (doc.steps || []).forEach((s, i) => {
+      const note = str(s.kaizenNote).trim().replace(/\s+/g, " ");
+      if (!note) return;
+      const step = r && r.steps ? r.steps[i] : null;
+      const origin = {
+        studyId: `mfv:${doc.id}`,
+        studyFileName: str(doc.fileName),
+        processName: "MFV",
+        product: str(doc.family),
+        etapa: "",
+        element: str(s.name) || `Etapa ${i + 1}`,
+        kaizen: note,
+      };
+      const tu = Calc.TIME_UNITS[doc.timeUnit] ? doc.timeUnit : "min";
+      const nums =
+        step && step.tc != null
+          ? `TC ${Calc.formatTime(step.tc, tu)} ${Calc.TIME_UNITS[tu].label}${step.taktPct != null ? ` (${Calc.formatNumber(step.taktPct, 1)}% do takt)` : ""}`
+          : "";
+      out.push({
+        key: originKey(origin),
+        origin,
+        clientName: str(doc.clientName),
+        value: "",
+        waste: "",
+        cycleTime: null,
+        sharePct: null,
+        unit: tu,
+        tool: "",
+        operator: "",
+        source: "mfv",
+        why: `Oportunidade Kaizen do MFV${nums ? `: ${nums}` : ""}`,
+      });
+    });
+    return out;
   }
 
   /**
@@ -402,6 +445,7 @@
     parseEcrs,
     originKey,
     studyCandidates,
+    mfvCandidates,
     actionFromCandidate,
     originStatus,
     excelDate,

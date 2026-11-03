@@ -282,6 +282,7 @@ O link **MFV** no cabeçalho abre o Mapa de Fluxo de Valor, que reproduz a aba *
 | **Demanda e disponibilidade** | Demanda mensal ÷ dias úteis = demanda diária. Disponibilidade da família (%), unidade do produto (pç, m², kg) e unidade de tempo (s, min, h) |
 | **Takt** | Tempo disponível por dia ÷ demanda diária |
 | **GBO** | Cada etapa vem de um **estudo de cronoanálise**: o TC é o tempo padrão do estudo. O TC é **editável** (vira "✎ editado", com a opção **↺ usar estudo**). Também é possível criar etapas manuais. Cada etapa tem nº de operadores, uptime (%) e % do takt. **Atualizar TCs** relê os estudos |
+| **Oportunidade Kaizen por etapa** (REV 1.27) | Campo "✸ Oportunidade Kaizen" na etapa: vira estouro numerado no fluxograma e pode entrar no Plano 5W2H ("+ Ações da cronoanálise") |
 | **Fluxograma do processo — estado presente** (REV 1.24) | Desenhado pelo app a partir das etapas e dos estoques ("Posição no fluxo"): TC, Nº ops, % do takt, gargalo, Kaizen, estoques com dias e linha do tempo. "Mostrar dados" e "Exportar PNG" para colar no Excel |
 | **Gráfico GBO** | Barras por etapa com a linha do takt. Barras acima do takt ficam em vermelho e o processo Kaizen fica tracejado |
 | **Resultados** | Gargalo (maior TC), operadores atuais × ideais (ΣTC ÷ takt), capacidade da linha (tempo disponível ÷ maior TC), produtividade (/dia/op e /h/op) e o processo Kaizen marcado |
@@ -463,6 +464,8 @@ O documento aberto não pode ser arquivado.
 3. Ao reabrir o navegador, ele pede a permissão de novo: clique em **Reautorizar pasta**. Enquanto isso, nada se perde, porque tudo continua salvo no navegador.
 4. O botão **Estudos** lista os arquivos `Crono_*.json` da pasta e os estudos guardados no navegador. As listas são agrupadas por empresa, com o filtro **"Empresa"** (REV 1.26).
 
+**Backup (REV 1.27):** o botão **"Backup .zip"** das listas baixa todos os documentos da empresa escolhida no filtro (ou de todas), com um LEIA-ME de como restaurar.
+
 **Uma subpasta por empresa (REV 1.26):** os arquivos ficam em `<Empresa>/` dentro da pasta conectada (ex.: `Industria_Metalurgica_Alfa/Crono_….json`), com o `_Arquivo` da empresa dentro dela. Os modelos Excel ficam em `_Modelos`, na pasta principal. Arquivos soltos na pasta principal (versões anteriores) continuam sendo lidos; o botão **"Organizar por empresa"**, no aviso das listas, move todos para as subpastas.
 
 **Nome do arquivo:** gerado uma única vez na criação, sem acentos e com um ID único. Exemplo: `Crono_Industria_Metalurgica_Alfa_Montagem_Final_Posto_01_2026-10-15_a1b2c3d4.json`. Renomear o cliente ou o posto **não** cria um arquivo novo; renomear o cliente muda o arquivo para a subpasta da nova grafia.
@@ -551,8 +554,8 @@ Ao alterar qualquer arquivo do app, incremente `CACHE_VERSION` em `sw.js` para o
 ## 7. Testes
 
 ```bash
-npm test             # 221 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
-npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.26 (Yamazumi, Plano de Ação, Kaizen da IA, IA minimizada, filmagem de continuação, filtros do plano, fluxograma, definir etapas, pastas por empresa…) — requer o servidor local
+npm test             # 224 testes: cálculo, filmagens, produtos, Excel, modelos B+P, MFV, pç/HH, payback, IA, Yamazumi e Plano de Ação (Node 18+, sem dependências)
+npm run test:e2e     # navegador (Playwright): cronoanálise, MFV, IA simulada, REV 1.2 a 1.27 (Yamazumi, Plano de Ação, Kaizen da IA, IA minimizada, filmagem de continuação, filtros do plano, fluxograma, definir etapas, pastas por empresa, estouros de Kaizen, backup…) — requer o servidor local
 ```
 
 O teste de ponta a ponta no navegador (`tests/e2e.browser.js`) usa Playwright e cobre:

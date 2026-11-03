@@ -36,6 +36,47 @@
   const studyName = (st) => [st.clientName, st.processName].filter(Boolean).join(" — ") || "sem nome";
 
   /* ==========================================================================
+     ESCOPO (REV 1.27): a IA lê só o estudo aberto e, por padrão, só o produto do Resumo
+     ========================================================================== */
+
+  /** Produto que vai para a IA (null = todos os produtos do estudo, ou estudo de 1 produto). */
+  function scopeKey(computed) {
+    if (!computed.multiProduct) return null;
+    return $("ai-scope").value === "todos" ? null : computed.product.key;
+  }
+
+  function scopeName(computed) {
+    if (!computed.multiProduct) return "";
+    return $("ai-scope").value === "todos" ? "todos os produtos" : computed.product.name || "produto";
+  }
+
+  /** Cabeçalho "Analisando: Empresa — Posto • Produto". */
+  function updateScope() {
+    const st = app() && app().state.study;
+    const label = $("ai-scope-label");
+    if (!label) return;
+    if (!st) {
+      label.textContent = "";
+      return;
+    }
+    const computed = Calc.computeStudy(st);
+    $("ai-scope-wrap").hidden = !computed.multiProduct;
+    const prod = scopeName(computed);
+    label.textContent = `Analisando: ${studyName(st)}${prod ? ` • ${prod}` : ""}`;
+  }
+
+  /** O estudo do pedido ainda é o aberto? Se não, o resultado é descartado (REV 1.27). */
+  function stillCurrent(study) {
+    const cur = app() && app().state.study;
+    if (cur && cur.id === study.id) return true;
+    pending = null;
+    $("ai-results").hidden = true;
+    setStatus(`Resultado da IA descartado: ele era do estudo "${studyName(study)}" e outro estudo foi aberto.`, true);
+    if (root.LeanUI && root.LeanUI.toast) root.LeanUI.toast(`Resultado da IA do estudo "${studyName(study)}" descartado (outro estudo aberto).`, "warn", 7000);
+    return false;
+  }
+
+  /* ==========================================================================
      MINIMIZAR (REV 1.21): selo no canto da tela com o andamento da tarefa
      ========================================================================== */
 
@@ -163,7 +204,7 @@
     const study = st.study;
     const computed = Calc.computeStudy(study);
     const anon = settings.anonymize !== false;
-    const prompt = AI.buildKaizenPrompt(study, computed, anon, { includeAll: $("ai-kaizen-all").checked });
+    const prompt = AI.buildKaizenPrompt(study, computed, anon, { includeAll: $("ai-kaizen-all").checked, productKey: scopeKey(computed) });
     const outside = AI.kaizenStatsText(prompt.stats);
     if (!prompt.count) return setStatus(`Nenhum elemento para enviar. ${outside || "Lance tempos na grade antes."}`, true);
     discardPending();
@@ -189,6 +230,7 @@
           /* mantém as sugestões da 1ª resposta */
         }
       }
+      if (!stillCurrent(study)) return finishJob("done");
       showItems("kaizen", items, study);
       const ok = items.filter((i) => !i.noAction).length;
       const parts = [`${ok} sugestão(ões) para ${prompt.count} elemento(s) enviado(s).`];
@@ -215,7 +257,7 @@
     const study = st.study;
     const computed = Calc.computeStudy(study);
     const anon = settings.anonymize !== false;
-    const prompt = AI.buildEtapasPrompt(study, computed, anon);
+    const prompt = AI.buildEtapasPrompt(study, computed, anon, { productKey: scopeKey(computed) });
     if (!prompt.count) return setStatus('Todos os elementos já têm etapa. Para mudar, use "Definir etapas".', true);
     discardPending();
     startJob("etapas", prompt.count, study);
@@ -229,6 +271,7 @@
     setStatus(`Consultando o Gemini (${prompt.count} elemento(s) sem etapa)...`);
     try {
       const res = AI.parseEtapas(await ask(prompt), prompt.targets, study);
+      if (!stillCurrent(study)) return finishJob("done");
       showEtapas(res, prompt, study, computed);
       finishJob("done");
     } catch (err) {
@@ -338,8 +381,12 @@
         json: kind !== "notes" && kind !== "ask",
         onRetry: (n, total) => setStatus(`Servidor do Gemini ocupado, tentando de novo (${n}/${total})...`),
       });
-      if (kind === "classify") showItems(kind, AI.parseClassify(text, prompt.names, study, anon), study);
-      else if (kind === "names") showItems(kind, AI.parseNames(text, prompt.names, study, anon), study);
+      if (!stillCurrent(study)) return finishJob("done");
+      // REV 1.27: classificação e nomes valem só para as linhas do produto analisado
+      const pk = computed.multiProduct ? computed.product.key : null;
+      const tag = (list) => list.map((x) => Object.assign(x, { productKey: pk }));
+      if (kind === "classify") showItems(kind, tag(AI.parseClassify(text, prompt.names, study, anon)), study);
+      else if (kind === "names") showItems(kind, tag(AI.parseNames(text, prompt.names, study, anon)), study);
       else if (kind === "ask") showAnswer(AI.restoreNames(text, study), study);
       else showNotes(AI.restoreNames(text, study), study);
       finishJob("done");
@@ -494,6 +541,7 @@
       if (job && job.state === "error") job = null; // o detalhe do erro fica na janela
       if (!dlg.open) dlg.showModal();
       if (pending) checkStudy();
+      updateScope();
       updatePill();
     };
     $("btn-ai").addEventListener("click", openDialog);
@@ -507,6 +555,17 @@
     $("ai-pill-open").addEventListener("click", openDialog);
     $("btn-ai-pill-discard").addEventListener("click", discardPending);
     dlg.addEventListener("close", updatePill);
+    $("ai-scope").addEventListener("change", updateScope);
+    // REV 1.27: outro estudo aberto → as sugestões do anterior saem do assistente
+    document.addEventListener("lean:study-changed", (e) => {
+      const id = e.detail && e.detail.id;
+      if (pending && pending.studyId !== id) {
+        const name = pending.studyName;
+        discardPending();
+        if (root.LeanUI && root.LeanUI.toast) root.LeanUI.toast(`Sugestões da IA do estudo "${name}" descartadas (outro estudo aberto).`, "info", 6000);
+      }
+      updateScope();
+    });
     $("btn-ai-models").addEventListener("click", loadModels);
     $("btn-ai-save").addEventListener("click", saveSettings);
     $("btn-ai-forget").addEventListener("click", async () => {

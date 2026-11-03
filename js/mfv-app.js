@@ -570,10 +570,26 @@
     );
   }
 
+  /** REV 1.27: estudo ou grupo de outra empresa (empresa do MFV preenchida e diferente). */
+  const otherCompany = (clientName) => {
+    const mine = state.doc ? Calc.elementKey(state.doc.clientName) : "";
+    return !!mine && Calc.elementKey(clientName) !== mine;
+  };
+
+  /** Etapas do MFV que vêm de estudos ou grupos de outra empresa. */
+  function otherCompanySteps(doc) {
+    return doc.steps.filter((s) => {
+      const src = s.studyId ? state.studies.find((x) => x.id === s.studyId) : s.groupId ? state.groups.find((g) => g.id === s.groupId) : null;
+      return !!src && otherCompany(src.clientName);
+    });
+  }
+
   function renderStudyPicker() {
     const sel = $("study-picker");
     const client = state.doc ? Calc.elementKey(state.doc.clientName) : "";
-    const list = state.studies.slice().sort((a, b) => {
+    // REV 1.27: só a empresa do MFV, a menos que "Outras empresas" esteja marcado
+    const all = $("picker-all").checked || !client;
+    const list = state.studies.filter((s) => all || !otherCompany(s.clientName)).sort((a, b) => {
       const ma = Calc.elementKey(a.clientName) === client ? 0 : 1;
       const mb = Calc.elementKey(b.clientName) === client ? 0 : 1;
       return ma - mb || String(a.processName).localeCompare(String(b.processName), "pt-BR");
@@ -585,7 +601,7 @@
       })
     );
     const groups = state.groups
-      .slice()
+      .filter((g) => all || !otherCompany(g.clientName))
       .sort((a, b) => (Calc.elementKey(a.clientName) === client ? 0 : 1) - (Calc.elementKey(b.clientName) === client ? 0 : 1) || a.name.localeCompare(b.name, "pt-BR"))
       .map((g) =>
         el("option", {
@@ -594,7 +610,10 @@
         })
       );
     sel.replaceChildren(
-      el("option", { value: "", textContent: list.length || groups.length ? "Selecione um estudo ou grupo..." : "Nenhum estudo encontrado" }),
+      el("option", {
+        value: "",
+        textContent: list.length || groups.length ? "Selecione um estudo ou grupo..." : all ? "Nenhum estudo encontrado" : 'Nenhum estudo desta empresa (marque "Outras empresas")',
+      }),
       ...(groups.length ? [el("optgroup", { label: "Estudos de cronoanálise" }, options), el("optgroup", { label: "Grupos do Yamazumi" }, groups)] : options)
     );
   }
@@ -1149,6 +1168,21 @@
     else if (pb.status === "sem-retorno" || pb.status === "invalido") pbCard.classList.add("is-bottleneck");
   }
 
+  /** REV 1.27: oportunidade Kaizen da etapa (estouro ✸ no fluxograma; vai para o Plano 5W2H). */
+  function kaizenNoteInput(s) {
+    const inp = el("input", {
+      type: "text",
+      className: "input-cell input-kaizen-note",
+      value: s.kaizenNote || "",
+      placeholder: "✸ Oportunidade Kaizen (opcional)",
+      autocomplete: "off",
+      maxLength: 200,
+      title: 'Estouro de Kaizen desta etapa: aparece numerado no fluxograma e pode entrar no Plano 5W2H (botão "+ Ações da cronoanálise"). Ex.: "Reorganizar: gelo preparado antes da janela"',
+    });
+    inp.dataset.field = "kaizenNote";
+    return inp;
+  }
+
   function stepRow(s, i) {
     const tr = el("tr");
     tr.dataset.id = s.id;
@@ -1246,7 +1280,7 @@
     tr.append(
       el("td", { className: "cell-center" }, [radio]),
       el("td", { className: "cell-num", textContent: String(i + 1).padStart(2, "0") }),
-      el("td", {}, [mk("name", s.name, "")]),
+      el("td", { className: "step-name-cell" }, [mk("name", s.name, ""), kaizenNoteInput(s)]),
       origin,
       el("td", {}, [tcInput]),
       el("td", {}, [opTag]),
@@ -1360,7 +1394,11 @@
     $("mfv-operator-list").replaceChildren(
       ...Array.from(new Set(d.steps.map((x) => String(x.operatorTag || "").trim()).filter(Boolean).concat(["Op1", "Op2", "Op3"]))).map((v) => el("option", { value: v }))
     );
-    renderLinkChecks(M.linkChecks(d, r, linkInfo));
+    const checks = M.linkChecks(d, r, linkInfo);
+    otherCompanySteps(d).forEach((s) =>
+      checks.unshift({ kind: "outra-empresa", text: `Etapa de outra empresa: ${d.steps.indexOf(s) + 1}. ${s.name || "Etapa"} — confira se ela pertence a este MFV (fica fora do resumo executivo da IA)` })
+    );
+    renderLinkChecks(checks);
     $("tc-total").textContent = r.tcTotal ? ft(r.tcTotal) : "--";
     $("ops-total").textContent = fmt(r.opsTotal, 2);
     renderGbo(r);
@@ -1481,6 +1519,7 @@
       box.replaceChildren(el("p", { className: "chart-empty", textContent: "Adicione as etapas no GBO para desenhar o fluxograma." }));
       $("flow-timeline").textContent = "";
       $("flow-unplaced").hidden = true;
+      $("flow-bursts").hidden = true;
       return;
     }
     // Layout: nós em sequência; quebra de linha quando não cabem na largura
@@ -1563,9 +1602,21 @@
       // Selos acima da caixa
       const tags = [];
       if (bn) tags.push(["Gargalo", "#dc2626"]);
-      if (s.kaizen) tags.push(["✸ Kaizen", "#ca8a04"]);
+      if (s.kaizen) tags.push(["Processo Kaizen", "#ca8a04"]);
       if (s.unmeasured) tags.push(["não medida", "#64748b"]);
       tags.forEach(([t, color], k) => svg.append(text(p.x + 6 + k * 70, y - 8, t, { "text-anchor": "start", "font-size": 11, "font-weight": "bold", fill: color })));
+      // REV 1.27: estouro de Kaizen numerado no canto da caixa (legenda embaixo do desenho)
+      if (p.n.burst) {
+        const bx = p.x + p.w - 4;
+        const by = y + 2;
+        const pts = Array.from({ length: 16 }, (_, k) => {
+          const r0 = k % 2 ? 9 : 17;
+          const a = (Math.PI * 2 * k) / 16 - Math.PI / 2;
+          return `${(bx + r0 * Math.cos(a)).toFixed(1)},${(by + r0 * Math.sin(a)).toFixed(1)}`;
+        }).join(" ");
+        svg.append(svgEl("polygon", { points: pts, fill: "#facc15", stroke: "#b45309", "stroke-width": 1.5 }));
+        svg.append(text(bx, by + 4, String(p.n.burst), { "font-size": 11, "font-weight": "bold", fill: "#78350f" }));
+      }
       if (show && !s.unmeasured) {
         const dy = y + STEP_H + 6;
         svg.append(svgEl("rect", { x: p.x, y: dy, width: p.w, height: DATA_H - 6, fill: "#f8fafc", stroke: "#cbd5e1" }));
@@ -1584,6 +1635,8 @@
     const lt = model.leadTimeDays != null ? `${fmt(model.leadTimeDays, 2)} dia(s) em estoques` : "-- (informe a demanda e os estoques)";
     const pt = model.processTotal != null ? `${ft(model.processTotal)} ${u}` : "--";
     $("flow-timeline").textContent = `Linha do tempo — Lead time: ${lt} + tempo de processamento ${pt} (Σ TC).`;
+    $("flow-bursts").replaceChildren(...model.bursts.map((b) => el("li", { textContent: `✸${b.n} — ${b.seq}. ${b.name}: ${b.note}` })));
+    $("flow-bursts").hidden = !model.bursts.length;
     const un = model.unplaced;
     $("flow-unplaced").hidden = !un.length;
     $("flow-unplaced").textContent = un.length
@@ -1768,6 +1821,7 @@
       markChanged({ render: true });
     });
 
+    $("picker-all").addEventListener("change", renderStudyPicker);
     $("btn-add-study-step").addEventListener("click", () => {
       const value = $("study-picker").value;
       if (value.startsWith("grupo:")) {
@@ -2173,7 +2227,10 @@
       return status("Configure a IA no botão ✨ IA da Cronoanálise (chave de API e modelo) e volte aqui.", true);
     }
     if (root.navigator.onLine === false) return status("A IA precisa de internet.", true);
-    const prompt = AI.buildMfvSummaryPrompt(state.doc, M.computeMfv(state.doc), settings.anonymize !== false);
+    // REV 1.27: a IA lê só este MFV e só as etapas da empresa dele
+    const outside = otherCompanySteps(state.doc);
+    const docAi = outside.length ? Object.assign({}, state.doc, { steps: state.doc.steps.filter((s) => !outside.includes(s)) }) : state.doc;
+    const prompt = AI.buildMfvSummaryPrompt(docAi, M.computeMfv(docAi), settings.anonymize !== false);
     if (!prompt.count) return status("Adicione as etapas do GBO antes de pedir o resumo.", true);
     status("Consultando o Gemini...");
     $("btn-mfv-ai-generate").disabled = true;
@@ -2182,7 +2239,10 @@
         onRetry: (n, total) => status(`Servidor do Gemini ocupado, tentando de novo (${n}/${total})...`),
       });
       $("mfv-ai-text").value = AI.restoreNames(text, { clientName: state.doc.clientName, processName: state.doc.family });
-      status("Revise e edite o texto antes de aplicar. Confira os números com o MFV.");
+      status(
+        "Revise e edite o texto antes de aplicar. Confira os números com o MFV." +
+          (outside.length ? ` ${outside.length} etapa(s) de outra empresa ficaram fora do resumo.` : "")
+      );
     } catch (err) {
       status(`Falha na IA: ${err.message || err}`, true);
     } finally {

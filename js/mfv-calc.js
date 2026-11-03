@@ -127,6 +127,7 @@
         studyDemand: null, // demanda própria do produto (pç/dia) na última atualização; null = sem demanda própria
         operatorTag: "", // REV 1.14: operador compartilhado entre etapas (ex.: "Op1")
         unmeasured: false, // REV 1.14: etapa não medida (só nome e posição no fluxo; fora dos cálculos)
+        kaizenNote: "", // REV 1.27: oportunidade Kaizen da etapa (estouro no fluxograma; vai para o Plano 5W2H)
       },
       overrides || {}
     );
@@ -252,6 +253,7 @@
             studyDemand: Number.isFinite(s.studyDemand) && s.studyDemand > 0 ? s.studyDemand : null,
             operatorTag: str(s.operatorTag).trim(),
             unmeasured: s.unmeasured === true,
+            kaizenNote: str(s.kaizenNote),
           })
         ),
       inventories: (Array.isArray(raw.inventories) ? raw.inventories : [])
@@ -352,6 +354,7 @@
           id: s.id, seq: i + 1, name: s.name || `Etapa ${i + 1}`, unmeasured: true, tc: null, tcOriginal: null, weight: null,
           fromStudy: false, operators: null, opsEff: 0, content: null, contentSource: "", isGroup: false, operatorTag: "",
           warnings: [], kaizen: false, taktPct: null, overTakt: false, errors: [],
+          kaizenNote: String(s.kaizenNote || "").trim(),
         };
       }
       const fromStudy = s.source === "study" && Number.isFinite(s.tcStudyMin);
@@ -416,6 +419,7 @@
         isGroup: !!s.groupId || Number.isFinite(s.contentStudyMin),
         warnings,
         kaizen: !!s.kaizen,
+        kaizenNote: String(s.kaizenNote || "").trim(),
         taktPct: takt && tc ? (tc / takt) * 100 : null,
         overTakt: !!(takt && tc && tc > takt + EPS),
         errors,
@@ -905,9 +909,11 @@
     const isBn = (s) =>
       !!bn && !s.unmeasured && (bn.kind === "etapa" ? bn.seq === s.seq : !!s.operatorTag && s.operatorTag.toLowerCase() === String(bn.operator).toLowerCase());
     const nodes = at(FLOW_START);
+    const bursts = []; // REV 1.27: estouros de Kaizen numerados na ordem do fluxo
     r.steps.forEach((s) => {
       nodes.push(...at(s.id));
-      nodes.push({ kind: "step", step: s, bottleneck: isBn(s) });
+      const burst = s.kaizenNote ? bursts.push({ n: bursts.length + 1, seq: s.seq, name: s.name, note: s.kaizenNote }) : 0;
+      nodes.push({ kind: "step", step: s, bottleneck: isBn(s), burst });
     });
     nodes.push(...at(FLOW_END));
     const unplaced = r.inventories.filter((i) => i.beforeStepId !== FLOW_START && i.beforeStepId !== FLOW_END && !ids.has(i.beforeStepId));
@@ -917,6 +923,7 @@
       leadTimeDays: r.demandDaily ? r.leadTimeDays : null,
       processTotal: r.processTotal > 0 ? r.processTotal : null,
       bottleneckKind: bn ? bn.kind : "",
+      bursts,
     };
   }
 

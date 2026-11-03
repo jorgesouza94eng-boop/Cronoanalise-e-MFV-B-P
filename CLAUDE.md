@@ -54,7 +54,7 @@ A consultoria possui carga horária de 116 horas (para médias empresas) distrib
 - Scripts clássicos no padrão UMD (`window.LeanX` no navegador e `module.exports` nos testes do Node). **Não usar módulos ES** (quebram no `file://`).
 - Armazenamento local-first: IndexedDB (`LeanChronoDB`) e pasta do OneDrive pela File System Access API, com debounce de 3 s e proteção contra conflito (revisão + cópia `_conflito_`).
 - Pasta conectada organizada **por empresa** (REV 1.26): `<Empresa>/` (= `Store.companyDirName(cliente)`, mesma grafia do nome dos arquivos); `_Arquivo` dentro de cada empresa; `_Modelos` na pasta principal. Arquivos soltos na pasta principal (versões anteriores) continuam lidos e podem ser movidos com "Organizar por empresa".
-- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6), `Yamazumi_*.json` (grupo de estudos, versão 1) e `Plano_*.json` (plano de ação 5W2H, versão 1) — REV 1.26. Elemento do estudo tem `kaizenTool` opcional (REV 1.20). Itens arquivados ficam na subpasta `_Arquivo` (fora das listas).
+- Arquivos: `Crono_*.json` (estudo, versão 7), `MFV_*.json` (MFV, versão 6), `Yamazumi_*.json` (grupo de estudos, versão 1) e `Plano_*.json` (plano de ação 5W2H, versão 1) — REV 1.27. Elemento do estudo tem `kaizenTool` opcional (REV 1.20). Itens arquivados ficam na subpasta `_Arquivo` (fora das listas).
 - A revisão aparece no cabeçalho das 4 páginas (`.app-rev`); um teste confere com a versão do `package.json`.
 
 | Arquivo | Função |
@@ -180,3 +180,10 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 
 - `C.etapaElements` (elementos do produto uma vez cada, etapa "" / texto / null = várias), `C.etapaAssignPlan` (linhas que mudam) e `C.etapaPreview` (TP por etapa numa cópia). A etapa vale para todas as linhas do elemento no produto.
 - IA (`A.buildEtapasPrompt` / `A.parseEtapas`): só elementos sem etapa recebem sugestão; 3–8 etapas por produto, pela sequência; "sem_etapa" quando não dá para decidir; a gravação passa sempre pela janela "Definir etapas".
+
+## Regra implementada na REV 1.27: escopo da IA, MFV por empresa, estouros e backup
+
+- IA: lê só o estudo aberto; Kaizen/Etapas com `productKey` = produto do Resumo (padrão) ou todos; classificar/nomes aplicados só nas linhas do produto; ao trocar de estudo (evento `lean:study-changed`) as sugestões do anterior são descartadas.
+- MFV: seletor só com estudos/grupos da empresa do MFV ("Outras empresas" mostra o resto); etapa de outra empresa = aviso e fora do resumo executivo da IA.
+- Estouros: `kaizenNote` na etapa do MFV → `flowchartModel(r).bursts` (numerados) e `P.mfvCandidates(doc, r)` no Plano (origem `mfv:<id>`).
+- Backup: `Store.collectCompanyDocs(chave|null)` + `LeanOrgUI.backupZip` (zip `<Empresa>/<arquivo>` + LEIA-ME).
