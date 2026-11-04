@@ -748,6 +748,37 @@
     refreshStatus();
     // REV 1.27: o assistente de IA descarta as sugestões de outro estudo
     document.dispatchEvent(new root.CustomEvent("lean:study-changed", { detail: { id: state.study.id } }));
+    // REV 1.30: a empresa do estudo aberto vira a empresa ativa das 4 páginas
+    if (root.LeanOrgUI) root.LeanOrgUI.setActiveCompany(state.study.clientName);
+  }
+
+  /**
+   * REV 1.30: estudo a abrir ao entrar na página, pela empresa ativa. O último estudo, se for
+   * da empresa; senão o mais recente dela (navegador e pasta). Retorna { id, fileName } |
+   * { none: name } | null (sem empresa ativa).
+   */
+  async function studyForActive(lastId) {
+    const Org = root.LeanOrgUI;
+    const act = Org && Org.activeCompany();
+    if (!act) return null;
+    const last = lastId ? await Store.getLocal(lastId) : null;
+    if (last && last.study && Calc.companyKey(last.study.clientName) === act.key) return { id: lastId };
+    const docs = new Map();
+    (await Store.listLocal()).forEach((r) => r && r.study && docs.set(r.id, r.study));
+    if (await Store.folderReady()) {
+      try {
+        (await Store.listFolderStudies()).studies.forEach((s) => {
+          const prev = docs.get(s.id);
+          if (!prev || String(s.updatedAt) > String(prev.updatedAt)) docs.set(s.id, s);
+        });
+      } catch (err) {
+        /* pasta ilegível: só o navegador */
+      }
+    }
+    const list = Array.from(docs.values()).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    const pick = Org.pickForActive(list, lastId);
+    if (pick && pick.doc) return { id: pick.doc.id, fileName: pick.doc.fileName };
+    return pick && pick.none ? { none: pick.name } : null;
   }
 
   /**
@@ -1185,13 +1216,19 @@
 
     let opened = false;
     const lastId = await Store.getKV("lastStudyId");
-    if (lastId) opened = await openStudy(lastId);
-    if (!opened) {
+    const pick = await studyForActive(lastId);
+    if (pick && pick.id) opened = await openStudy(pick.id, pick.fileName);
+    else if (!pick && lastId) opened = await openStudy(lastId);
+    if (!opened && !(pick && pick.none)) {
       const locals = (await Store.listLocal()).filter((r) => r && r.study);
       locals.sort((a, b) => String(b.study.updatedAt).localeCompare(String(a.study.updatedAt)));
       if (locals.length) opened = await openStudy(locals[0].id);
     }
-    if (!opened) await showStudies({ focusNew: true });
+    if (!opened) {
+      await showStudies({ focusNew: true });
+      // Empresa ativa sem estudo: "Novo estudo" já na empresa (nada é criado sozinho)
+      if (pick && pick.none) document.getElementById("new-client").value = pick.none;
+    }
     refreshStatus();
 
     if (opened) UI.focusCell(0, "description");

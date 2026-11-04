@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.30** | 04/11/2026 | Empresa ativa nas 4 páginas e seletor "MFV da empresa" / "Grupo da empresa" |
 | **REV 1.29** | 04/11/2026 | Mesma empresa com grafias diferentes e renomear a empresa em todos os documentos |
 | **REV 1.28** | 03/11/2026 | Modelo de cronoanálise EO_Cronoanálise v00_r05 (unidades, lote e Plano 5W2H na Listagem) |
 | **REV 1.27** | 03/11/2026 | IA só com o estudo aberto, MFV só da empresa, estouros de Kaizen ligados ao 5W2H e backup .zip |
@@ -34,6 +35,19 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.30 — 04/11/2026
+
+Decisão do consultor ("confirmo"): a empresa escolhida numa página vale nas outras, com seletor do MFV e do grupo da empresa.
+
+- **Empresa ativa:** abrir um estudo, MFV, grupo ou plano (ou mudar o cliente no cabeçalho) torna a empresa dele a **empresa ativa** das 4 páginas. Selo **"Empresa: …"** ao lado da revisão.
+- **Entrar numa página pelo menu:** abre o último documento da página se for da empresa ativa; senão, o **mais recente da empresa ativa**. Sem documento da empresa: abre a janela com o "Novo" já preenchido com a empresa (nada é criado sozinho). Sem empresa ativa: como antes. "→ MFV" e `plano.html?cliente=` continuam como estão.
+- **Seletor "MFV da empresa"** no cabeçalho do MFV (famílias da empresa com a data da última alteração e **"+ Novo MFV desta empresa"**): troca na hora, salvando o MFV atual antes. Empresa com 2 ou mais MFVs: abre o mais recente, avisa e destaca o seletor.
+- **Seletor "Grupo da empresa"** no Yamazumi, igual. O Plano é um por empresa (sem seletor).
+- **Filtro das listas:** já vem na empresa ativa (troque para "todas" quando quiser).
+- Nenhum cálculo muda. Service worker v38. Testes: `tests/e2e.rev130.js`; `e2e.rev120` (rótulo) e `e2e.rev129` (filtro já na empresa ativa) ajustados.
 
 ---
 

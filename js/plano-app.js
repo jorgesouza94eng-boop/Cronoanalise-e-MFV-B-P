@@ -253,6 +253,8 @@
     $("conflict-banner").hidden = true;
     renderAll();
     refreshStatus();
+    // REV 1.30: a empresa do plano aberto vira a empresa ativa
+    if (root.LeanOrgUI) root.LeanOrgUI.setActiveCompany(state.doc.clientName);
   }
 
   async function openDoc(id, fileNameHint) {
@@ -926,8 +928,13 @@
       if (hit) opened = await openDoc(hit.doc.id, hit.doc.fileName);
       else $("new-client").value = wanted;
     } else {
+      // REV 1.30: o plano da empresa ativa (sem plano: janela com a empresa preenchida)
       const lastId = await Store.getKV("lastPlanId");
-      if (lastId) opened = await openDoc(lastId);
+      const { list } = await listPlans();
+      const pick = root.LeanOrgUI ? root.LeanOrgUI.pickForActive(list.map((x) => x.doc), lastId) : null;
+      if (pick && pick.doc) opened = await openDoc(pick.doc.id, pick.doc.fileName);
+      else if (pick && pick.none) $("new-client").value = pick.name;
+      else if (lastId) opened = await openDoc(lastId);
     }
     if (!opened) await showDocs();
     refreshStatus();

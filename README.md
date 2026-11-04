@@ -484,6 +484,8 @@ O documento aberto não pode ser arquivado.
 
 **Uma subpasta por empresa (REV 1.26):** os arquivos ficam em `<Empresa>/` dentro da pasta conectada (ex.: `Industria_Metalurgica_Alfa/Crono_….json`), com o `_Arquivo` da empresa dentro dela. Os modelos Excel ficam em `_Modelos`, na pasta principal. Arquivos soltos na pasta principal (versões anteriores) continuam sendo lidos; o botão **"Organizar por empresa"**, no aviso das listas, move todos para as subpastas.
 
+**Empresa ativa (REV 1.30):** a empresa do documento aberto (selo "Empresa: …" no cabeçalho) vale nas 4 páginas: ao entrar em Cronoanálise, MFV, Yamazumi ou Plano pelo menu, abre o documento dessa empresa (o último dela ou o mais recente) ou a janela "Novo" já com a empresa. No MFV, o seletor **"MFV da empresa"** troca de família (ou cria outro MFV da empresa); no Yamazumi, **"Grupo da empresa"**. Os filtros das listas já vêm na empresa ativa.
+
 **Mesma empresa e renomear empresa (REV 1.29):** pontos, acentos e espaços não separam empresas ("R. F. DE ASSIS" = "R F de Assis"). Ao mudar "Empresa / Cliente" no cabeçalho, o app pergunta se aplica o nome novo aos outros documentos da empresa (estudos, MFVs, grupos e planos); o botão **"Renomear empresa"** das listas faz o mesmo para a empresa escolhida no filtro. Só o nome muda; arquivados e cópias de conflito ficam como estão.
 
 **Nome do arquivo:** gerado uma única vez na criação, sem acentos e com um ID único. Exemplo: `Crono_Industria_Metalurgica_Alfa_Montagem_Final_Posto_01_2026-10-15_a1b2c3d4.json`. Renomear o cliente ou o posto **não** cria um arquivo novo; renomear o cliente muda o arquivo para a subpasta da nova grafia.

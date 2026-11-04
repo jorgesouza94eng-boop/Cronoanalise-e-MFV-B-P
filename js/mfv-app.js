@@ -266,6 +266,22 @@
     refreshLinkedSteps(false);
     renderAll();
     refreshStatus();
+    // REV 1.30: empresa ativa e seletor "MFV da empresa"
+    if (root.LeanOrgUI) root.LeanOrgUI.setActiveCompany(state.doc.clientName);
+    refreshSwitch();
+  }
+
+  /** Seletor "MFV da empresa" (REV 1.30). Retorna quantos MFVs a empresa tem. */
+  function renderSwitch() {
+    if (!root.LeanOrgUI) return 0;
+    const docs = (state.docsCache || []).map((x) => x.doc);
+    return root.LeanOrgUI.renderSwitch($("mfv-switch"), docs, state.doc, (d) => d.family || "Sem família", "+ Novo MFV desta empresa");
+  }
+
+  async function refreshSwitch() {
+    if (!state.doc) return 0;
+    if (!state.docsCache || !state.docsCache.some((x) => x.doc.id === state.doc.id)) await listDocs();
+    return renderSwitch();
   }
 
   async function openDoc(id, fileNameHint) {
@@ -1738,6 +1754,22 @@
         renderAll();
       });
     }
+    // REV 1.30: seletor "MFV da empresa"
+    $("mfv-family").addEventListener("input", () => setTimeout(renderSwitch)); // depois de gravar a família no documento
+    $("mfv-switch").addEventListener("change", async () => {
+      const id = $("mfv-switch").value;
+      if (!state.doc || id === state.doc.id) return;
+      $("mfv-switch").value = state.doc.id;
+      if (id === "__new") {
+        $("new-client").value = state.doc.clientName || "";
+        await showDocs();
+        $("new-family").focus();
+        return;
+      }
+      const hit = (state.docsCache || []).find((x) => x.doc.id === id);
+      await flushSave();
+      await openDoc(id, hit && hit.doc.fileName);
+    });
     // Campos do documento (cliente, família, demanda, notas, unidade...)
     document.querySelectorAll("[data-doc]").forEach((input) => {
       const evt = input.tagName === "SELECT" ? "change" : "input";
@@ -2288,10 +2320,22 @@
       refreshStatus();
       return;
     }
+    // REV 1.30: abre o MFV da empresa ativa (o último aberto, se for dela; senão o mais recente)
     let opened = false;
     const lastId = await Store.getKV("lastMfvId");
-    if (lastId) opened = await openDoc(lastId);
-    if (!opened) await showDocs();
+    const { list } = await listDocs();
+    const pick = root.LeanOrgUI ? root.LeanOrgUI.pickForActive(list.map((x) => x.doc), lastId) : null;
+    if (pick && pick.doc) {
+      opened = await openDoc(pick.doc.id, pick.doc.fileName);
+      if (opened && pick.count > 1) {
+        toast(`${state.doc.clientName} tem ${pick.count} MFVs — escolha a família no seletor "MFV da empresa".`, "info", 8000);
+        root.LeanOrgUI.flagSwitch($("mfv-switch"));
+      }
+    } else if (!pick && lastId) opened = await openDoc(lastId);
+    if (!opened) {
+      if (pick && pick.none) $("new-client").value = pick.name;
+      await showDocs();
+    }
     refreshStatus();
   }
 

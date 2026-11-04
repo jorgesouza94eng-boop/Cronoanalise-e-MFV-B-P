@@ -200,3 +200,9 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 - Empresa = `Calc.companyKey(clientName)` (sem acentos, pontos, símbolos e espaços; mesma regra da subpasta). Nunca comparar empresas com `elementKey`.
 - `Store.renameCompany(chave, nome, { excludeId })`: só `clientName` muda; pasta com revisão + 1 na subpasta nova (sai da antiga); registro do navegador sincronizado acompanha a revisão; fora arquivados, conflitos e o documento aberto.
 - `LeanOrgUI.watchClient(input, getId, onDone)` (pergunta ao mudar o cliente) e botão "Renomear empresa" nas listas; evento `lean:company-renamed`.
+
+## Regra implementada na REV 1.30: empresa ativa
+
+- `LeanOrgUI.activeCompany()/setActiveCompany(nome)` (localStorage `lean:empresaAtiva` = { key, name }): definida no `setCurrent` das 4 páginas e ao mudar o cliente; selo `.app-company` no cabeçalho.
+- Entrada na página: `LeanOrgUI.pickForActive(docs, lastId)` → último da página se for da empresa, senão o mais recente dela; nenhum → janela com `#new-client` preenchido (não cria). Sem empresa ativa: último, como antes.
+- Seletores `#mfv-switch` / `#grp-switch` (`LeanOrgUI.renderSwitch`): documentos da empresa + "+ Novo"; troca com `flushSave` antes; 2+ documentos ao entrar = aviso e destaque. Filtro das listas inicia na empresa ativa.

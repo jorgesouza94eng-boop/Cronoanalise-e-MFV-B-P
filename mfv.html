@@ -18,7 +18,7 @@
         <h1>MFV — Estado presente</h1>
         <nav class="app-nav" aria-label="Módulos">
           <a href="index.html">Cronoanálise</a><a href="mfv.html" aria-current="page">MFV</a><a href="yamazumi.html">Yamazumi</a><a href="plano.html">Plano de Ação</a>
-        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.29</span></nav>
+        <span class="app-rev" title="Revisão do aplicativo. Se não for a mais recente, recarregue com Ctrl+F5">REV 1.30</span></nav>
       </div>
     </div>
 
@@ -30,6 +30,10 @@
       <div class="input-inline">
         <label for="mfv-family">Família / Produto</label>
         <input type="text" id="mfv-family" data-doc="family" placeholder="Ex.: Lajes treliçadas TR8/TR12" autocomplete="off">
+      </div>
+      <div class="input-inline" id="mfv-switch-box" hidden>
+        <label for="mfv-switch">MFV da empresa</label>
+        <select id="mfv-switch" class="doc-switch" title="Troca para outro documento desta empresa (o atual é salvo antes)"></select>
       </div>
     </div>
 

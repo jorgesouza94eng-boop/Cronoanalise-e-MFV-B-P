@@ -112,8 +112,11 @@ const check = (cond, msg) => { console.log((cond ? "  OK  " : "  FALHA ") + msg)
   await p.waitForSelector("#study-dialog[open]");
   await p.waitForSelector("select.company-filter");
   check(await p.$$eval("select.company-filter option", (o) => o.length) === 3, "lista: 2 empresas (todas + 2)");
-  check(await p.isHidden("button.btn-rename-company"), "C: botão escondido com o filtro em \"todas\"");
   const val = await p.$eval("select.company-filter", (s) => Array.from(s.options).find((o) => o.textContent.startsWith("R. F. de Assis")).value);
+  // REV 1.30: o filtro já vem na empresa ativa (a do estudo aberto)
+  check(await p.$eval("select.company-filter", (s) => s.value) === val, "C: filtro já na empresa ativa (REV 1.30)");
+  await p.selectOption("select.company-filter", "");
+  check(await p.isHidden("button.btn-rename-company"), "C: botão escondido com o filtro em \"todas\"");
   await p.selectOption("select.company-filter", val);
   check(await p.isVisible("button.btn-rename-company"), "C: botão aparece com a empresa escolhida");
   const openId = await p.evaluate(() => LeanApp.state.study.id);

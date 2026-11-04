@@ -6,6 +6,8 @@
  *  - filtro "Empresa" e agrupamento da lista por empresa (itens com data-client);
  *  - aviso dos arquivos soltos na pasta principal (versões anteriores), com o botão
  *    "Organizar por empresa", que os move para a subpasta de cada empresa.
+ *  - REV 1.30: empresa ativa compartilhada pelas 4 páginas (selo no cabeçalho, filtro das
+ *    listas e documento aberto ao entrar na página).
  *  - REV 1.29: renomear a empresa em todos os documentos (pergunta ao mudar o cliente no
  *    cabeçalho e botão "Renomear empresa" na lista).
  * Depende de: LeanCalc, LeanStorage.
@@ -26,6 +28,102 @@
       /* sem armazenamento local: o filtro vale só nesta tela */
     }
     return "";
+  }
+
+  /* --------------------------------------------------------------------------
+     EMPRESA ATIVA (REV 1.30)
+     -------------------------------------------------------------------------- */
+
+  const ACTIVE_KEY = "lean:empresaAtiva";
+
+  /** Empresa do último documento aberto em qualquer página: { key, name } ou null. */
+  function activeCompany() {
+    try {
+      const v = JSON.parse(root.localStorage.getItem(ACTIVE_KEY) || "null");
+      return v && v.key ? v : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function setActiveCompany(name) {
+    const n = String(name || "").trim();
+    const key = Calc.companyKey(n);
+    if (!key) return;
+    try {
+      root.localStorage.setItem(ACTIVE_KEY, JSON.stringify({ key, name: n }));
+    } catch (err) {
+      /* sem armazenamento local: vale só nesta página */
+    }
+    renderBadge();
+  }
+
+  /** Selo "Empresa: …" ao lado da revisão, no cabeçalho. */
+  function renderBadge() {
+    if (typeof document === "undefined") return;
+    const rev = document.querySelector(".app-header .app-rev");
+    if (!rev) return;
+    let badge = document.querySelector(".app-header .app-company");
+    if (!badge) {
+      badge = Object.assign(document.createElement("span"), { className: "app-company" });
+      badge.title = "Empresa ativa: as outras páginas abrem nesta empresa";
+      rev.after(badge);
+    }
+    const a = activeCompany();
+    badge.hidden = !a;
+    badge.textContent = a ? `Empresa: ${a.name}` : "";
+  }
+
+  /**
+   * Documento a abrir ao entrar na página. docs = documentos da página (mais recente primeiro);
+   * lastId = último aberto nesta página. Sem empresa ativa: o último (como antes).
+   * Retorna { doc, count } (count = documentos da empresa) | { none: true, name } | null.
+   */
+  function pickForActive(docs, lastId) {
+    const a = activeCompany();
+    const list = (docs || []).filter(Boolean);
+    if (!a) {
+      const last = list.find((d) => d.id === lastId);
+      return last ? { doc: last, count: 1 } : null;
+    }
+    const same = list.filter((d) => Calc.companyKey(d.clientName) === a.key);
+    if (!same.length) return { none: true, name: a.name };
+    return { doc: same.find((d) => d.id === lastId) || same[0], count: same.length };
+  }
+
+  /**
+   * Seletor "MFV da empresa" / "Grupo da empresa" (REV 1.30): os documentos da empresa do
+   * documento aberto, com a data da última alteração, e "+ Novo …". docs = documentos da página;
+   * current = documento aberto (prevalece sobre a cópia da lista). Retorna quantos são da empresa.
+   */
+  function renderSwitch(select, docs, current, label, newLabel) {
+    if (!select) return 0;
+    const box = select.parentElement;
+    if (!current) {
+      box.hidden = true;
+      return 0;
+    }
+    const key = Calc.companyKey(current.clientName);
+    const same = [current].concat((docs || []).filter((d) => d && d.id !== current.id && key && Calc.companyKey(d.clientName) === key));
+    same.sort((a, b) => String(label(a)).localeCompare(String(label(b)), "pt-BR"));
+    const date = (iso) => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+      return m ? ` (${m[3]}/${m[2]})` : "";
+    };
+    select.replaceChildren(
+      ...same.map((d) => Object.assign(document.createElement("option"), { value: d.id, textContent: `${label(d) || "(sem nome)"}${date(d.updatedAt)}` })),
+      Object.assign(document.createElement("option"), { value: "__new", textContent: newLabel })
+    );
+    select.value = current.id;
+    box.hidden = false;
+    return same.length;
+  }
+
+  /** Destaca o seletor por alguns segundos (empresa com vários documentos). */
+  function flagSwitch(select) {
+    if (!select) return;
+    select.classList.add("switch-attention");
+    setTimeout(() => select.classList.remove("switch-attention"), 6000);
   }
 
   /**
@@ -66,7 +164,12 @@
       if (renameBtn) renameBtn.hidden = !renameBtn.__key;
       return;
     }
-    const saved = sel.value || remember(key);
+    // REV 1.30: a empresa ativa (ao montar e quando ela muda); fora isso, a escolha feita na lista
+    const act = activeCompany();
+    const fresh = !sel.__ready || (act && sel.__active !== act.key);
+    const saved = !fresh ? sel.value : act ? (keys.includes(act.key) ? act.key : "") : remember(key);
+    sel.__ready = true;
+    sel.__active = act ? act.key : null;
     sel.replaceChildren(
       Object.assign(document.createElement("option"), { value: "", textContent: `Empresa: todas (${items.length})` }),
       ...keys.map((k) => Object.assign(document.createElement("option"), { value: k, textContent: `${groups.get(k).name} (${groups.get(k).items.length})` }))
@@ -221,6 +324,7 @@
       const old = String(input.__old || "").trim();
       const name = input.value.trim();
       input.__old = input.value;
+      if (name) setActiveCompany(name);
       if (!old || !name || old === name) return;
       try {
         const res = await renameFlow(Calc.companyKey(old), old, name, getId && getId(), `Empresa do documento aberto: "${old}" → "${name}".`);
@@ -315,5 +419,10 @@
     organizeBanner(ul, o.onRefresh);
   }
 
-  root.LeanOrgUI = { attach, companyFilter, backupZip, watchClient, renameFlow };
+  if (typeof document !== "undefined") {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", renderBadge);
+    else renderBadge();
+  }
+
+  root.LeanOrgUI = { attach, companyFilter, backupZip, watchClient, renameFlow, activeCompany, setActiveCompany, pickForActive, renderBadge, renderSwitch, flagSwitch };
 })(typeof self !== "undefined" ? self : this);

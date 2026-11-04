@@ -248,6 +248,22 @@
     $("conflict-banner").hidden = true;
     renderAll();
     refreshStatus();
+    // REV 1.30: empresa ativa e seletor "Grupo da empresa"
+    if (root.LeanOrgUI) root.LeanOrgUI.setActiveCompany(state.doc.clientName);
+    refreshSwitch();
+  }
+
+  /** Seletor "Grupo da empresa" (REV 1.30). */
+  function renderSwitch() {
+    if (!root.LeanOrgUI) return 0;
+    const docs = (state.groupsCache || []).map((x) => x.doc);
+    return root.LeanOrgUI.renderSwitch($("grp-switch"), docs, state.doc, (d) => d.name || "Sem nome", "+ Novo grupo desta empresa");
+  }
+
+  async function refreshSwitch() {
+    if (!state.doc) return 0;
+    if (!state.groupsCache || !state.groupsCache.some((x) => x.doc.id === state.doc.id)) await listGroups();
+    return renderSwitch();
   }
 
   async function openDoc(id, fileNameHint) {
@@ -633,6 +649,22 @@
      ========================================================================== */
 
   function bindEvents() {
+    // REV 1.30: seletor "Grupo da empresa"
+    $("grp-name").addEventListener("input", () => setTimeout(renderSwitch)); // depois de gravar o nome no documento
+    $("grp-switch").addEventListener("change", async () => {
+      const id = $("grp-switch").value;
+      if (!state.doc || id === state.doc.id) return;
+      $("grp-switch").value = state.doc.id;
+      if (id === "__new") {
+        $("new-client").value = state.doc.clientName || "";
+        await showDocs();
+        $("new-name").focus();
+        return;
+      }
+      const hit = (state.groupsCache || []).find((x) => x.doc.id === id);
+      await flushSave();
+      await openDoc(id, hit && hit.doc.fileName);
+    });
     // REV 1.29: mudar a empresa oferece renomear os outros documentos dela
     if (root.LeanOrgUI) {
       root.LeanOrgUI.watchClient($("grp-client"), () => state.doc && state.doc.id, async () => {
@@ -903,10 +935,22 @@
     }
     updateFolderButton();
     await loadStudies();
+    // REV 1.30: abre o grupo da empresa ativa (o último aberto, se for dela; senão o mais recente)
     let opened = false;
     const lastId = await Store.getKV("lastGroupId");
-    if (lastId) opened = await openDoc(lastId);
-    if (!opened) await showDocs();
+    const { list } = await listGroups();
+    const pick = root.LeanOrgUI ? root.LeanOrgUI.pickForActive(list.map((x) => x.doc), lastId) : null;
+    if (pick && pick.doc) {
+      opened = await openDoc(pick.doc.id, pick.doc.fileName);
+      if (opened && pick.count > 1) {
+        toast(`${state.doc.clientName} tem ${pick.count} grupos — escolha no seletor "Grupo da empresa".`, "info", 8000);
+        root.LeanOrgUI.flagSwitch($("grp-switch"));
+      }
+    } else if (!pick && lastId) opened = await openDoc(lastId);
+    if (!opened) {
+      if (pick && pick.none) $("new-client").value = pick.name;
+      await showDocs();
+    }
     refreshStatus();
   }
 

@@ -58,7 +58,7 @@ const check = (cond, msg) => { console.log((cond ? "  OK  " : "  FALHA ") + msg)
   s.filmPieces = { inicio: "10" };
   await p.goto(base + "index.html");
   await p.waitForSelector("#study-dialog[open]");
-  check(/^REV 1\.(2\d)$/.test(await txt(".app-header .app-rev")), "rótulo da revisão REV 1.20");
+  check(/^REV 1\.(2\d|[3-9]\d)$/.test(await txt(".app-header .app-rev")), "rótulo da revisão REV 1.20");
   await p.setInputFiles("#input-import-json", { name: "k.json", mimeType: "application/json", buffer: Buffer.from(C.serializeStudy(s)) });
   await p.waitForFunction(() => window.LeanApp && LeanApp.state.study && LeanApp.state.study.processName === "Bancada");
 
