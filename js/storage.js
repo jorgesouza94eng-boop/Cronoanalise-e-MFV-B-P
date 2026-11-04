@@ -401,7 +401,7 @@
     const best = new Map();
     const keep = (doc, text, fileName) => {
       if (!doc || typeof doc !== "object" || !doc.id) return;
-      if (clientKey != null && Calc.elementKey(doc.clientName) !== clientKey) return;
+      if (clientKey != null && Calc.companyKey(doc.clientName) !== clientKey) return;
       const prev = best.get(doc.id);
       if (prev && String(prev.updatedAt) >= String(doc.updatedAt || "")) return;
       best.set(doc.id, { doc, text, fileName: fileName || doc.fileName, updatedAt: String(doc.updatedAt || "") });
@@ -432,6 +432,77 @@
       .filter((x) => DOC_PATTERN.test(String(x.fileName || "")))
       .map((x) => ({ dir: companyDirName(x.doc.clientName), fileName: x.fileName, text: x.text, kind: x.fileName.split("_")[0] }))
       .sort((a, b) => a.dir.localeCompare(b.dir) || a.fileName.localeCompare(b.fileName));
+  }
+
+  /**
+   * Renomear empresa (REV 1.29): grava o nome novo em todos os documentos (estudos, MFVs, grupos e
+   * planos) cuja empresa tem a chave oldKey (Calc.companyKey), no navegador e na pasta. Só o campo
+   * clientName muda (e updatedAt/revisão). Na pasta: lê a versão do disco, grava com revisão + 1
+   * na subpasta da empresa nova e tira do lugar antigo. No navegador: o registro sincronizado
+   * acompanha a revisão nova; o que só existe no navegador fica pendente para a pasta.
+   * Fora: arquivados (_Arquivo), cópias de conflito e o documento opts.excludeId (já aberto).
+   * Retorna { count, items: [{ id, kind, fileName }], errors: [{ fileName, error }] }.
+   */
+  async function renameCompany(oldKey, newName, options) {
+    const opts = options || {};
+    const name = String(newName || "").trim();
+    const now = new Date().toISOString();
+    const items = new Map();
+    const errors = [];
+    const matches = (doc) =>
+      !!doc && typeof doc === "object" && !!doc.id && doc.id !== opts.excludeId && Calc.companyKey(doc.clientName) === oldKey && String(doc.clientName || "").trim() !== name;
+    const kindOf = (fileName) => String(fileName || "").split("_")[0];
+    const diskRev = new Map(); // id → { before, after }
+    if (name && (await folderReady())) {
+      const files = [];
+      const dirs = [{ handle: dirHandle, name: "" }];
+      for await (const entry of dirHandle.values()) if (entry.kind === "directory" && isCompanyDir(entry.name)) dirs.push({ handle: entry, name: entry.name });
+      for (const d of dirs) {
+        for await (const entry of d.handle.values()) {
+          if (entry.kind === "file" && DOC_PATTERN.test(entry.name) && !entry.name.includes(CONFLICT_MARK)) files.push({ dir: d.name, entry });
+        }
+      }
+      const target = companyDirName(name);
+      for (const f of files) {
+        try {
+          const doc = JSON.parse(await (await f.entry.getFile()).text());
+          if (!matches(doc)) continue;
+          const before = Number(doc.revision) || 0;
+          doc.clientName = name;
+          doc.updatedAt = now;
+          doc.revision = before + 1;
+          await writeTextFile(f.entry.name, JSON.stringify(doc, null, 2), target);
+          if (f.dir !== target) await (await subdir(f.dir)).removeEntry(f.entry.name);
+          locations.set(f.entry.name, target);
+          diskRev.set(doc.id, { before, after: before + 1 });
+          items.set(doc.id, { id: doc.id, kind: kindOf(f.entry.name), fileName: f.entry.name });
+        } catch (err) {
+          errors.push({ fileName: f.entry.name, error: err.message || String(err) });
+        }
+      }
+    }
+    if (name) {
+      for (const store of [STORE_STUDIES, STORE_MFV, STORE_GROUPS, STORE_PLANS]) {
+        for (const r of await listLocal(store)) {
+          if (!r || !matches(r.study)) continue;
+          r.study.clientName = name;
+          r.study.updatedAt = now;
+          const d = diskRev.get(r.study.id);
+          if (d) {
+            // Sincronizado com a pasta: acompanha a revisão nova (sem conflito na próxima gravação)
+            if (r.diskRevision === d.before) {
+              r.diskRevision = d.after;
+              r.study.revision = d.after;
+            }
+          } else {
+            r.dirty = true; // só no navegador: vai para a pasta na próxima gravação
+          }
+          await putLocal(r, store);
+          if (!items.has(r.study.id)) items.set(r.study.id, { id: r.study.id, kind: kindOf(r.study.fileName), fileName: r.study.fileName });
+        }
+      }
+    }
+    return { count: items.size, items: Array.from(items.values()), errors };
   }
 
   /** Arquivos de documentos soltos na pasta principal (versões anteriores à REV 1.26). */
@@ -712,6 +783,7 @@
     countLooseFiles,
     organizeByCompany,
     collectCompanyDocs,
+    renameCompany,
     writeStudy,
     writeTextFile,
     writeBinaryFile,

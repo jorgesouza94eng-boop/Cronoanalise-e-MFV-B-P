@@ -329,8 +329,8 @@
   function updatePlanRef() {
     const box = $("pb-plan-ref");
     if (!box || !state.doc) return;
-    const key = Calc.elementKey(state.doc.clientName);
-    const plans = (state.plans || []).filter((d) => key && Calc.elementKey(d.clientName) === key);
+    const key = Calc.companyKey(state.doc.clientName);
+    const plans = (state.plans || []).filter((d) => key && Calc.companyKey(d.clientName) === key);
     box.hidden = !plans.length;
     if (!plans.length) return;
     const parts = plans.map((d) => {
@@ -572,8 +572,8 @@
 
   /** REV 1.27: estudo ou grupo de outra empresa (empresa do MFV preenchida e diferente). */
   const otherCompany = (clientName) => {
-    const mine = state.doc ? Calc.elementKey(state.doc.clientName) : "";
-    return !!mine && Calc.elementKey(clientName) !== mine;
+    const mine = state.doc ? Calc.companyKey(state.doc.clientName) : "";
+    return !!mine && Calc.companyKey(clientName) !== mine;
   };
 
   /** Etapas do MFV que vêm de estudos ou grupos de outra empresa. */
@@ -586,12 +586,12 @@
 
   function renderStudyPicker() {
     const sel = $("study-picker");
-    const client = state.doc ? Calc.elementKey(state.doc.clientName) : "";
+    const client = state.doc ? Calc.companyKey(state.doc.clientName) : "";
     // REV 1.27: só a empresa do MFV, a menos que "Outras empresas" esteja marcado
     const all = $("picker-all").checked || !client;
     const list = state.studies.filter((s) => all || !otherCompany(s.clientName)).sort((a, b) => {
-      const ma = Calc.elementKey(a.clientName) === client ? 0 : 1;
-      const mb = Calc.elementKey(b.clientName) === client ? 0 : 1;
+      const ma = Calc.companyKey(a.clientName) === client ? 0 : 1;
+      const mb = Calc.companyKey(b.clientName) === client ? 0 : 1;
       return ma - mb || String(a.processName).localeCompare(String(b.processName), "pt-BR");
     });
     const options = list.map((s) =>
@@ -602,7 +602,7 @@
     );
     const groups = state.groups
       .filter((g) => all || !otherCompany(g.clientName))
-      .sort((a, b) => (Calc.elementKey(a.clientName) === client ? 0 : 1) - (Calc.elementKey(b.clientName) === client ? 0 : 1) || a.name.localeCompare(b.name, "pt-BR"))
+      .sort((a, b) => (Calc.companyKey(a.clientName) === client ? 0 : 1) - (Calc.companyKey(b.clientName) === client ? 0 : 1) || a.name.localeCompare(b.name, "pt-BR"))
       .map((g) =>
         el("option", {
           value: `grupo:${g.id}`,
@@ -737,8 +737,8 @@
   /** Nome de empresa já usado nos estudos/MFVs com a mesma grafia (ignora maiúsculas e espaços). */
   function knownClients(docs) {
     const map = new Map();
-    state.studies.forEach((s) => s.clientName && !map.has(Calc.elementKey(s.clientName)) && map.set(Calc.elementKey(s.clientName), s.clientName.trim()));
-    (docs || []).forEach(({ doc }) => doc.clientName && !map.has(Calc.elementKey(doc.clientName)) && map.set(Calc.elementKey(doc.clientName), doc.clientName.trim()));
+    state.studies.forEach((s) => s.clientName && !map.has(Calc.companyKey(s.clientName)) && map.set(Calc.companyKey(s.clientName), s.clientName.trim()));
+    (docs || []).forEach(({ doc }) => doc.clientName && !map.has(Calc.companyKey(doc.clientName)) && map.set(Calc.companyKey(doc.clientName), doc.clientName.trim()));
     return map;
   }
 
@@ -822,10 +822,10 @@
 
   /** Lista de estudos da empresa digitada no "Novo MFV" (marcados viram etapas). */
   function renderNewDocStudies() {
-    const key = Calc.elementKey($("new-client").value);
+    const key = Calc.companyKey($("new-client").value);
     const list = key
       ? state.studies
-          .filter((s) => Calc.elementKey(s.clientName) === key)
+          .filter((s) => Calc.companyKey(s.clientName) === key)
           .sort((a, b) => String(a.processName).localeCompare(String(b.processName), "pt-BR") || (a.product === MIX_KEY) - (b.product === MIX_KEY))
       : [];
     const ul = $("new-doc-study-list");
@@ -853,7 +853,7 @@
     const fam = new Map();
     const addFam = (n) => n && !fam.has(Calc.elementKey(n)) && fam.set(Calc.elementKey(n), n.trim());
     list.forEach((st) => st.product !== MIX_KEY && addFam(st.productName));
-    state.docsCache.forEach(({ doc }) => key && Calc.elementKey(doc.clientName) === key && addFam(doc.family));
+    state.docsCache.forEach(({ doc }) => key && Calc.companyKey(doc.clientName) === key && addFam(doc.family));
     $("family-list").replaceChildren(...Array.from(fam.values()).map((n) => el("option", { value: n })));
     $("new-doc-hint").textContent = !key
       ? "Escolha a empresa: os estudos de cronoanálise dela aparecem aqui para virar etapas, com o TC já preenchido."
@@ -915,7 +915,7 @@
     }
     state.pendingGroupId = g.id;
     const { list } = await listDocs();
-    const same = list.filter(({ doc }) => Calc.elementKey(doc.clientName) === Calc.elementKey(g.clientName));
+    const same = list.filter(({ doc }) => Calc.companyKey(doc.clientName) === Calc.companyKey(g.clientName));
     if (same.length === 1 && (await openDoc(same[0].doc.id, same[0].doc.fileName))) {
       addPendingGroup();
       return true;
@@ -958,7 +958,7 @@
     }
     state.pendingStudyKey = st.key;
     const { list } = await listDocs();
-    const same = list.filter(({ doc }) => Calc.elementKey(doc.clientName) === Calc.elementKey(st.clientName));
+    const same = list.filter(({ doc }) => Calc.companyKey(doc.clientName) === Calc.companyKey(st.clientName));
     if (same.length === 1) {
       if (await openDoc(same[0].doc.id, same[0].doc.fileName)) {
         addPendingStudy();
@@ -1731,6 +1731,13 @@
      ========================================================================== */
 
   function bindEvents() {
+    // REV 1.29: mudar a empresa oferece renomear os outros documentos dela (estudos, grupos…)
+    if (root.LeanOrgUI) {
+      root.LeanOrgUI.watchClient($("mfv-client"), () => state.doc && state.doc.id, async () => {
+        await loadStudies();
+        renderAll();
+      });
+    }
     // Campos do documento (cliente, família, demanda, notas, unidade...)
     document.querySelectorAll("[data-doc]").forEach((input) => {
       const evt = input.tagName === "SELECT" ? "change" : "input";
@@ -1997,7 +2004,7 @@
       const family = $("new-family").value.trim();
       if (!typed || !family) return toast("Informe a empresa e a família.", "warn");
       // Mesma empresa dos estudos com a mesma grafia ("metal alfa" → "Metal Alfa")
-      const client = knownClients().get(Calc.elementKey(typed)) || typed;
+      const client = knownClients().get(Calc.companyKey(typed)) || typed;
       // Etapas na ordem em que os estudos foram marcados (a ordem do processo)
       const chosen = state.checkOrder.map((k) => state.studies.find((x) => x.key === k)).filter(Boolean);
       const dup = updateCheckOrder();

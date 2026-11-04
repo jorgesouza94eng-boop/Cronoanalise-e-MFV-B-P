@@ -6,6 +6,8 @@
  *  - filtro "Empresa" e agrupamento da lista por empresa (itens com data-client);
  *  - aviso dos arquivos soltos na pasta principal (versões anteriores), com o botão
  *    "Organizar por empresa", que os move para a subpasta de cada empresa.
+ *  - REV 1.29: renomear a empresa em todos os documentos (pergunta ao mudar o cliente no
+ *    cabeçalho e botão "Renomear empresa" na lista).
  * Depende de: LeanCalc, LeanStorage.
  * ============================================================================
  */
@@ -30,7 +32,7 @@
    * Agrupa os itens (li com data-client) por empresa, em ordem alfabética ("Sem cliente" no fim),
    * mantendo a ordem original dentro de cada empresa, e aplica o filtro escolhido.
    */
-  function companyFilter(ul, key) {
+  function companyFilter(ul, key, onRefresh) {
     const items = Array.from(ul.children).filter((li) => li.dataset && li.dataset.client != null);
     ul.querySelectorAll("li.company-head").forEach((h) => h.remove());
     const header = ul.previousElementSibling;
@@ -38,13 +40,14 @@
     const groups = new Map();
     items.forEach((li) => {
       const name = String(li.dataset.client || "").trim();
-      const k = name ? Calc.elementKey(name) : NONE;
+      const k = name ? Calc.companyKey(name) : NONE;
       if (!groups.has(k)) groups.set(k, { name: name || "Sem cliente", items: [] });
       groups.get(k).items.push(li);
     });
     const keys = Array.from(groups.keys()).sort((a, b) => (a === NONE) - (b === NONE) || groups.get(a).name.localeCompare(groups.get(b).name, "pt-BR"));
     const many = keys.length > 1;
     backupButton(header, () => (sel && many && sel.value ? sel.value : null), groups);
+    const renameBtn = renameButton(header, groups, onRefresh);
     if (!sel && header && many) {
       sel = document.createElement("select");
       sel.className = "company-filter";
@@ -58,6 +61,9 @@
     if (sel) sel.hidden = !many;
     if (!many) {
       items.forEach((li) => (li.hidden = false));
+      // Uma empresa só: "Renomear empresa" vale para ela
+      if (renameBtn) renameBtn.__key = keys.length === 1 && keys[0] !== NONE ? keys[0] : null;
+      if (renameBtn) renameBtn.hidden = !renameBtn.__key;
       return;
     }
     const saved = sel.value || remember(key);
@@ -78,6 +84,10 @@
     function apply() {
       const v = sel.value;
       ul.querySelectorAll("li[data-group]").forEach((li) => (li.hidden = !!v && li.dataset.group !== v));
+      if (renameBtn) {
+        renameBtn.__key = v && v !== NONE ? v : null;
+        renameBtn.hidden = !renameBtn.__key;
+      }
     }
     apply();
   }
@@ -149,6 +159,117 @@
     btn.title = 'Baixa um .zip com todos os documentos da empresa escolhida no filtro (ou de todas), do navegador e da pasta';
   }
 
+  /* --------------------------------------------------------------------------
+     RENOMEAR EMPRESA EM TODOS OS DOCUMENTOS (REV 1.29)
+     -------------------------------------------------------------------------- */
+
+  const KIND_SHORT = { Crono: "estudo(s)", MFV: "MFV(s)", Yamazumi: "grupo(s)", Plano: "plano(s)" };
+  // Campo "Empresa / Cliente" do documento aberto nesta página (registrado por watchClient)
+  let current = null;
+
+  /** Documentos da empresa oldKey que mudariam (fora o aberto e os que já têm o nome novo). */
+  async function renameTargets(oldKey, name, excludeId) {
+    const docs = await Store.collectCompanyDocs(oldKey);
+    return docs.filter((d) => {
+      try {
+        const doc = JSON.parse(d.text);
+        return doc.id !== excludeId && String(doc.clientName || "").trim() !== name;
+      } catch (err) {
+        return false;
+      }
+    });
+  }
+
+  /**
+   * Pergunta e renomeia. oldLabel = grafia antiga (para a mensagem). Retorna o resultado de
+   * Store.renameCompany, ou null quando não havia o que mudar ou o consultor disse não.
+   */
+  async function renameFlow(oldKey, oldLabel, newName, excludeId, ask) {
+    const name = String(newName || "").trim();
+    if (!name || !Store.renameCompany) return null;
+    const targets = await renameTargets(oldKey, name, excludeId);
+    if (!targets.length) return null;
+    const count = {};
+    targets.forEach((d) => (count[d.kind] = (count[d.kind] || 0) + 1));
+    const resume = Object.keys(count).map((k) => `${count[k]} ${KIND_SHORT[k] || k}`).join(", ");
+    const names = targets.slice(0, 8).map((d) => `  • ${d.fileName}`).join("\n") + (targets.length > 8 ? `\n  • … e mais ${targets.length - 8}` : "");
+    const merge = Calc.companyKey(name) !== oldKey ? (await Store.collectCompanyDocs(Calc.companyKey(name))).length : 0;
+    const msg =
+      `${ask}\n\nAplicar "${name}" também aos outros ${targets.length} documento(s) de "${oldLabel}" (${resume})?\n\n${names}` +
+      (merge ? `\n\nAtenção: já existem ${merge} documento(s) com o nome "${name}". As duas empresas vão ficar juntas.` : "") +
+      "\n\nSó o nome da empresa muda (tempos, etapas e ligações ficam iguais). Arquivados ficam como estão." +
+      "\nOK = renomear todos • Cancelar = só este documento";
+    if (!root.confirm(msg)) return null;
+    const res = await Store.renameCompany(oldKey, name, { excludeId });
+    root.dispatchEvent(new root.CustomEvent("lean:company-renamed", { detail: { oldKey, name, count: res.count } }));
+    const err = res.errors.length ? `\n\n${res.errors.length} arquivo(s) não foram alterados: ${res.errors.map((e) => `${e.fileName} (${e.error})`).join("; ")}` : "";
+    root.alert(`✅ ${res.count} documento(s) renomeado(s) para "${name}".${err}`);
+    return res;
+  }
+
+  /**
+   * B — campo "Empresa / Cliente" do cabeçalho: ao terminar de editar (change), se a grafia mudou
+   * e há outros documentos da empresa antiga, pergunta se renomeia todos.
+   * getId() = id do documento aberto; onDone(res) = recarregar as listas da página.
+   */
+  function watchClient(input, getId, onDone) {
+    if (!input) return;
+    current = { input, getId };
+    const remember = () => (input.__old = input.value);
+    input.addEventListener("focus", remember);
+    input.addEventListener("change", async () => {
+      const old = String(input.__old || "").trim();
+      const name = input.value.trim();
+      input.__old = input.value;
+      if (!old || !name || old === name) return;
+      try {
+        const res = await renameFlow(Calc.companyKey(old), old, name, getId && getId(), `Empresa do documento aberto: "${old}" → "${name}".`);
+        if (res && typeof onDone === "function") onDone(res);
+      } catch (err) {
+        root.alert(`Não foi possível renomear os outros documentos: ${err.message || err}`);
+      }
+    });
+  }
+
+  /** C — botão "Renomear empresa" no cabeçalho da lista (empresa do filtro). */
+  function renameButton(header, groups, onRefresh) {
+    if (!header || !Store.renameCompany) return null;
+    let btn = header.querySelector("button.btn-rename-company");
+    if (!btn) {
+      btn = Object.assign(document.createElement("button"), { type: "button", className: "btn-outline btn-small btn-rename-company", textContent: "Renomear empresa" });
+      btn.title = "Troca o nome da empresa escolhida no filtro em todos os estudos, MFVs, grupos e planos";
+      header.append(btn);
+      btn.addEventListener("click", async () => {
+        const k = btn.__key;
+        if (!k) return;
+        const oldLabel = (btn.__groups.get(k) || {}).name || "";
+        const typed = root.prompt(`Novo nome da empresa "${oldLabel}" (vale para todos os documentos dela):`, oldLabel);
+        const name = String(typed || "").trim();
+        if (!name || name === oldLabel) return;
+        btn.disabled = true;
+        try {
+          // O documento aberto muda pelo próprio campo (a página grava como sempre)
+          const openId = current && current.getId ? current.getId() : null;
+          const openIsHere = current && Calc.companyKey(current.input.value) === k;
+          const res = await renameFlow(k, oldLabel, name, openIsHere ? openId : null, `Renomear a empresa "${oldLabel}" para "${name}".`);
+          if (res && openIsHere) {
+            current.input.value = name;
+            current.input.__old = name;
+            current.input.dispatchEvent(new root.Event("input", { bubbles: true }));
+          }
+          if (res && typeof btn.__refresh === "function") btn.__refresh();
+        } catch (err) {
+          root.alert(`Não foi possível renomear a empresa: ${err.message || err}`);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    }
+    btn.__groups = groups;
+    btn.__refresh = onRefresh;
+    return btn;
+  }
+
   /** Aviso dos documentos soltos na pasta principal, com "Organizar por empresa". */
   async function organizeBanner(ul, onRefresh) {
     const header = ul.previousElementSibling;
@@ -190,9 +311,9 @@
   function attach(ul, opts) {
     const o = opts || {};
     if (!ul) return;
-    companyFilter(ul, o.key || "docs");
+    companyFilter(ul, o.key || "docs", o.onRefresh);
     organizeBanner(ul, o.onRefresh);
   }
 
-  root.LeanOrgUI = { attach, companyFilter, backupZip };
+  root.LeanOrgUI = { attach, companyFilter, backupZip, watchClient, renameFlow };
 })(typeof self !== "undefined" ? self : this);

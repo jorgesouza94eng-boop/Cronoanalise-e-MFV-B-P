@@ -255,7 +255,7 @@
     const motion = ok.reduce((a, m) => a + m.motion, 0);
 
     // Avisos de consistência
-    const clients = new Set(ok.map((m) => Calc.elementKey(m.clientName)).filter(Boolean));
+    const clients = new Set(ok.map((m) => Calc.companyKey(m.clientName)).filter(Boolean));
     if (clients.size > 1) warnings.push("Estudos de empresas diferentes no mesmo grupo");
     const tols = new Set(ok.map((m) => (m.tolPct == null ? "?" : String(m.tolPct))));
     if (tols.size > 1) warnings.push("Estudos com tolerâncias diferentes: confira os parâmetros");

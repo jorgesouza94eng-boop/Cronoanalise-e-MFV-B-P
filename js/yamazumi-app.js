@@ -350,10 +350,10 @@
 
   function renderStudyPicker() {
     const sel = $("study-picker");
-    const client = state.doc ? Calc.elementKey(state.doc.clientName) : "";
+    const client = state.doc ? Calc.companyKey(state.doc.clientName) : "";
     const list = state.options.slice().sort((a, b) => {
-      const ma = Calc.elementKey(a.clientName) === client ? 0 : 1;
-      const mb = Calc.elementKey(b.clientName) === client ? 0 : 1;
+      const ma = Calc.companyKey(a.clientName) === client ? 0 : 1;
+      const mb = Calc.companyKey(b.clientName) === client ? 0 : 1;
       return ma - mb || String(a.processName).localeCompare(String(b.processName), "pt-BR");
     });
     sel.replaceChildren(
@@ -365,7 +365,7 @@
   /** Clientes já usados nos estudos e grupos, com a grafia original. */
   function knownClients() {
     const map = new Map();
-    const add = (n) => n && !map.has(Calc.elementKey(n)) && map.set(Calc.elementKey(n), n.trim());
+    const add = (n) => n && !map.has(Calc.companyKey(n)) && map.set(Calc.companyKey(n), n.trim());
     state.options.forEach((o) => add(o.clientName));
     state.groupsCache.forEach(({ doc }) => add(doc.clientName));
     return map;
@@ -407,8 +407,8 @@
 
   function renderCompareOptions() {
     const d = state.doc;
-    const key = Calc.elementKey(d.clientName);
-    const others = state.groupsCache.filter(({ doc }) => doc.id !== d.id && Calc.elementKey(doc.clientName) === key);
+    const key = Calc.companyKey(d.clientName);
+    const others = state.groupsCache.filter(({ doc }) => doc.id !== d.id && Calc.companyKey(doc.clientName) === key);
     const sel = $("grp-compare");
     sel.replaceChildren(
       el("option", { value: "", textContent: others.length ? "Sem comparação" : "Nenhum outro grupo" }),
@@ -633,6 +633,13 @@
      ========================================================================== */
 
   function bindEvents() {
+    // REV 1.29: mudar a empresa oferece renomear os outros documentos dela
+    if (root.LeanOrgUI) {
+      root.LeanOrgUI.watchClient($("grp-client"), () => state.doc && state.doc.id, async () => {
+        await loadStudies();
+        renderAll();
+      });
+    }
     document.querySelectorAll("[data-doc]").forEach((input) => {
       const evt = input.tagName === "SELECT" ? "change" : "input";
       input.addEventListener(evt, () => {
@@ -743,7 +750,7 @@
       const typed = $("new-client").value.trim();
       const name = $("new-name").value.trim();
       if (!typed || !name) return toast("Informe a empresa e o nome do grupo.", "warn");
-      const client = knownClients().get(Calc.elementKey(typed)) || typed;
+      const client = knownClients().get(Calc.companyKey(typed)) || typed;
       const chosen = Array.from($("new-doc-study-list").querySelectorAll("input:checked"))
         .map((i) => state.options.find((x) => x.key === i.value))
         .filter(Boolean);
@@ -809,9 +816,9 @@
 
   /** Estudos da empresa digitada no "Novo grupo". */
   function renderNewDocStudies() {
-    const key = Calc.elementKey($("new-client").value);
+    const key = Calc.companyKey($("new-client").value);
     const list = key
-      ? state.options.filter((o) => Calc.elementKey(o.clientName) === key).sort((a, b) => String(a.processName).localeCompare(String(b.processName), "pt-BR"))
+      ? state.options.filter((o) => Calc.companyKey(o.clientName) === key).sort((a, b) => String(a.processName).localeCompare(String(b.processName), "pt-BR"))
       : [];
     const box = $("new-doc-study-list");
     const prev = new Set(Array.from(box.querySelectorAll("input:checked")).map((i) => i.value));

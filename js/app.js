@@ -127,7 +127,7 @@
   async function clientPlanActions(study) {
     if (!Store.collectCompanyDocs) return [];
     try {
-      const docs = await Store.collectCompanyDocs(Calc.elementKey(study.clientName));
+      const docs = await Store.collectCompanyDocs(Calc.companyKey(study.clientName));
       return docs
         .filter((d) => d.kind === "Plano")
         .flatMap((d) => {
@@ -1156,6 +1156,8 @@
 
   async function start() {
     UI.init(handlers);
+    // REV 1.29: mudar a empresa no cabeçalho oferece renomear os outros documentos dela
+    if (root.LeanOrgUI) root.LeanOrgUI.watchClient(document.getElementById("client-name"), () => state.study && state.study.id);
     UI.setStatus("offline", "Iniciando...");
 
     const info = await Store.init();

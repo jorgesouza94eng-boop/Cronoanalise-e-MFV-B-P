@@ -484,6 +484,8 @@ O documento aberto não pode ser arquivado.
 
 **Uma subpasta por empresa (REV 1.26):** os arquivos ficam em `<Empresa>/` dentro da pasta conectada (ex.: `Industria_Metalurgica_Alfa/Crono_….json`), com o `_Arquivo` da empresa dentro dela. Os modelos Excel ficam em `_Modelos`, na pasta principal. Arquivos soltos na pasta principal (versões anteriores) continuam sendo lidos; o botão **"Organizar por empresa"**, no aviso das listas, move todos para as subpastas.
 
+**Mesma empresa e renomear empresa (REV 1.29):** pontos, acentos e espaços não separam empresas ("R. F. DE ASSIS" = "R F de Assis"). Ao mudar "Empresa / Cliente" no cabeçalho, o app pergunta se aplica o nome novo aos outros documentos da empresa (estudos, MFVs, grupos e planos); o botão **"Renomear empresa"** das listas faz o mesmo para a empresa escolhida no filtro. Só o nome muda; arquivados e cópias de conflito ficam como estão.
+
 **Nome do arquivo:** gerado uma única vez na criação, sem acentos e com um ID único. Exemplo: `Crono_Industria_Metalurgica_Alfa_Montagem_Final_Posto_01_2026-10-15_a1b2c3d4.json`. Renomear o cliente ou o posto **não** cria um arquivo novo; renomear o cliente muda o arquivo para a subpasta da nova grafia.
 
 **Proteção contra conflito (dois notebooks):** cada arquivo tem um número de **revisão**. Antes de gravar, o app confere se a pasta ainda está na revisão que ele conhece. Se outro dispositivo gravou antes:
@@ -548,7 +550,7 @@ js/app.js             Orquestração: estado, autosave, conflitos, gerenciador d
 js/ai.js              Assistente de IA (Gemini): pedidos, anonimização e validação das respostas
 js/ai-ui.js           Tela do assistente de IA (configuração, sugestões e aplicação)
 js/etapas-ui.js       Janela "Definir etapas do processo" (REV 1.25)
-js/org-ui.js          Filtro por empresa nas listas e "Organizar por empresa" (REV 1.26)
+js/org-ui.js          Filtro por empresa, "Organizar por empresa" (REV 1.26), backup e renomear empresa (REV 1.29)
 mfv.html              Página do MFV (estado presente)
 js/mfv-calc.js        Motor de cálculo do MFV (aba EP: horário, takt, GBO, capacidade, atravessamento, fluxograma)
 js/mfv-app.js         Tela e salvamento do MFV (mesma pasta e proteção contra conflito)

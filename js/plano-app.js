@@ -342,15 +342,15 @@
 
   /** Ações Kaizen dos estudos do cliente do plano, da maior para a menor parcela do ciclo. */
   function clientCandidates() {
-    const key = state.doc ? Calc.elementKey(state.doc.clientName) : "";
+    const key = state.doc ? Calc.companyKey(state.doc.clientName) : "";
     const out = [];
     state.studies.forEach((study) => {
-      if (Calc.elementKey(study.clientName) !== key) return;
+      if (Calc.companyKey(study.clientName) !== key) return;
       (state.candidatesByStudy.get(study.id) || []).forEach((c) => out.push(c));
     });
     // Oportunidades dos MFVs do cliente: no fim da lista (não têm % do ciclo)
     (state.mfvs || new Map()).forEach((d) => {
-      if (Calc.elementKey(d.clientName) !== key) return;
+      if (Calc.companyKey(d.clientName) !== key) return;
       (state.candidatesByStudy.get(`mfv:${d.id}`) || []).forEach((c) => out.push(c));
     });
     return out.sort((a, b) => (b.sharePct || 0) - (a.sharePct || 0));
@@ -382,8 +382,8 @@
   /** Empresas já usadas nos estudos e planos (mesma grafia). */
   function knownClients() {
     const map = new Map();
-    state.studies.forEach((s) => s.clientName && !map.has(Calc.elementKey(s.clientName)) && map.set(Calc.elementKey(s.clientName), s.clientName.trim()));
-    state.plansCache.forEach(({ doc }) => doc.clientName && !map.has(Calc.elementKey(doc.clientName)) && map.set(Calc.elementKey(doc.clientName), doc.clientName.trim()));
+    state.studies.forEach((s) => s.clientName && !map.has(Calc.companyKey(s.clientName)) && map.set(Calc.companyKey(s.clientName), s.clientName.trim()));
+    state.plansCache.forEach(({ doc }) => doc.clientName && !map.has(Calc.companyKey(doc.clientName)) && map.set(Calc.companyKey(doc.clientName), doc.clientName.trim()));
     return map;
   }
 
@@ -683,6 +683,13 @@
      ========================================================================== */
 
   function bindEvents() {
+    // REV 1.29: mudar a empresa oferece renomear os outros documentos dela
+    if (root.LeanOrgUI) {
+      root.LeanOrgUI.watchClient($("pl-client"), () => state.doc && state.doc.id, async () => {
+        await loadStudies();
+        renderAll();
+      });
+    }
     document.querySelectorAll("[data-doc]").forEach((input) => {
       input.addEventListener(input.tagName === "SELECT" || input.type === "date" ? "change" : "input", () => {
         if (!state.doc) return;
@@ -794,8 +801,8 @@
       e.preventDefault();
       const typed = $("new-client").value.trim();
       if (!typed) return toast("Informe a empresa.", "warn");
-      const client = knownClients().get(Calc.elementKey(typed)) || typed;
-      const existing = state.plansCache.find(({ doc }) => Calc.elementKey(doc.clientName) === Calc.elementKey(client));
+      const client = knownClients().get(Calc.companyKey(typed)) || typed;
+      const existing = state.plansCache.find(({ doc }) => Calc.companyKey(doc.clientName) === Calc.companyKey(client));
       if (existing && !root.confirm(`Já existe um plano de ação para "${client}". Criar outro mesmo assim?\n\nCancelar = abrir o existente.`)) {
         await flushSave();
         if (await openDoc(existing.doc.id, existing.doc.fileName)) dlg.close();
@@ -915,7 +922,7 @@
     let opened = false;
     if (wanted) {
       const { list } = await listPlans();
-      const hit = list.find(({ doc }) => Calc.elementKey(doc.clientName) === Calc.elementKey(wanted));
+      const hit = list.find(({ doc }) => Calc.companyKey(doc.clientName) === Calc.companyKey(wanted));
       if (hit) opened = await openDoc(hit.doc.id, hit.doc.fileName);
       else $("new-client").value = wanted;
     } else {

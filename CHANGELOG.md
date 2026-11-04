@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.29** | 04/11/2026 | Mesma empresa com grafias diferentes e renomear a empresa em todos os documentos |
 | **REV 1.28** | 03/11/2026 | Modelo de cronoanálise EO_Cronoanálise v00_r05 (unidades, lote e Plano 5W2H na Listagem) |
 | **REV 1.27** | 03/11/2026 | IA só com o estudo aberto, MFV só da empresa, estouros de Kaizen ligados ao 5W2H e backup .zip |
 | **REV 1.26** | 03/11/2026 | Arquivos organizados por empresa (subpastas) e filtro por empresa nas listas |
@@ -33,6 +34,21 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.29 — 04/11/2026
+
+Decisão do consultor: itens **A, B e C** ("confirmo"). Caso real: o MFV com "R. F. DE ASSIS" acusava "Etapa de outra empresa" para o estudo "R F DE ASSIS".
+
+**A — Mesma empresa com grafias diferentes:** empresas passam a ser comparadas pela mesma regra do nome da subpasta (`Calc.companyKey`: sem acentos, pontos, símbolos e espaços extras). "R. F. DE ASSIS", "R F de Assis" e "R.F. DE ASSIS" são a mesma empresa no seletor do MFV, nos avisos, no filtro das listas, no Plano, no Yamazumi e no backup.
+
+**B — Mudar o cliente no cabeçalho:** ao terminar de editar "Empresa / Cliente" (estudo, MFV, grupo ou plano), se houver outros documentos da empresa antiga, o app pergunta se aplica o nome novo a eles (lista os documentos e avisa quando as duas empresas vão ficar juntas). OK = renomeia todos; Cancelar = só o documento aberto.
+
+**C — Botão "Renomear empresa"** nas listas de Estudos, MFVs, Grupos e Planos: aparece com uma empresa escolhida no filtro (ou quando a lista tem uma empresa só). O documento aberto muda pelo próprio campo e grava como sempre.
+
+- Renomear muda só `clientName` (e `updatedAt`/revisão): nenhum cálculo, etapa ou ligação muda. Na pasta: lê a versão do disco, grava com revisão + 1 na subpasta da empresa nova e tira da antiga (inclusive arquivos soltos de versões anteriores). No navegador, o registro sincronizado acompanha a revisão (sem conflito na próxima gravação). Fora: arquivados (`_Arquivo`), cópias de conflito e o documento aberto.
+- Service worker v37. Testes: `tests/rev129.test.js` e `tests/e2e.rev129.js` (inclui pasta simulada).
 
 ---
 

@@ -218,6 +218,19 @@
   }
 
   /**
+   * Chave da empresa (REV 1.29): a mesma regra do nome da subpasta (sem acentos, pontos e
+   * espaços extras), para "R. F. DE ASSIS", "R F de Assis" e "R.F. DE ASSIS" serem a mesma empresa.
+   */
+  function companyKey(clientName) {
+    return String(clientName || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9]+/g, " ")
+      .trim()
+      .toLowerCase();
+  }
+
+  /**
    * Chave do elemento no resumo (mesma etapa + mesmo nome). Com etapas (REV 1.15), o mesmo
    * nome em etapas diferentes é outro elemento. row = linha calculada; el = elemento do estudo.
    */
@@ -1677,6 +1690,7 @@
     formatTime,
     parseQuantity,
     elementKey,
+    companyKey,
     parseTimeInput,
     formatVideoTime,
     parseFrequency,

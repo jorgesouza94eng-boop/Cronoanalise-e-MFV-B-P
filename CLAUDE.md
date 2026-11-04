@@ -194,3 +194,9 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 - Tipo A = 1 "Lote" e UNIDADES!B8 = peças das filmagens (sem todas as peças: 1, com aviso); tipo C na unidade base (B9). Tempos observados (sem ritmo/tolerância, com aviso).
 - Listagem C/D = mesmos números da GERAL (A: Σtempo ÷ lote; C: média ÷ qtd média); G/H = Quem/Fim do Plano 5W2H do cliente (`options.planActions`, origem do mesmo estudo, elemento e etapa); I em branco.
 - UNIDADES!C15 = premissas + desperdícios; Compilação!B35 = constatações. > 137 lançamentos: aviso (macros do modelo).
+
+## Regra implementada na REV 1.29: chave e renomeação da empresa
+
+- Empresa = `Calc.companyKey(clientName)` (sem acentos, pontos, símbolos e espaços; mesma regra da subpasta). Nunca comparar empresas com `elementKey`.
+- `Store.renameCompany(chave, nome, { excludeId })`: só `clientName` muda; pasta com revisão + 1 na subpasta nova (sai da antiga); registro do navegador sincronizado acompanha a revisão; fora arquivados, conflitos e o documento aberto.
+- `LeanOrgUI.watchClient(input, getId, onDone)` (pergunta ao mudar o cliente) e botão "Renomear empresa" nas listas; evento `lean:company-renamed`.
