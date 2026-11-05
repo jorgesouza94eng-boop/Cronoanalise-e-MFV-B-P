@@ -100,13 +100,37 @@
     state.study.updatedAt = new Date().toISOString();
     state.dirty = true;
     state.changeSeq += 1;
-    if (o.recompute !== false) recompute(o.rerender);
+    if (o.recompute === "soon") recomputeSoon();
+    else if (o.recompute !== false) recompute(o.rerender);
     scheduleLocalSave();
     scheduleDiskSave(DISK_SAVE_DELAY_MS);
     refreshStatus();
   }
 
+  /**
+   * REV 1.32: ao digitar nomes (descrição, produto, etapa), o recálculo espera uma pausa de
+   * 250 ms em vez de rodar a cada tecla (estudos grandes ficavam lentos). Sair do campo, salvar,
+   * exportar ou qualquer outro recálculo aplica o pendente na hora.
+   */
+  let recomputeTimer = null;
+  const RECOMPUTE_DELAY_MS = 250;
+  function recomputeSoon() {
+    clearTimeout(recomputeTimer);
+    recomputeTimer = setTimeout(() => {
+      recomputeTimer = null;
+      if (state.study) recompute();
+    }, RECOMPUTE_DELAY_MS);
+  }
+  function flushRecompute() {
+    if (!recomputeTimer) return;
+    clearTimeout(recomputeTimer);
+    recomputeTimer = null;
+    if (state.study) recompute();
+  }
+
   function recompute(rerender) {
+    clearTimeout(recomputeTimer);
+    recomputeTimer = null;
     state.computed = Calc.computeStudy(state.study);
     if (rerender) UI.renderRows(state.study, state.computed);
     else UI.updateComputed(state.computed);
@@ -213,6 +237,7 @@
      * Retorna { ids, value, from, to } das linhas alteradas, ou null.
      */
     onProductCommit(id, oldValue, filtered, field) {
+      flushRecompute(); // REV 1.32
       if (!state.study || filtered) return null; // com filtro, só a linha editada muda
       const f = field === "etapa" ? "etapa" : "product";
       const els = state.study.elements;
@@ -371,7 +396,8 @@
       // Ação apagada: a ferramenta sugerida pela IA (REV 1.20) sai junto
       if (field === "kaizen" && !String(value).trim()) el.kaizenTool = "";
       // A descrição define o agrupamento do resumo; só o Kaizen não altera cálculos.
-      markChanged({ recompute: field !== "kaizen" });
+      // REV 1.32: nomes (descrição, produto, etapa) recalculam após uma pausa na digitação
+      markChanged({ recompute: field === "kaizen" ? false : ["description", "product", "etapa"].includes(field) ? "soon" : true });
     },
 
     /**
@@ -379,6 +405,7 @@
      * o valor e o desperdício (linha ainda não classificada). Retorna o que foi copiado.
      */
     onDescriptionCommit(id) {
+      flushRecompute(); // REV 1.32: sair do campo aplica o recálculo pendente
       const el = findElement(id);
       if (!el || el.value) return null;
       const key = Calc.elementKey(el.description);
@@ -506,6 +533,7 @@
 
     /** Com modelo carregado: preenche a planilha B+P. Sem modelo: Excel simples. */
     async onExportXlsx() {
+      flushRecompute(); // REV 1.32
       if (!state.study) return;
       let rec = (await getTemplate()) || memoryTemplate;
       if (!rec && state.folder === "granted") rec = await syncTemplateFromFolder(true);
@@ -939,6 +967,7 @@
 
   /** Grava imediatamente o que estiver pendente (troca de estudo, Ctrl+S, saída da página). */
   async function flushSave() {
+    flushRecompute(); // REV 1.32
     if (localTimer) {
       clearTimeout(localTimer);
       localTimer = null;

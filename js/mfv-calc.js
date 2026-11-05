@@ -347,7 +347,8 @@
         gross = en.minutes - st.minutes;
         if (gross <= 0) errors.push("Saída deve ser depois da entrada");
         net = gross - (br.minutes || 0) - (me.minutes || 0);
-        if (net < 0) errors.push("Paradas maiores que o expediente");
+        // REV 1.32: paradas iguais ao expediente também são erro (antes o dia zerava sem aviso)
+        if (gross > 0 && net <= 0) errors.push("Paradas maiores ou iguais ao expediente");
       }
       const worked = !errors.length && net > 0;
       return { day: d.day, gross: worked ? gross : 0, net: worked ? net : 0, worked, errors };

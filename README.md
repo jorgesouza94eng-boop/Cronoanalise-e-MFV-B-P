@@ -384,7 +384,9 @@ Em **MFVs → Modelo Excel → Carregar modelo**, escolha a planilha "MFV Simpli
 | **EF** | Mesmos dados gerais do EP, com as etapas e os estoques em branco, para você montar o estado futuro |
 
 **Como os dados são tratados:**
-- Os TCs vão em **horas** ("HORAS / peça"). É a única unidade em que todas as fórmulas da planilha (O27, K46, N46, U45) calculam de forma consistente. O takt sai na unidade escolhida no app.
+- Os TCs vão em **horas** ("HORAS / peça"). É a única unidade em que todas as fórmulas da planilha (O27, K46, N46, U45) calculam de forma consistente. Desde a REV 1.32, o **takt também vai em horas** (P23): antes ele ia na unidade do app, e o "Nº de operadores ideal" (K43 = ΣTC ÷ takt) saía 60× menor em minutos e 3.600× menor em segundos.
+- O "Nº de operadores ideal" do modelo soma só as **7 primeiras etapas** (E39:E45): com mais etapas, o app avisa que a planilha dá um valor menor que o dele.
+- Diferença conhecida (mantida por decisão do consultor): a **capacidade da linha** do modelo (K46) usa o tempo do dia **sem** a disponibilidade (K24); o app usa o tempo **com** a disponibilidade (como N46/U45 do próprio modelo). Com disponibilidade < 100%, a planilha mostra capacidade maior.
 - Contas digitadas pelo consultor em células de entrada (ex.: demanda `=1240/6*26`) são substituídas pelo valor do app. As **fórmulas de cálculo** da planilha são preservadas.
 - Onde o modelo não tem a fórmula das horas do dia (ex.: sábado da aba EF), o app grava as horas calculadas.
 - O **fluxograma** é uma imagem do modelo e precisa ser atualizado manualmente.

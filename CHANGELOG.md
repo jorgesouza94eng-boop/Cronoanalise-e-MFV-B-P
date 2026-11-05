@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.32** | 05/11/2026 | Correções da bateria de testes: Excel do MFV (takt em horas), avisos, tolerância, paradas e digitação mais rápida |
 | **REV 1.31** | 05/11/2026 | Pausas e refeição em minutos no MFV e modelo reserva da IA no erro 503 |
 | **REV 1.30** | 04/11/2026 | Empresa ativa nas 4 páginas e seletor "MFV da empresa" / "Grupo da empresa" |
 | **REV 1.29** | 04/11/2026 | Mesma empresa com grafias diferentes e renomear a empresa em todos os documentos |
@@ -36,6 +37,21 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.32 — 05/11/2026
+
+Correções dos achados da bateria de testes de 05/11/2026 (≈70 mil conferências dos cálculos contra uma conta independente — sem divergência —, 23 planilhas recalculadas no LibreOffice e jornada no navegador). Decisão do consultor: itens 1, 2, 4, 5, 6 e 7; item 3 mantido como está.
+
+- **1 — Excel do MFV, Nº de operadores ideal (EP!K43) errado:** o modelo divide ΣTC (gravado em horas) pelo takt (gravado na unidade do app), então em minutos saía 60× menor (ex.: 0,026 em vez de 1,54) e em segundos 3.600× menor. Agora o **takt vai em HORAS** (P23), como no MFV original da Laje Forte, e K43 bate com o app; aviso na exportação quando o MFV usa min/s.
+- **2 — Mais de 7 etapas:** o Nº ideal do modelo (K40 = E39:E45) soma só as 7 primeiras; o app avisa e mostra o valor dele.
+- **3 — Capacidade da linha (K46) sem a disponibilidade no modelo:** mantida como está (o app usa o tempo com a disponibilidade); diferença registrada no README.
+- **4 — Modelo r05:** aviso dos elementos **sem classificação de valor**, que ficam fora da Compilação da planilha (com o tempo que falta no total).
+- **5 — Tolerância fora de 0–99%:** o TP do produto passa a "--" (antes, 150% mostrava o aviso mas entrava no TP; as etapas já faziam assim).
+- **6 — MFV:** pausa + refeição **iguais** ao expediente agora dão o erro "Paradas maiores ou iguais ao expediente" (antes o dia zerava sem aviso).
+- **7 — Digitação mais rápida em estudos grandes:** nos campos de nome (descrição, produto, etapa) o recálculo espera uma pausa de 250 ms em vez de rodar a cada tecla; sair do campo, salvar ou exportar aplica na hora. 600 linhas: ~300 → ~115 ms por tecla; 1.500 linhas: ~940 → ~220 ms. Os resultados são os mesmos.
+- Service worker v40. Testes: `tests/rev132.test.js` e `tests/e2e.rev132.js`.
 
 ---
 

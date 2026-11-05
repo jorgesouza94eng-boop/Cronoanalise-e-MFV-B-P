@@ -211,3 +211,9 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 
 - MFV: `M.parseDuration` para pausas/refeição (sem ":" = minutos, até 3 dígitos; com ":" = HH:MM); entrada/saída seguem `parseClock`. `M.parseScheduleField(campo, valor)` escolhe a regra.
 - IA: `A.generate` no 503, depois das tentativas, usa `A.fallbackModels(settings.models | listModels, escolhido)` (até 2; 1 nova tentativa cada) e avisa por `onFallback(de, para)`; `fallback: false` desliga. A configuração não muda.
+
+## Regra implementada na REV 1.32: achados da bateria de testes
+
+- Excel do MFV: P23 (takt) sempre "HORAS", igual a D35 (TC em horas), para K43 = ΣTC ÷ takt; aviso com > 7 etapas (K40 soma E39:E45, `MFV.idealSum`). Capacidade K46 do modelo sem disponibilidade × app com disponibilidade: **mantido** (decisão do consultor).
+- r05: aviso de elementos sem Valor (fora da Compilação). Tolerância válida 0 ≤ tol < 100 também no TP do produto (`computeKpis`). MFV: paradas ≥ expediente = erro.
+- Grade da cronoanálise: `markChanged({ recompute: "soon" })` nos campos de nome (descrição, produto, etapa) → `recomputeSoon` (250 ms); `flushRecompute` ao sair do campo, em `flushSave` e na exportação do Excel.

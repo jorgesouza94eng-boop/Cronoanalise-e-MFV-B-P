@@ -1044,7 +1044,8 @@
     }
 
     const taktTime = netTime > 0 && demand != null && demand > 0 ? netTime / demand : null;
-    const standardTime = tol != null && tol >= 0 ? sumNormal * (1 + tol / 100) : null;
+    // REV 1.32: tolerância fora de 0–99% = TP "--" (antes 150% gerava aviso, mas entrava no TP)
+    const standardTime = tol != null && tol >= 0 && tol < 100 ? sumNormal * (1 + tol / 100) : null;
     const capacity =
       standardTime != null && standardTime > EPS && netTime > 0
         ? Math.floor(netTime / standardTime + EPS)

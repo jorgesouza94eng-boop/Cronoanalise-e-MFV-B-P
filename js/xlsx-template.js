@@ -577,6 +577,7 @@
     });
     const plan = planLookup(study, r, options && options.planActions);
     let fromPlan = 0;
+    const cycleByName = new Map(); // tempo (s) de cada elemento, como a GERAL calcula
     const lst = new Map();
     for (let n = R05.listFirst; n <= R05.listLast; n++) {
       const e = elements[n - R05.listFirst];
@@ -587,6 +588,7 @@
         avgQty = a.qty / a.n;
         const avgTime = a.type === "A" ? a.time : a.time / a.n; // A: Σtempo; C: média (fórmula O da GERAL)
         cycle = avgQty > 0 ? avgTime / avgQty : null;
+        if (cycle != null) cycleByName.set(e.name, cycle);
       }
       const p = e ? plan(e) : null;
       if (p) fromPlan += 1;
@@ -600,6 +602,12 @@
       lst.set(`I${n}`, null); // D4: % de incidência fica para o consultor
     }
     applyUpdates(tpl.sheets.listagem.parts, lst);
+    // REV 1.32: a Compilação do r05 soma só os elementos com Valor (Agrega/Não agrega/Incidental)
+    const unclassified = elements.filter((e) => !e.value);
+    if (unclassified.length) {
+      const sec = unclassified.reduce((a, e) => a + (cycleByName.get(e.name) || 0), 0);
+      warnings.push(`${unclassified.length} elemento(s) sem classificação de valor ficam fora da Compilação da planilha (total ${String(Math.round(sec * 10) / 10).replace(".", ",")} s menor que o ciclo): ${unclassified.slice(0, 5).map((e) => e.name).join(", ")}${unclassified.length > 5 ? "…" : ""}.`);
+    }
     if (fromPlan) warnings.push(`Responsável e data de conclusão de ${fromPlan} elemento(s) vieram do Plano de Ação 5W2H.`);
 
     // ---- UNIDADES: lote, unidade base e observações do analista (premissas + desperdícios)
@@ -662,8 +670,7 @@
      MODELO DO MFV SIMPLIFICADO (ABA EP / EF)
      ========================================================================== */
 
-  const MFV = { stepsFirst: 39, stepsLast: 51, stockFirst: 55, stockLast: 64, notesFirst: 76, notesLast: 95, days: [22, 28] };
-  const TAKT_UNITS = { s: "SEGUNDOS", min: "MINUTOS", h: "HORAS" };
+  const MFV = { idealSum: 7, stepsFirst: 39, stepsLast: 51, stockFirst: 55, stockLast: 64, notesFirst: 76, notesLast: 95, days: [22, 28] };
 
   async function recognizeMfv(wb) {
     const sst = parseSharedStrings(await wb.text("xl/sharedStrings.xml"));
@@ -711,6 +718,13 @@
     // REV 1.14: etapa não medida não vai para a tabela de processos (fica nas premissas)
     const measured = doc.steps.map((st, i) => ({ st, calc: r.steps[i] })).filter((x) => !x.st.unmeasured);
     if (measured.length > maxSteps) throw new Error(`O MFV tem ${measured.length} etapas; a planilha comporta ${maxSteps} (linhas ${MFV.stepsFirst}–${MFV.stepsLast}).`);
+    // REV 1.32: o Nº ideal de operadores do modelo (K43 = K40 ÷ takt) soma só E39:E45
+    if (measured.length > MFV.idealSum) {
+      warnings.push(`O MFV tem ${measured.length} etapas, mas o "Nº de operadores ideal" da planilha (EP!K43) soma só as ${MFV.idealSum} primeiras (E39:E45): na planilha ele sai menor que o do app (${String(Math.round(r.opsIdeal * 100) / 100).replace(".", ",")}).`);
+    }
+    if (doc.timeUnit && doc.timeUnit !== "h") {
+      warnings.push(`O takt vai para a planilha em HORAS (mesma unidade do TC do modelo), para as fórmulas de operadores e capacidade darem certo; no app ele continua em ${{ s: "segundos", min: "minutos" }[doc.timeUnit] || doc.timeUnit}.`);
+    }
     const maxStock = MFV.stockLast - MFV.stockFirst + 1;
     if (doc.inventories.length > maxStock) throw new Error(`O MFV tem ${doc.inventories.length} estoques; a planilha comporta ${maxStock}.`);
 
@@ -724,7 +738,9 @@
         ["O26", num(doc.workDaysMonth)],
         ["P21", `${pu} / MÊS`],
         ["P22", `${pu} / DIA`],
-        ["P23", TAKT_UNITS[doc.timeUnit] || "MINUTOS"],
+        // REV 1.32: takt em HORAS, a mesma unidade do TC (D35). As fórmulas do modelo dividem um
+        // pelo outro (K43 = ΣTC ÷ takt); com takt em min/s o nº ideal de operadores saía 60×/3.600× menor.
+        ["P23", "HORAS"],
         ["P27", `${pu} / HORA`],
         ["D35", "HORAS / peça"],
         ["D54", pu],
