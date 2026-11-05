@@ -60,6 +60,26 @@
     return { minutes: h * 60 + m, error: null };
   }
 
+  /**
+   * Duração de pausas e refeição (REV 1.31). Com ":" = HH:MM ("1:30" = 90 min); sem ":" =
+   * MINUTOS ("20" = 20 min, "90" = 1:30) — antes "20" era lido como 20 horas. Até 3 dígitos,
+   * no máximo 24 h. Retorna { minutes, error, asMinutes } (asMinutes = digitado sem ":").
+   */
+  function parseDuration(raw) {
+    const s = String(raw == null ? "" : raw).trim();
+    if (!s) return { minutes: null, error: null, asMinutes: false };
+    if (s.includes(":")) return Object.assign(parseClock(s), { asMinutes: false });
+    if (!/^\d{1,3}$/.test(s)) return { minutes: null, error: "Use minutos (ex.: 20) ou HH:MM", asMinutes: false };
+    const m = Number(s);
+    if (m > 1440) return { minutes: null, error: "Duração inválida", asMinutes: false };
+    return { minutes: m, error: null, asMinutes: true };
+  }
+
+  /** Lê o campo do horário: entrada/saída = hora do relógio; pausas/refeição = duração. */
+  function parseScheduleField(field, raw) {
+    return field === "breaks" || field === "meal" ? parseDuration(raw) : parseClock(raw);
+  }
+
   function formatClock(minutes) {
     if (minutes == null || !Number.isFinite(minutes)) return "";
     const t = Math.round(minutes);
@@ -318,8 +338,8 @@
     const days = doc.schedule.map((d) => {
       const st = parseClock(d.start);
       const en = parseClock(d.end);
-      const br = parseClock(d.breaks);
-      const me = parseClock(d.meal);
+      const br = parseDuration(d.breaks);
+      const me = parseDuration(d.meal);
       const errors = [st, en, br, me].filter((x) => x.error).map((x) => x.error);
       let gross = 0;
       let net = 0;
@@ -937,6 +957,8 @@
     MIX_KEY,
     DAYS,
     parseClock,
+    parseDuration,
+    parseScheduleField,
     formatClock,
     buildFileName,
     createMfv,

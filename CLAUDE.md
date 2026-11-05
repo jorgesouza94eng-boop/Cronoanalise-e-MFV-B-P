@@ -206,3 +206,8 @@ Não encontrados na base (perguntar antes de assumir): fórmula oficial de toler
 - `LeanOrgUI.activeCompany()/setActiveCompany(nome)` (localStorage `lean:empresaAtiva` = { key, name }): definida no `setCurrent` das 4 páginas e ao mudar o cliente; selo `.app-company` no cabeçalho.
 - Entrada na página: `LeanOrgUI.pickForActive(docs, lastId)` → último da página se for da empresa, senão o mais recente dela; nenhum → janela com `#new-client` preenchido (não cria). Sem empresa ativa: último, como antes.
 - Seletores `#mfv-switch` / `#grp-switch` (`LeanOrgUI.renderSwitch`): documentos da empresa + "+ Novo"; troca com `flushSave` antes; 2+ documentos ao entrar = aviso e destaque. Filtro das listas inicia na empresa ativa.
+
+## Regra implementada na REV 1.31: pausas em minutos e modelo reserva da IA
+
+- MFV: `M.parseDuration` para pausas/refeição (sem ":" = minutos, até 3 dígitos; com ":" = HH:MM); entrada/saída seguem `parseClock`. `M.parseScheduleField(campo, valor)` escolhe a regra.
+- IA: `A.generate` no 503, depois das tentativas, usa `A.fallbackModels(settings.models | listModels, escolhido)` (até 2; 1 nova tentativa cada) e avisa por `onFallback(de, para)`; `fallback: false` desliga. A configuração não muda.

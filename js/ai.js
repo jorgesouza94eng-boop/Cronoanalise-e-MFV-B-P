@@ -671,12 +671,34 @@
 
   /** Esperas antes das novas tentativas quando o Gemini responde 503 (servidor sobrecarregado). REV 1.17 */
   const RETRY_DELAYS_MS = [3000, 8000];
+  /** REV 1.31: no modelo reserva, só 1 nova tentativa (após ~3 s). */
+  const FALLBACK_DELAYS_MS = [3000];
+  const MAX_FALLBACKS = 2;
+
+  /**
+   * Modelos reserva para o erro 503 (REV 1.31), na ordem: outros "flash" estáveis (mais novos
+   * primeiro), "flash-lite" estáveis, depois os demais estáveis; prévias/experimentais por último.
+   * models = [{ id }] ou [id]; current = modelo escolhido pelo consultor (fica de fora).
+   */
+  function fallbackModels(models, current) {
+    const ids = Array.from(new Set((models || []).map((m) => (typeof m === "string" ? m : m && m.id)).filter(Boolean))).filter((id) => id !== current);
+    const rank = (id) => {
+      const unstable = /exp|preview/i.test(id) ? 10 : 0;
+      if (/flash/i.test(id) && !/lite/i.test(id)) return unstable;
+      if (/flash/i.test(id)) return 1 + unstable;
+      return 2 + unstable;
+    };
+    return ids.sort((a, b) => rank(a) - rank(b) || b.localeCompare(a, "en", { numeric: true })).slice(0, MAX_FALLBACKS);
+  }
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   /**
    * Gera o texto. Erro 503 (modelo sobrecarregado, em geral passageiro): tenta de novo sozinho
    * mais 2 vezes (após ~3 s e ~8 s), avisando por options.onRetry(tentativa, total). Os demais
    * erros (chave, limite 429, filtro) não são repetidos. options: { json, schema, temperature }.
+   * REV 1.31: se o modelo continua sobrecarregado, troca sozinho para até 2 modelos reserva da
+   * mesma chave (settings.models ou a lista da API), avisando por options.onFallback(de, para).
+   * Só vale para este pedido: o modelo escolhido na configuração não muda.
    */
   async function generate(settings, prompt, options, fetchImpl) {
     const f = fetchImpl || fetch;
@@ -691,10 +713,13 @@
         o.json && o.schema ? { responseSchema: o.schema } : {}
       ),
     };
-    const delays = o.retryDelays || RETRY_DELAYS_MS;
+    let delays = o.retryDelays || RETRY_DELAYS_MS;
     const wait = o.sleep || sleep;
+    let model = settings.model;
+    const tried = [model];
+    let reserves = null;
     for (let attempt = 0; ; attempt++) {
-      const res = await f(`${API_BASE}/models/${encodeURIComponent(settings.model)}:generateContent`, {
+      const res = await f(`${API_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": settings.apiKey },
         body: JSON.stringify(body),
@@ -707,9 +732,33 @@
         continue;
       }
       const err = await httpError(res);
-      if (err.status !== 503 || attempt >= delays.length) throw err;
-      if (typeof o.onRetry === "function") o.onRetry(attempt + 2, delays.length + 1);
-      await wait(delays[attempt]);
+      if (err.status !== 503) throw err;
+      if (attempt < delays.length) {
+        if (typeof o.onRetry === "function") o.onRetry(attempt + 2, delays.length + 1);
+        await wait(delays[attempt]);
+        continue;
+      }
+      // REV 1.31: modelo reserva
+      if (o.fallback === false) throw err;
+      if (!reserves) {
+        let list = settings.models;
+        if (!Array.isArray(list) || !list.length) list = await listModels(settings.apiKey, f).catch(() => []);
+        reserves = fallbackModels(list, settings.model);
+      }
+      const next = reserves.shift();
+      if (!next) {
+        if (tried.length > 1) {
+          const e = new Error(`Gemini sobrecarregado no momento (erro 503) nos modelos ${tried.join(", ")}. Tente em alguns minutos.`);
+          e.status = 503;
+          throw e;
+        }
+        throw err;
+      }
+      if (typeof o.onFallback === "function") o.onFallback(model, next);
+      model = next;
+      tried.push(next);
+      delays = o.fallbackDelays || FALLBACK_DELAYS_MS;
+      attempt = -1;
     }
   }
 
@@ -723,6 +772,7 @@
     buildNamesPrompt,
     buildQuestionPrompt,
     buildMfvSummaryPrompt,
+    fallbackModels,
     parseNames,
     parseClassify,
     parseKaizen,

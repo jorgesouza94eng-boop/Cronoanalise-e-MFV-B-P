@@ -175,6 +175,14 @@
     setStatus(settings.apiKey && settings.model ? "Configuração salva neste aparelho." : "Informe a chave e escolha o modelo.");
   }
 
+  /** REV 1.31: modelo escolhido sobrecarregado (503) → este pedido vai para um modelo reserva. */
+  function onFallback(from, to) {
+    setStatus(`Modelo ${from} sobrecarregado: tentando o modelo reserva ${to}...`);
+    if (root.LeanUI && root.LeanUI.toast) {
+      root.LeanUI.toast(`IA: ${from} sobrecarregado (erro 503). Este pedido foi para o modelo reserva ${to}; a configuração não mudou.`, "info", 8000);
+    }
+  }
+
   async function loadModels() {
     const key = $("ai-key").value.trim();
     if (!key) return setStatus("Cole a chave de API primeiro.", true);
@@ -183,6 +191,7 @@
       const models = await AI.listModels(key);
       if (!models.length) return setStatus("Nenhum modelo Gemini de texto disponível para esta chave.", true);
       const def = settings.model && models.some((m) => m.id === settings.model) ? settings.model : AI.pickDefaultModel(models);
+      settings.models = models.map((m) => m.id); // REV 1.31: modelos reserva para o erro 503
       $("ai-model").replaceChildren(...models.map((m) => new Option(`${m.label} (${m.id})`, m.id, m.id === def, m.id === def)));
       setStatus(`${models.length} modelo(s) encontrado(s). Sugerido: ${def}. Clique em "Salvar configuração".`);
     } catch (err) {
@@ -215,6 +224,7 @@
         schema: p.schema,
         temperature: p.temperature,
         onRetry: (n, total) => setStatus(`Servidor do Gemini ocupado, tentando de novo (${n}/${total})...`),
+        onFallback,
       });
     setStatus(`Consultando o Gemini (${prompt.count} elemento(s))...`);
     try {
@@ -267,6 +277,7 @@
         schema: p.schema,
         temperature: p.temperature,
         onRetry: (n, total) => setStatus(`Servidor do Gemini ocupado, tentando de novo (${n}/${total})...`),
+        onFallback,
       });
     setStatus(`Consultando o Gemini (${prompt.count} elemento(s) sem etapa)...`);
     try {
@@ -380,6 +391,7 @@
       const text = await AI.generate(settings, prompt.text, {
         json: kind !== "notes" && kind !== "ask",
         onRetry: (n, total) => setStatus(`Servidor do Gemini ocupado, tentando de novo (${n}/${total})...`),
+        onFallback,
       });
       if (!stillCurrent(study)) return finishJob("done");
       // REV 1.27: classificação e nomes valem só para as linhas do produto analisado

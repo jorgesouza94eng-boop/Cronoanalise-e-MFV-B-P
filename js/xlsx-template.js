@@ -698,6 +698,11 @@
       const p = M.parseClock(v);
       return p.minutes == null || p.error ? null : p.minutes / 1440;
     };
+    // REV 1.31: pausas e refeição sem ":" são minutos
+    const dur = (v) => {
+      const p = M.parseDuration(v);
+      return p.minutes == null || p.error ? null : p.minutes / 1440;
+    };
     const num = (v) => {
       const n = Calc.parseNumber(v);
       return Number.isFinite(n) ? n : null;
@@ -738,8 +743,8 @@
         // (ex.: sábado da aba EF do modelo Laje Forte); fórmulas existentes são preservadas.
         u.set(`G${row}`, day.worked ? day.gross / 1440 : null);
         u.set(`H${row}`, day.worked ? day.net / 1440 : null);
-        u.set(`E${row}`, clock(d.breaks) == null && clock(d.start) != null ? 0 : clock(d.breaks));
-        u.set(`F${row}`, clock(d.meal) == null && clock(d.start) != null ? 0 : clock(d.meal));
+        u.set(`E${row}`, dur(d.breaks) == null && clock(d.start) != null ? 0 : dur(d.breaks));
+        u.set(`F${row}`, dur(d.meal) == null && clock(d.start) != null ? 0 : dur(d.meal));
       });
       return u;
     };

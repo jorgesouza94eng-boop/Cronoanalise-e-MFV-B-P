@@ -4,6 +4,7 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 
 | Revisão | Data | Situação |
 |---|---|---|
+| **REV 1.31** | 05/11/2026 | Pausas e refeição em minutos no MFV e modelo reserva da IA no erro 503 |
 | **REV 1.30** | 04/11/2026 | Empresa ativa nas 4 páginas e seletor "MFV da empresa" / "Grupo da empresa" |
 | **REV 1.29** | 04/11/2026 | Mesma empresa com grafias diferentes e renomear a empresa em todos os documentos |
 | **REV 1.28** | 03/11/2026 | Modelo de cronoanálise EO_Cronoanálise v00_r05 (unidades, lote e Plano 5W2H na Listagem) |
@@ -35,6 +36,23 @@ Controle de revisões do aplicativo de Cronoanálise e apoio ao Mapa de Fluxo de
 | **REV 1.2** | 16/10/2026 | Comprovação da meta B+P: pç/HH real, payback e acíclicos por unidade |
 | **REV 1.1** | 16/10/2026 | Assistente de IA (Gemini), opcional |
 | **REV 1.0** | 16/10/2026 | Versão estável, validada com as planilhas B+P da Laje Forte |
+
+---
+
+## REV 1.31 — 05/11/2026
+
+Decisão do consultor: itens **5 e 6** das sugestões ("confirmo 5 e 6").
+
+**5 — Pausas e refeição sem ":" = minutos (MFV):**
+- No horário de trabalho, **pausas e refeição** digitadas sem ":" passam a ser **minutos**: "20" = 00:20, "60" = 01:00, "90" = 01:30. Com ":" continua HH:MM ("1:30"). Antes, "20" era lido como 20 **horas**, e o dia ficava com erro e fora do tempo disponível.
+- Ao sair do campo, o valor aparece em HH:MM; de 60 minutos para cima, um aviso confirma a conversão ("Refeição: 90 = 90 minutos (01:30)"). Cabeçalhos "Pausas (min)" e "Refeição (min)".
+- Entrada e saída continuam como hora do relógio ("730" = 07:30). O Excel do MFV recebe as pausas pela mesma regra. MFVs salvos já estão em HH:MM e não mudam.
+
+**6 — Modelo reserva da IA no erro 503:**
+- Se o modelo escolhido continua sobrecarregado depois das 2 novas tentativas (REV 1.17), o pedido vai sozinho para **até 2 modelos reserva** da mesma chave (outro "flash" estável, depois "flash-lite", depois os demais; prévias por último), com 1 nova tentativa em cada.
+- Aviso na tela: "*X* sobrecarregado (erro 503). Este pedido foi para o modelo reserva *Y*; a configuração não mudou." O modelo escolhido continua o mesmo nos próximos pedidos.
+- A lista de reservas vem de "Carregar modelos" (guardada na configuração) ou, se ainda não houver, de uma consulta à API. Vale para todos os pedidos da cronoanálise e para o resumo executivo do MFV. Erros de chave e de limite (429) não trocam de modelo.
+- Nenhum cálculo do app muda. Service worker v39. Testes: `tests/rev131.test.js` e `tests/e2e.rev131.js`; `ai.test.js` ajustado (sem reserva = comportamento da REV 1.17).
 
 ---
 

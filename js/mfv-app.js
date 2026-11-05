@@ -1018,9 +1018,9 @@
                 className: "input-cell mono",
                 value: day[f],
                 inputMode: "numeric",
-                placeholder: f === "start" || f === "end" ? "--:--" : "00:00",
+                placeholder: f === "start" || f === "end" ? "--:--" : "min",
                 autocomplete: "off",
-                title: `${day.day}: ${{ start: "entrada", end: "saída", breaks: "pausas", meal: "refeição" }[f]}`,
+                title: `${day.day}: ${{ start: "entrada (HH:MM)", end: "saída (HH:MM)", breaks: "pausas (minutos ou HH:MM)", meal: "refeição (minutos ou HH:MM)" }[f]}`,
               }),
             ])
           ),
@@ -1789,14 +1789,19 @@
       markChanged();
     });
     $("schedule-tbody").addEventListener("focusout", (e) => {
-      const p = M.parseClock(e.target.value);
-      if (!p.error && p.minutes != null && e.target.dataset.field) {
+      const field = e.target.dataset.field;
+      if (!field) return;
+      // REV 1.31: pausas/refeição sem ":" = minutos ("20" → 00:20)
+      const p = M.parseScheduleField(field, e.target.value);
+      if (!p.error && p.minutes != null) {
         const tr = e.target.closest("tr");
         const v = M.formatClock(p.minutes);
         if (v !== e.target.value) {
+          const typed = e.target.value.trim();
           e.target.value = v;
-          state.doc.schedule[Number(tr.dataset.day)][e.target.dataset.field] = v;
+          state.doc.schedule[Number(tr.dataset.day)][field] = v;
           markChanged();
+          if (p.asMinutes && p.minutes >= 60) toast(`${{ breaks: "Pausas", meal: "Refeição" }[field]}: ${typed} = ${typed} minutos (${v}). Para horas, use HH:MM (ex.: 1:30).`, "info", 6000);
         }
       }
     });
@@ -2276,6 +2281,11 @@
     try {
       const text = await AI.generate(settings, prompt.text, {
         onRetry: (n, total) => status(`Servidor do Gemini ocupado, tentando de novo (${n}/${total})...`),
+        // REV 1.31: modelo escolhido sobrecarregado → modelo reserva só neste pedido
+        onFallback: (from, to) => {
+          status(`Modelo ${from} sobrecarregado: tentando o modelo reserva ${to}...`);
+          toast(`IA: ${from} sobrecarregado (erro 503). O resumo foi pedido ao modelo reserva ${to}; a configuração não mudou.`, "info", 8000);
+        },
       });
       $("mfv-ai-text").value = AI.restoreNames(text, { clientName: state.doc.clientName, processName: state.doc.family });
       status(

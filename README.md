@@ -294,7 +294,7 @@ O link **MFV** no cabeçalho abre o Mapa de Fluxo de Valor, que reproduz a aba *
 
 | Bloco | O que faz |
 |---|---|
-| **Horário de trabalho** | Entrada, saída, pausas e refeição por dia da semana. Mostra o efetivo por dia e a média por dia trabalhado |
+| **Horário de trabalho** | Entrada, saída, pausas e refeição por dia da semana. Mostra o efetivo por dia e a média por dia trabalhado. Pausas e refeição sem ":" são **minutos** ("20" = 00:20; REV 1.31) |
 | **Demanda e disponibilidade** | Demanda mensal ÷ dias úteis = demanda diária. Disponibilidade da família (%), unidade do produto (pç, m², kg) e unidade de tempo (s, min, h) |
 | **Takt** | Tempo disponível por dia ÷ demanda diária |
 | **GBO** | Cada etapa vem de um **estudo de cronoanálise**: o TC é o tempo padrão do estudo. O TC é **editável** (vira "✎ editado", com a opção **↺ usar estudo**). Também é possível criar etapas manuais. Cada etapa tem nº de operadores, uptime (%) e % do takt. **Atualizar TCs** relê os estudos |
@@ -426,6 +426,7 @@ Um plano por cliente, no formato do modelo 5W2H do B+P.
 O botão **✨ IA** na barra da grade abre o assistente. Durante um pedido, o botão **"−"** minimiza a janela (REV 1.21): a grade fica livre, um selo no canto mostra o andamento e avisa quando as sugestões ficam prontas; as sugestões só se aplicam ao estudo do pedido. Ele precisa de **internet** e de uma **chave de API do Google AI Studio** (aistudio.google.com → ícone 🔑 → *Create API key*).
 
 1. Na primeira vez: cole a chave → **Carregar modelos** → escolha o modelo (o app sugere um "flash") → **Salvar configuração**.
+   - Modelo sobrecarregado (erro 503): o app tenta de novo 2 vezes e, se continuar, envia o pedido a um **modelo reserva** da sua chave, com aviso na tela (REV 1.31). O modelo escolhido não muda.
 2. Use os botões:
    - **Classificar valor e desperdício:** para os elementos ainda sem classificação;
    - **Sugerir etapas do processo** (REV 1.25): agrupa os elementos sem etapa de cada produto em etapas (as barras do GBO); você revisa e salva na janela **"Definir etapas"** (botão ao lado de "Etapas"), que também funciona sem IA: uma etapa por elemento, aplicação em lote e prévia do TP por etapa;
